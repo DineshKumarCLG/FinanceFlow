@@ -118,7 +118,7 @@ export default function DashboardPage() {
         setIsLoadingNotifications(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser]); // Reload data if currentUser changes
+  }, [currentUser, toast]); // Added toast as dependency as it's used inside
 
 
   // Centralized data processing useEffect
@@ -263,15 +263,15 @@ export default function DashboardPage() {
     const topSpenders = Object.entries(userExpenses)
       .map(([userId, totalSpent]) => {
         let displayName = `User ...${userId.slice(-6)}`;
-        let avatarFallbackText = userId.substring(0, 2).toUpperCase();
+        let avatarFallback = userId.substring(0, 2).toUpperCase(); // Default fallback
 
         if (currentUser && userId === currentUser.uid) {
           displayName = currentUser.displayName || `User ...${userId.slice(-6)}`;
           if (currentUser.displayName) {
             const names = currentUser.displayName.split(' ');
-            avatarFallbackText = names.map(n => n[0]).slice(0,2).join('').toUpperCase();
+            avatarFallback = names.map(n => n[0]).slice(0,2).join('').toUpperCase();
           } else if (currentUser.email) {
-            avatarFallbackText = currentUser.email.substring(0, 2).toUpperCase();
+            avatarFallback = currentUser.email.substring(0, 2).toUpperCase();
           }
         }
         
@@ -462,3 +462,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
