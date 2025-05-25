@@ -7,13 +7,13 @@ import { IncomeExpenseChart } from "@/components/dashboard/IncomeExpenseChart";
 // import { AnalyticsOverview, type AnalyticsKpiData, type ExpenseCategoryData as AnalyticsExpenseCategoryData } from "@/components/dashboard/AnalyticsOverview"; // Will be dynamically imported
 // import { ProfitLossReport, type ProfitLossReportData, type ReportLineItem as PLReportLineItem } from "@/components/dashboard/ProfitLossReport"; // Will be dynamically imported
 import { DollarSign, TrendingUp, TrendingDown, Activity, CalendarDays, Download } from "lucide-react"; 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { UserSpendingList, type UserSpending } from "@/components/dashboard/UserSpendingList"; 
 // import { NotificationList, type Notification } from "@/components/dashboard/NotificationList"; // Will be dynamically imported
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
-import { getJournalEntries, type JournalEntry as StoredJournalEntry, getNotifications, type Notification as StoredNotification } from "@/lib/data-service";
+import { getJournalEntries, type JournalEntry as StoredJournalEntry, getNotifications } from "@/lib/data-service";
 import type { DateRange } from "react-day-picker";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
@@ -75,7 +75,7 @@ export default function DashboardPage() {
   });
   const [chartDisplayData, setChartDisplayData] = useState<ChartPoint[]>([]);
   const [userSpendingData, setUserSpendingData] = useState<UserSpending[]>([]);
-  const [notifications, setNotifications] = useState<StoredNotification[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(true);
   const [analyticsKpis, setAnalyticsKpis] = useState<AnalyticsKpiData>({
     avgTransactionValue: 0, profitMargin: 0, incomeTransactions: 0, expenseTransactions: 0,
@@ -155,6 +155,9 @@ export default function DashboardPage() {
 
     if (!dateRange?.from || !dateRange?.to) {
       console.log("Dashboard: Date range not fully set, skipping processing.");
+      if (allJournalEntries.length === 0 && !isLoadingData) { // Handle initial empty state before entries load
+        setIsLoadingData(false); // Ensure loader is off if nothing to process yet
+      }
       return;
     }
     
