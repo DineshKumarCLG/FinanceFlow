@@ -141,7 +141,7 @@ const SidebarProvider = React.forwardRef<
               } as React.CSSProperties
             }
             className={cn(
-              "group/sidebar-wrapper flex min-h-svh w-full has-[[data-variant=inset]]:bg-sidebar",
+              "group/sidebar-wrapper flex w-full has-[[data-variant=inset]]:bg-sidebar", // Removed min-h-svh
               className
             )}
             ref={ref}
@@ -175,18 +175,12 @@ const Sidebar = React.forwardRef<
     },
     ref
   ) => {
-    const { state, isMobile } = useSidebar()
+    const { state, isMobile, setOpen: setSidebarOpen } = useSidebar() // Get setOpen as setSidebarOpen
 
     // Mobile sidebar content (now using Sheet from shadcn)
     if (isMobile) {
       return (
-        <Sheet open={state === "expanded"} onOpenChange={(open) => {
-          // This assumes setOpen in SidebarContext can handle the toggle for mobile sheet
-          // For a dedicated mobile sheet, you might need a separate openMobile state.
-          // For now, we'll use the main 'open' state for simplicity of the toggle.
-          const { setOpen } = useSidebar(); // Get setOpen from context
-          setOpen(open);
-         }}>
+        <Sheet open={state === "expanded"} onOpenChange={setSidebarOpen}> {/* Use setSidebarOpen here */}
           <SheetContent side={side} className="w-[--sidebar-width] p-0">
             <SheetTitle className="sr-only">Main Navigation</SheetTitle> {/* Accessibility */}
             {children}
@@ -247,7 +241,16 @@ const SidebarTrigger = React.forwardRef<
   React.ElementRef<typeof Button>,
   React.ComponentProps<typeof Button>
 >(({ className, onClick, ...props }, ref) => {
-  const { toggleSidebar } = useSidebar()
+  const { toggleSidebar, isMobile, setOpen: setSidebarOpen, open } = useSidebar()
+
+  const handleTriggerClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    onClick?.(event)
+    if (isMobile) {
+      setSidebarOpen(!open); // Toggle the sheet on mobile
+    } else {
+      toggleSidebar(); // Toggle the desktop sidebar
+    }
+  };
 
   return (
     <Button
@@ -255,11 +258,8 @@ const SidebarTrigger = React.forwardRef<
       data-sidebar="trigger"
       variant="ghost"
       size="icon"
-      className={cn("h-7 w-7", className)} // className from Header will control md:flex
-      onClick={(event) => {
-        onClick?.(event)
-        toggleSidebar()
-      }}
+      className={cn("h-7 w-7", className)} 
+      onClick={handleTriggerClick}
       {...props}
     >
       <PanelLeft />
@@ -306,7 +306,7 @@ const SidebarInset = React.forwardRef<
     <main
       ref={ref}
       className={cn(
-        "relative flex flex-1 flex-col bg-background", // Removed min-h-svh
+        "relative flex flex-1 flex-col bg-background", 
         // The following classes are for the "inset" variant styling.
         // If variant="inset" is used on the <Sidebar> peer, these apply.
         // If not using variant="inset", these min-h classes won't apply.
