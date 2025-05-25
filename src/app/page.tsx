@@ -26,9 +26,9 @@ export default function CompanyLoginPage() {
   const { user, isAuthenticated, isLoading: authIsLoading, signInWithGoogle } = useAuth();
   const router = useRouter();
   const [companyId, setCompanyId] = useState("");
-  const [isCompanyIdValid, setIsCompanyIdValid] = useState(false);
+  const [companyIdValidated, setCompanyIdValidated] = useState(false); // New state
   const [error, setError] = useState<string | null>(null);
-  const [uiIsLoading, setUiIsLoading] = useState(false); // For Google Sign-In button click
+  const [uiIsLoading, setUiIsLoading] = useState(false); 
 
   useEffect(() => {
     if (!authIsLoading && isAuthenticated) {
@@ -40,11 +40,11 @@ export default function CompanyLoginPage() {
     const newCompanyId = e.target.value;
     setCompanyId(newCompanyId);
     if (newCompanyId.trim().toUpperCase() === VALID_COMPANY_ID) {
-      setIsCompanyIdValid(true);
+      setCompanyIdValidated(true);
       setError(null);
     } else {
-      setIsCompanyIdValid(false);
-      if (newCompanyId.trim() !== "") {
+      setCompanyIdValidated(false);
+      if (newCompanyId.trim() !== "" && newCompanyId.trim().toUpperCase() !== VALID_COMPANY_ID) {
         setError("Invalid Company ID. Please enter 'KENESIS'.");
       } else {
         setError(null);
@@ -53,8 +53,8 @@ export default function CompanyLoginPage() {
   };
 
   const handleGoogleSignIn = async () => {
-    if (!isCompanyIdValid) {
-      setError("Please enter a valid Company ID first.");
+    if (!companyIdValidated) { // Should ideally not be callable if button isn't rendered
+      setError("Company ID not validated.");
       return;
     }
     setUiIsLoading(true);
@@ -68,9 +68,8 @@ export default function CompanyLoginPage() {
       } else {
         setError(e.message || "An unexpected error occurred during Google Sign-In.");
       }
-      setUiIsLoading(false); // Stop loading on error
+      setUiIsLoading(false); 
     }
-    // uiIsLoading will be reset implicitly by page navigation on success or stay true if an error occurred and wasn't caught above
   };
 
   if (authIsLoading || (!authIsLoading && isAuthenticated)) {
@@ -90,20 +89,27 @@ export default function CompanyLoginPage() {
             <AppLogo iconClassName="h-10 w-10 text-primary" textClassName="text-2xl font-semibold" />
           </div>
           <CardTitle className="text-2xl">Welcome to FinanceFlow AI</CardTitle>
-          <CardDescription>Enter your Company ID to proceed with Google Sign-In.</CardDescription>
+          <CardDescription>
+            {companyIdValidated 
+              ? "Company ID verified. Proceed with Google Sign-In." 
+              : "Enter your Company ID to proceed."}
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <label htmlFor="companyId" className="block text-sm font-medium text-foreground">Company ID</label>
-            <Input
-              id="companyId"
-              type="text"
-              placeholder="Enter Company ID (e.g., KENESIS)"
-              value={companyId}
-              onChange={handleCompanyIdChange}
-              className={error && !isCompanyIdValid && companyId.trim() !== "" ? "border-destructive" : ""}
-            />
-          </div>
+          {!companyIdValidated && (
+            <div className="space-y-2">
+              <label htmlFor="companyId" className="block text-sm font-medium text-foreground">Company ID</label>
+              <Input
+                id="companyId"
+                type="text"
+                placeholder="Enter Company ID (e.g., KENESIS)"
+                value={companyId}
+                onChange={handleCompanyIdChange}
+                className={error && companyId.trim() !== "" && !companyIdValidated ? "border-destructive" : ""}
+                disabled={uiIsLoading || authIsLoading}
+              />
+            </div>
+          )}
           {error && (
             <Alert variant="destructive" className="py-2 px-3">
               <AlertCircle className="h-4 w-4" />
@@ -111,15 +117,17 @@ export default function CompanyLoginPage() {
               <AlertDescription className="text-xs">{error}</AlertDescription>
             </Alert>
           )}
-          <Button 
-            onClick={handleGoogleSignIn} 
-            className="w-full" 
-            disabled={!isCompanyIdValid || uiIsLoading || authIsLoading}
-          >
-            {(uiIsLoading || authIsLoading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            <GoogleIcon />
-            Sign in with Google
-          </Button>
+          {companyIdValidated && (
+            <Button 
+              onClick={handleGoogleSignIn} 
+              className="w-full" 
+              disabled={uiIsLoading || authIsLoading}
+            >
+              {(uiIsLoading || authIsLoading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <GoogleIcon />
+              Sign in with Google
+            </Button>
+          )}
         </CardContent>
         <CardFooter>
            <p className="text-xs text-muted-foreground text-center w-full">
@@ -130,5 +138,3 @@ export default function CompanyLoginPage() {
     </div>
   );
 }
-
-    
