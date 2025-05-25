@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview An AI assistant for financial management via conversational interface.
@@ -31,7 +32,7 @@ export async function chatWithAiAssistant(input: ChatWithAiAssistantInput): Prom
 
 const prompt = ai.definePrompt({
   name: 'chatWithAiAssistantPrompt',
-  input: {schema: ChatWithAiAssistantInputSchema},
+  input: {schema: ChatWithAiAssistantInputSchema}, // Schema definition remains based on original input
   output: {schema: ChatWithAiAssistantOutputSchema},
   prompt: `You are a helpful AI assistant specializing in accounting and financial management for small businesses.
   Your goal is to help users manage their finances through a conversational interface.
@@ -40,7 +41,7 @@ const prompt = ai.definePrompt({
 
   Here's the conversation history:
   {{#each conversationHistory}}
-  {{#if (eq role \"user\")}}User:{{else}}Assistant:{{/if}} {{{content}}}
+    {{#if role_is_user}}User:{{else}}Assistant:{{/if}} {{{content}}}
   {{/each}}
 
   {{#if uploadedFiles}}
@@ -61,8 +62,19 @@ const chatWithAiAssistantFlow = ai.defineFlow(
     inputSchema: ChatWithAiAssistantInputSchema,
     outputSchema: ChatWithAiAssistantOutputSchema,
   },
-  async input => {
-    const {output} = await prompt(input);
+  async (input: ChatWithAiAssistantInput) => {
+    const processedConversationHistory = input.conversationHistory?.map(msg => ({
+      ...msg, // Preserve original content and role
+      role_is_user: msg.role === 'user', // Add the boolean flag
+    }));
+
+    // Prepare data for the prompt, using the processed history
+    const promptData = {
+      ...input,
+      conversationHistory: processedConversationHistory || [], // Ensure it's an array
+    };
+
+    const {output} = await prompt(promptData);
     return output!;
   }
 );
