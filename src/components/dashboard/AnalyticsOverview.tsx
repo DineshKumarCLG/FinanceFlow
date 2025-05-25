@@ -2,23 +2,30 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import type { JournalEntry } from "@/lib/data-service";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SummaryCard } from "./SummaryCard";
-import { TrendingUp, TrendingDown, Hash, Percent } from "lucide-react";
-import { incomeKeywords, expenseKeywords } from "@/app/(app)/dashboard/page"; // Import from dashboard
+import { TrendingUp, TrendingDown, Percent } from "lucide-react"; // Removed Hash as it's not used for KPIs
 
-interface AnalyticsOverviewProps {
-  journalEntries: JournalEntry[];
-  isLoading?: boolean;
+// Define types for the props this component will now receive
+export interface AnalyticsKpiData {
+  avgTransactionValue: number;
+  profitMargin: number;
+  incomeTransactions: number;
+  expenseTransactions: number;
 }
 
-interface ExpenseCategoryData {
+export interface ExpenseCategoryData {
   name: string;
   total: number;
+}
+
+interface AnalyticsOverviewProps {
+  kpis: AnalyticsKpiData;
+  expenseCategories: ExpenseCategoryData[];
+  isLoading?: boolean;
 }
 
 const chartColors = [
@@ -37,7 +44,7 @@ const chartConfig = {
 } satisfies ChartConfig;
 
 
-export function AnalyticsOverview({ journalEntries, isLoading = false }: AnalyticsOverviewProps) {
+export function AnalyticsOverview({ kpis, expenseCategories, isLoading = false }: AnalyticsOverviewProps) {
   const [clientLocale, setClientLocale] = useState('en-US');
 
   useEffect(() => {
@@ -45,75 +52,6 @@ export function AnalyticsOverview({ journalEntries, isLoading = false }: Analyti
       setClientLocale(navigator.language || 'en-US');
     }
   }, []);
-
-  const { kpis, expenseCategories } = useMemo(() => {
-    if (journalEntries.length === 0) {
-      return {
-        kpis: {
-          avgTransactionValue: 0,
-          profitMargin: 0,
-          incomeTransactions: 0,
-          expenseTransactions: 0,
-          totalRevenue: 0,
-          totalExpenses: 0,
-        },
-        expenseCategories: [],
-      };
-    }
-
-    let totalRevenue = 0;
-    let totalExpenses = 0;
-    let totalTransactionAmount = 0;
-    let incomeTransactions = 0;
-    let expenseTransactions = 0;
-    const expensesByAccount: Record<string, number> = {};
-
-    journalEntries.forEach(entry => {
-      totalTransactionAmount += entry.amount;
-      let isIncome = false;
-      let isExpense = false;
-
-      if (incomeKeywords.some(keyword => entry.creditAccount?.toLowerCase().includes(keyword) || entry.description.toLowerCase().includes(keyword))) {
-        isIncome = true;
-        totalRevenue += entry.amount;
-        incomeTransactions++;
-      }
-      
-      if (expenseKeywords.some(keyword => entry.debitAccount?.toLowerCase().includes(keyword) || entry.description.toLowerCase().includes(keyword))) {
-         isExpense = true;
-      }
-      if (entry.creditAccount?.toLowerCase().includes('cash') || entry.creditAccount?.toLowerCase().includes('bank')) {
-        if(!isIncome) isExpense = true;
-      }
-
-      if(isExpense){
-        totalExpenses += entry.amount;
-        expenseTransactions++;
-        const account = entry.debitAccount || "Uncategorized Expense";
-        expensesByAccount[account] = (expensesByAccount[account] || 0) + entry.amount;
-      }
-    });
-
-    const avgTransactionValue = journalEntries.length > 0 ? totalTransactionAmount / journalEntries.length : 0;
-    const profitMargin = totalRevenue > 0 ? ((totalRevenue - totalExpenses) / totalRevenue) * 100 : 0;
-
-    const sortedExpenseCategories = Object.entries(expensesByAccount)
-      .map(([name, total]) => ({ name, total }))
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 5);
-
-    return {
-      kpis: {
-        avgTransactionValue,
-        profitMargin,
-        incomeTransactions,
-        expenseTransactions,
-        totalRevenue, // Also needed for profit margin context
-        totalExpenses, // For context
-      },
-      expenseCategories: sortedExpenseCategories,
-    };
-  }, [journalEntries]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat(clientLocale, { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value);
@@ -130,7 +68,16 @@ export function AnalyticsOverview({ journalEntries, isLoading = false }: Analyti
     );
   }
   
-  if (journalEntries.length === 0 && !isLoading) {
+  // Check if there's meaningful data to display, not just if journalEntries was empty
+  const noDataAvailable = !isLoading && 
+                         kpis.avgTransactionValue === 0 && 
+                         kpis.profitMargin === 0 && 
+                         kpis.incomeTransactions === 0 && 
+                         kpis.expenseTransactions === 0 && 
+                         expenseCategories.length === 0;
+
+
+  if (noDataAvailable) {
     return (
       <Card>
         <CardHeader>
@@ -150,14 +97,14 @@ export function AnalyticsOverview({ journalEntries, isLoading = false }: Analyti
         <SummaryCard 
           title="Avg. Transaction Value" 
           value={kpis.avgTransactionValue} 
-          icon={TrendingUp} 
+          icon={TrendingUp} // Consider if TrendingUp is always appropriate
         />
         <SummaryCard 
           title="Profit Margin" 
           value={kpis.profitMargin} 
           icon={Percent} 
           isCurrency={false} 
-          change={`${kpis.profitMargin.toFixed(1)}%`} // Show percentage
+          change={`${kpis.profitMargin.toFixed(1)}%`} 
         />
         <SummaryCard 
           title="Income Transactions" 
@@ -201,7 +148,7 @@ export function AnalyticsOverview({ journalEntries, isLoading = false }: Analyti
               </ChartContainer>
             </div>
           ) : (
-            <p className="text-muted-foreground">No expense data to display.</p>
+            <p className="text-muted-foreground">No expense data to display for the chart.</p>
           )}
         </CardContent>
       </Card>

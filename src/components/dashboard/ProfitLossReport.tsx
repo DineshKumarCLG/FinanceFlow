@@ -1,28 +1,32 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import type { JournalEntry } from "@/lib/data-service";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { DateRange } from "react-day-picker";
-import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
-import { incomeKeywords, expenseKeywords } from "@/app/(app)/dashboard/page"; // Import from dashboard
 
-
-interface ProfitLossReportProps {
-  journalEntries: JournalEntry[];
-  dateRange?: DateRange;
-  isLoading?: boolean;
-}
-
-interface ReportLineItem {
+// Define types for the props this component will now receive
+export interface ReportLineItem {
   accountName: string;
   amount: number;
 }
 
-export function ProfitLossReport({ journalEntries, dateRange, isLoading = false }: ProfitLossReportProps) {
+export interface ProfitLossReportData {
+  revenueItems: ReportLineItem[];
+  expenseItems: ReportLineItem[];
+  totalRevenue: number;
+  totalExpenses: number;
+  netProfit: number;
+  formattedDateRange: string;
+}
+
+interface ProfitLossReportProps {
+  reportData?: ProfitLossReportData; // Make it optional initially
+  isLoading?: boolean;
+}
+
+export function ProfitLossReport({ reportData, isLoading = false }: ProfitLossReportProps) {
   const [clientLocale, setClientLocale] = useState('en-US');
 
   useEffect(() => {
@@ -31,66 +35,10 @@ export function ProfitLossReport({ journalEntries, dateRange, isLoading = false 
     }
   }, []);
 
-  const { revenueItems, expenseItems, totalRevenue, totalExpenses, netProfit } = useMemo(() => {
-    if (!journalEntries) {
-      return { revenueItems: [], expenseItems: [], totalRevenue: 0, totalExpenses: 0, netProfit: 0 };
-    }
-
-    const revenues: Record<string, number> = {};
-    const expenses: Record<string, number> = {};
-    let currentTotalRevenue = 0;
-    let currentTotalExpenses = 0;
-
-    journalEntries.forEach(entry => {
-      let isIncome = false;
-      // Check for income
-      if (incomeKeywords.some(keyword => entry.creditAccount?.toLowerCase().includes(keyword) || entry.description.toLowerCase().includes(keyword))) {
-        isIncome = true;
-        const account = entry.creditAccount || "Uncategorized Revenue";
-        revenues[account] = (revenues[account] || 0) + entry.amount;
-        currentTotalRevenue += entry.amount;
-      }
-      
-      // Check for expenses
-      // Prioritize explicit expense accounts, then cash outflows not marked as income
-      if (expenseKeywords.some(keyword => entry.debitAccount?.toLowerCase().includes(keyword) || entry.description.toLowerCase().includes(keyword))) {
-        const account = entry.debitAccount || "Uncategorized Expense";
-        expenses[account] = (expenses[account] || 0) + entry.amount;
-        currentTotalExpenses += entry.amount;
-      } else if ( (entry.creditAccount?.toLowerCase().includes('cash') || entry.creditAccount?.toLowerCase().includes('bank')) && !isIncome ) {
-        // If cash/bank is credited and it's not already an income transaction, consider it an expense
-        const account = entry.description || "Cash Payment (Uncategorized)"; // Use description as fallback category
-        expenses[account] = (expenses[account] || 0) + entry.amount;
-        currentTotalExpenses += entry.amount;
-      }
-    });
-    
-    const revenueItemsList = Object.entries(revenues).map(([accountName, amount]) => ({ accountName, amount }));
-    const expenseItemsList = Object.entries(expenses).map(([accountName, amount]) => ({ accountName, amount }));
-
-    return {
-      revenueItems: revenueItemsList,
-      expenseItems: expenseItemsList,
-      totalRevenue: currentTotalRevenue,
-      totalExpenses: currentTotalExpenses,
-      netProfit: currentTotalRevenue - currentTotalExpenses,
-    };
-  }, [journalEntries]);
-
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat(clientLocale, { style: 'currency', currency: 'INR' }).format(value);
   };
   
-  const formattedDateRange = useMemo(() => {
-    if (dateRange?.from && dateRange?.to) {
-      return `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}`;
-    } else if (dateRange?.from) {
-      return `From ${format(dateRange.from, "LLL dd, y")}`;
-    }
-    return "All Time";
-  }, [dateRange]);
-
-
   if (isLoading) {
     return (
       <Card>
@@ -105,12 +53,12 @@ export function ProfitLossReport({ journalEntries, dateRange, isLoading = false 
     );
   }
   
-  if (journalEntries.length === 0 && !isLoading) {
+  if (!reportData || (reportData.revenueItems.length === 0 && reportData.expenseItems.length === 0 && !isLoading)) {
     return (
       <Card>
         <CardHeader>
           <CardTitle>Profit & Loss Statement</CardTitle>
-           <CardDescription>For the period: {formattedDateRange}</CardDescription>
+           <CardDescription>For the period: {reportData?.formattedDateRange || "selected period"}</CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground">No data available for the selected period to generate the report.</p>
@@ -118,6 +66,8 @@ export function ProfitLossReport({ journalEntries, dateRange, isLoading = false 
       </Card>
     );
   }
+
+  const { revenueItems, expenseItems, totalRevenue, totalExpenses, netProfit, formattedDateRange } = reportData;
 
   return (
     <Card>
