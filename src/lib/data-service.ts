@@ -196,50 +196,62 @@ export async function addJournalEntries(newEntriesData: Omit<JournalEntry, 'id' 
   }
 
   const batch = writeBatch(db);
-  const addedEntries: JournalEntry[] = [];
+  const preparedEntries: JournalEntry[] = []; // To store entries with their generated IDs
+
+  newEntriesData.forEach(newData => {
+    const docRef = doc(collection(db, JOURNAL_COLLECTION)); // Generate a new doc ref for ID
+    const entryToSave = {
+      ...newData,
+      creatorUserId: currentUser.uid,
+      companyId: KENESIS_COMPANY_ID,
+      createdAt: serverTimestamp() as Timestamp, // Use serverTimestamp for batch
+      tags: newData.tags || [],
+    };
+    batch.set(docRef, entryToSave);
+
+    // Store the full entry details including the generated ID for notification creation later
+    preparedEntries.push({
+      id: docRef.id,
+      date: newData.date,
+      description: newData.description,
+      debitAccount: newData.debitAccount,
+      creditAccount: newData.creditAccount,
+      amount: newData.amount,
+      tags: newData.tags || [],
+      creatorUserId: currentUser.uid,
+      companyId: KENESIS_COMPANY_ID,
+      createdAt: Timestamp.now() // Client-side placeholder, actual Firestore doc will have server timestamp
+    });
+  });
 
   try {
-    newEntriesData.forEach(newData => {
-      const docRef = doc(collection(db, JOURNAL_COLLECTION)); 
-      const entryToSave = {
-        ...newData,
-        creatorUserId: currentUser.uid,
-        companyId: KENESIS_COMPANY_ID, 
-        createdAt: serverTimestamp() as Timestamp,
-        tags: newData.tags || [],
-      };
-      batch.set(docRef, entryToSave);
-      
-      const savedEntry: JournalEntry = {
-        id: docRef.id,
-        date: entryToSave.date,
-        description: entryToSave.description,
-        debitAccount: entryToSave.debitAccount,
-        creditAccount: entryToSave.creditAccount,
-        amount: entryToSave.amount,
-        tags: entryToSave.tags,
-        creatorUserId: entryToSave.creatorUserId,
-        companyId: entryToSave.companyId,
-        createdAt: Timestamp.now() 
-      };
-      addedEntries.push(savedEntry);
+    await batch.commit(); // Commit all journal entries first
 
-      // Add notification for each new entry
+    // After successful commit, create notifications for each entry
+    const notificationPromises = preparedEntries.map(savedEntry => {
       const shortDesc = savedEntry.description.length > 30 ? savedEntry.description.substring(0, 27) + "..." : savedEntry.description;
       const amountFormatted = savedEntry.amount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' });
-      // Note: Adding notification here might not be ideal in a batch if the batch itself fails.
-      // For simplicity, adding it now. A more robust solution might do this after successful batch.commit().
-      addNotification(
+      return addNotification(
         `User ...${currentUser.uid.slice(-6)} added entry from document: '${shortDesc}' (${amountFormatted})`,
-        'document_upload', // Or a more specific type
+        'document_upload', // Or a more specific type if needed
         currentUser.uid,
         savedEntry.id
-      ).catch(console.error); // Log error but don't block main flow
+      );
     });
 
-    await batch.commit();
-    // Potentially trigger notifications here after successful commit for more atomicity.
-    return addedEntries;
+    // Use Promise.allSettled to ensure all notification attempts are made,
+    // even if some fail, without stopping others or throwing an error for the whole process.
+    const notificationResults = await Promise.allSettled(notificationPromises);
+    notificationResults.forEach(result => {
+      if (result.status === 'rejected') {
+        console.error("Failed to add a notification for a batch entry:", result.reason);
+      }
+    });
+    
+    // The `createdAt` field in `preparedEntries` objects returned to the client
+    // will be client-side timestamps. The actual documents in Firestore have server timestamps.
+    // This is usually acceptable for immediate UI feedback.
+    return preparedEntries; 
   } catch (error) {
     console.error("Error adding KENESIS journal entries to Firestore in batch:", error);
     throw error;
