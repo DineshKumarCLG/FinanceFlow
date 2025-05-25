@@ -34,31 +34,36 @@ async function fetchLedgerTransactions(
   const accountName = accountsOptions.find(acc => acc.value === selectedAccountKey)?.label || selectedAccountKey;
   
   let journalEntries = await getJournalEntries();
+  console.log(`Ledger: Fetched ${journalEntries.length} total journal entries for account ${selectedAccountKey}`);
 
   // Filter journal entries relevant to the selected account
   let relevantEntries = journalEntries.filter(entry => 
     entry.debitAccount === selectedAccountKey || entry.creditAccount === selectedAccountKey
   );
+  console.log(`Ledger: Found ${relevantEntries.length} entries relevant to ${selectedAccountKey}`);
 
   // Further filter by dateRange
   if (dateRange?.from) {
+    const fromDateStart = new Date(dateRange.from.getFullYear(), dateRange.from.getMonth(), dateRange.from.getDate(), 0, 0, 0, 0);
+    const toDateEnd = dateRange.to ? new Date(dateRange.to.getFullYear(), dateRange.to.getMonth(), dateRange.to.getDate(), 23, 59, 59, 999) : null;
+
     relevantEntries = relevantEntries.filter(entry => {
       const entryDate = new Date(entry.date);
-      // Adjust date to avoid timezone issues with comparison
-      const fromDate = new Date(dateRange.from!.getFullYear(), dateRange.from!.getMonth(), dateRange.from!.getDate());
-      if (dateRange.to) {
-        const toDate = new Date(dateRange.to!.getFullYear(), dateRange.to!.getMonth(), dateRange.to!.getDate(), 23, 59, 59);
-        return entryDate >= fromDate && entryDate <= toDate;
+      if (toDateEnd) {
+        return entryDate >= fromDateStart && entryDate <= toDateEnd;
       }
-      return entryDate >= fromDate;
+      return entryDate >= fromDateStart;
     });
+    console.log(`Ledger: After date filter (${dateRange.from} - ${dateRange.to}), ${relevantEntries.length} entries remain.`);
   }
+
 
   // Further filter by searchTerm in description
   if (searchTerm) {
     relevantEntries = relevantEntries.filter(entry => 
       entry.description.toLowerCase().includes(searchTerm.toLowerCase())
     );
+    console.log(`Ledger: After search term "${searchTerm}", ${relevantEntries.length} entries remain.`);
   }
 
   // Sort entries by date (important for balance calculation)
@@ -99,6 +104,7 @@ async function fetchLedgerTransactions(
     };
   });
 
+  console.log(`Ledger: Processed ${ledgerTransactions.length} transactions for display.`);
   return { accountName, transactions: ledgerTransactions };
 }
 
@@ -110,7 +116,7 @@ export default function LedgerPage() {
   const [currentFilters, setCurrentFilters] = useState<{ account?: string; dateRange?: DateRange, searchTerm?: string  }>({ account: "Cash" });
 
   const loadLedgerData = useCallback(async (filters: { account?: string; dateRange?: DateRange, searchTerm?: string }) => {
-    if (!currentUser) { // Don't load if no user
+    if (!currentUser) { 
       setIsLoading(false);
       setLedgerData({ accountName: filters.account || "Cash", transactions: []});
       return;
@@ -125,11 +131,17 @@ export default function LedgerPage() {
     } finally {
         setIsLoading(false);
     }
-  }, [currentUser]); // Add currentUser as dependency
+  }, [currentUser]); 
 
   useEffect(() => {
-    loadLedgerData(currentFilters);
-  }, [loadLedgerData, currentFilters]);
+    if (currentUser) { // Only load if there's a user
+      loadLedgerData(currentFilters);
+    } else {
+      // Handle case where user logs out or isn't available initially
+      setIsLoading(false);
+      setLedgerData({ accountName: currentFilters.account || "Cash", transactions: []});
+    }
+  }, [loadLedgerData, currentFilters, currentUser]);
 
   const handleFilterChange = (newFilters: { account?: string; dateRange?: DateRange, searchTerm?: string }) => {
     setCurrentFilters(prev => ({...prev, ...newFilters}));
@@ -160,3 +172,4 @@ export default function LedgerPage() {
     </div>
   );
 }
+
