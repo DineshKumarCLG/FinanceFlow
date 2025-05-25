@@ -30,12 +30,12 @@ export function QuickActions() {
       <CardHeader>
         <CardTitle className="text-xl">Quick Actions</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-4 sm:grid-cols-1 md:grid-cols-3">
+      <CardContent className="grid gap-4"> {/* Changed md:grid-cols-3 to default single column */}
         {actions.map((action) => (
           <Button
             key={action.label}
             variant="outline"
-            className="h-auto p-4 flex flex-col items-start text-left justify-start gap-2 hover:bg-accent/50"
+            className="h-auto p-4 flex flex-col items-start text-left justify-start gap-2 hover:bg-accent/50 w-full" // Added w-full
             asChild
           >
             <Link href={action.href}>
