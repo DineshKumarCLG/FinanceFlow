@@ -7,7 +7,7 @@ import { IncomeExpenseChart } from "@/components/dashboard/IncomeExpenseChart";
 // import { AnalyticsOverview, type AnalyticsKpiData, type ExpenseCategoryData as AnalyticsExpenseCategoryData } from "@/components/dashboard/AnalyticsOverview"; // Will be dynamically imported
 // import { ProfitLossReport, type ProfitLossReportData, type ReportLineItem as PLReportLineItem } from "@/components/dashboard/ProfitLossReport"; // Will be dynamically imported
 import { DollarSign, TrendingUp, TrendingDown, Activity, CalendarDays, Download } from "lucide-react"; 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"; // Added CardDescription
 import { UserSpendingList, type UserSpending } from "@/components/dashboard/UserSpendingList"; 
 // import { NotificationList, type Notification } from "@/components/dashboard/NotificationList"; // Will be dynamically imported
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -22,6 +22,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import dynamic from 'next/dynamic';
+import { usePathname } from "next/navigation"; // Added for refresh logic
+
 
 // Dynamically import components for tab content
 const AnalyticsOverview = dynamic(() => import('@/components/dashboard/AnalyticsOverview').then(mod => mod.AnalyticsOverview), { 
@@ -49,12 +51,18 @@ interface ChartPoint {
   expense: number; 
 }
 
-export const incomeKeywords = ['revenue', 'sales', 'income', 'service fee', 'interest received'];
-export const expenseKeywords = ['expense', 'cost', 'supply', 'rent', 'salary', 'utility', 'utilities', 'purchase', 'advertising', 'maintenance', 'insurance', 'interest paid', 'fee'];
+export const incomeKeywords = ['revenue', 'sales', 'income', 'service fee', 'interest received', 'consulting income', 'project revenue', 'commission', 'rental income', 'dividend'];
+export const expenseKeywords = [
+    'expense', 'cost', 'supply', 'supplies', 'rent', 'salary', 'salaries', 'utility', 'utilities', 
+    'purchase', 'advertising', 'marketing', 'maintenance', 'repair', 'insurance', 'interest paid', 
+    'fee', 'fees', 'travel', 'software', 'subscription', 'development', 'consulting', 'contractor', 
+    'design', 'depreciation', 'amortization', 'office supplies', 'bank charges', 'shipping', 'postage'
+];
 
 
 export default function DashboardPage() {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, currentCompanyId } = useAuth();
+  const pathname = usePathname();
   const [clientLocale, setClientLocale] = useState('en-US');
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [allJournalEntries, setAllJournalEntries] = useState<StoredJournalEntry[]>([]);
@@ -92,11 +100,30 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function loadInitialData() {
-      if (!currentUser) {
+      if (!currentUser || !currentCompanyId) {
         setIsLoadingData(false);
         setIsLoadingNotifications(false);
         setAllJournalEntries([]);
         setNotifications([]);
+        // Reset all data states
+        setSummaryData({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
+        const now = new Date();
+        setChartDisplayData(
+             eachMonthOfInterval({ start: startOfMonth(subMonths(now, 11)), end: endOfMonth(now) }).map(d => ({
+                month: d.toLocaleString(clientLocale, { month: 'short' }), income: 0, expense: 0 
+            }))
+        );
+        setUserSpendingData([]);
+        setAnalyticsKpis({ avgTransactionValue: 0, profitMargin: 0, incomeTransactions: 0, expenseTransactions: 0 });
+        setAnalyticsExpenseCategories([]);
+        if (dateRange?.from && dateRange?.to) {
+            const formattedRange = `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}`;
+            setProfitLossReportData({
+                revenueItems: [], expenseItems: [], totalRevenue: 0, totalExpenses: 0, netProfit: 0, formattedDateRange: formattedRange
+            });
+        } else {
+            setProfitLossReportData(undefined);
+        }
         return;
       }
       console.log("Dashboard: Starting to load initial data...");
@@ -104,8 +131,8 @@ export default function DashboardPage() {
       setIsLoadingNotifications(true);
       try {
         const [fetchedEntries, fetchedNotifications] = await Promise.all([
-          getJournalEntries(),
-          getNotifications()
+          getJournalEntries(currentCompanyId),
+          getNotifications(currentCompanyId)
         ]);
         
         setAllJournalEntries(fetchedEntries);
@@ -135,17 +162,40 @@ export default function DashboardPage() {
       } finally {
         setIsLoadingNotifications(false);
         console.log("Dashboard: Finished loading initial notifications.");
-        if (!currentUser) setIsLoadingData(false);
+        // setIsLoadingData(false) is handled by the processing useEffect
       }
     }
-    if (currentUser) { // Only load if currentUser is available
+    // Only load if currentUser and currentCompanyId are available
+    // The pathname dependency ensures data re-fetch on navigation to dashboard
+    if (currentUser && currentCompanyId) {
       loadInitialData();
-    } else { // If no currentUser yet, set loading to false to avoid indefinite loading screen
+    } else { // If no currentUser yet, or no companyId, set loading to false to avoid indefinite loading screen
       setIsLoadingData(false);
       setIsLoadingNotifications(false);
+      // Reset data if user logs out or companyId is lost
+        setAllJournalEntries([]);
+        setNotifications([]);
+        setSummaryData({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
+        const now = new Date();
+        setChartDisplayData(
+             eachMonthOfInterval({ start: startOfMonth(subMonths(now, 11)), end: endOfMonth(now) }).map(d => ({
+                month: d.toLocaleString(clientLocale, { month: 'short' }), income: 0, expense: 0
+            }))
+        );
+        setUserSpendingData([]);
+        setAnalyticsKpis({ avgTransactionValue: 0, profitMargin: 0, incomeTransactions: 0, expenseTransactions: 0 });
+        setAnalyticsExpenseCategories([]);
+        if (dateRange?.from && dateRange?.to) {
+            const formattedRange = `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}`;
+            setProfitLossReportData({
+                revenueItems: [], expenseItems: [], totalRevenue: 0, totalExpenses: 0, netProfit: 0, formattedDateRange: formattedRange
+            });
+        } else {
+             setProfitLossReportData(undefined);
+        }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser, toast]); 
+  }, [currentUser, currentCompanyId, pathname]); // Removed toast from dependencies
 
 
   // Centralized data processing useEffect
@@ -155,13 +205,22 @@ export default function DashboardPage() {
 
     if (!dateRange?.from || !dateRange?.to) {
       console.log("Dashboard: Date range not fully set, skipping processing.");
+      setIsLoadingData(false); // Ensure loading stops if date range is missing
+      return;
+    }
+    
+    if (!currentUser || !currentCompanyId) { // If user logs out or companyId lost while processing
+      console.log("Dashboard: No user or company ID during processing, skipping.");
+      setIsLoadingData(false);
       return;
     }
     
     setIsLoadingData(true); 
 
-    if (!currentUser && allJournalEntries.length === 0) { 
-        console.log("Dashboard: No current user and no journal entries. Setting defaults for empty state.");
+    // This block is for when there's a user & companyId, but no entries yet.
+    // It should still set loading to false after setting defaults.
+    if (allJournalEntries.length === 0) { 
+        console.log("Dashboard: No journal entries for this company. Setting defaults for empty state.");
         setSummaryData({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
         const now = new Date();
         setChartDisplayData(
@@ -177,7 +236,7 @@ export default function DashboardPage() {
             revenueItems: [], expenseItems: [], totalRevenue: 0, totalExpenses: 0, netProfit: 0, formattedDateRange: formattedRange
         });
         setIsLoadingData(false);
-        console.log(`Dashboard: Finished processing (no user/entries) in ${Date.now() - overallProcessingStartTime}ms.`);
+        console.log(`Dashboard: Finished processing (no entries for company) in ${Date.now() - overallProcessingStartTime}ms.`);
         return;
     }
     
@@ -224,15 +283,35 @@ export default function DashboardPage() {
       let isIncomeEntry = false;
       let isExpenseEntry = false;
 
-      if (incomeKeywords.some(keyword => (entry.creditAccount?.toLowerCase().includes(keyword) || entry.description.toLowerCase().includes(keyword))) ||
-          (entry.debitAccount?.toLowerCase().includes('cash') || entry.debitAccount?.toLowerCase().includes('bank'))) {
+      // Check if debitAccount or description contains income keywords
+      const debitAccountLower = entry.debitAccount?.toLowerCase() || "";
+      const creditAccountLower = entry.creditAccount?.toLowerCase() || "";
+      const descriptionLower = entry.description.toLowerCase();
+
+      let debitAccountMatchesIncomeKeyword = incomeKeywords.some(keyword => debitAccountLower.includes(keyword));
+      let creditAccountMatchesIncomeKeyword = incomeKeywords.some(keyword => creditAccountLower.includes(keyword));
+      let descriptionMatchesIncomeKeyword = incomeKeywords.some(keyword => descriptionLower.includes(keyword));
+
+      let debitAccountMatchesExpenseKeyword = expenseKeywords.some(keyword => debitAccountLower.includes(keyword));
+      let creditAccountMatchesExpenseKeyword = expenseKeywords.some(keyword => creditAccountLower.includes(keyword));
+      let descriptionMatchesExpenseKeyword = expenseKeywords.some(keyword => descriptionLower.includes(keyword));
+
+
+      // More refined classification
+      if (creditAccountMatchesIncomeKeyword || (debitAccountLower.includes('cash') || debitAccountLower.includes('bank')) && (descriptionMatchesIncomeKeyword || debitAccountMatchesIncomeKeyword)) {
           isIncomeEntry = true;
       }
-      if (expenseKeywords.some(keyword => (entry.debitAccount?.toLowerCase().includes(keyword) || entry.description.toLowerCase().includes(keyword)))) {
-          isExpenseEntry = true;
-      } else if ((entry.creditAccount?.toLowerCase().includes('cash') || entry.creditAccount?.toLowerCase().includes('bank')) && !isIncomeEntry) {
+      
+      if (debitAccountMatchesExpenseKeyword || (creditAccountLower.includes('cash') || creditAccountLower.includes('bank')) && (descriptionMatchesExpenseKeyword || creditAccountMatchesExpenseKeyword) && !isIncomeEntry ) {
           isExpenseEntry = true; 
       }
+
+       // Debugging log for "Web Development Expense"
+       if (debitAccountLower.includes("web development expense") || descriptionLower.includes("web development expense")) {
+        console.log(`DEBUG: Entry for Web Dev: ID=${entry.id}, Desc=${entry.description}, Debit=${entry.debitAccount}, Credit=${entry.creditAccount}, Amount=${entry.amount}`);
+        console.log(`  Flags: debitKWmatch=${debitAccountMatchesExpenseKeyword}, creditCashBank=${creditAccountLower.includes('cash') || creditAccountLower.includes('bank')}, descKWmatch=${descriptionMatchesExpenseKeyword}, isIncome=${isIncomeEntry}, isExpense (final)=${isExpenseEntry}`);
+      }
+
       
       if (isWithinRange) {
         transactionCountInRange++;
@@ -274,6 +353,7 @@ export default function DashboardPage() {
       }
     });
     console.log(`Dashboard: Main entry iteration (${allJournalEntries.length} entries) took ${Date.now() - sectionStartTime}ms.`);
+    console.log("Dashboard: Calculated expensesByAccountForAnalytics:", expensesByAccountForAnalytics);
     sectionStartTime = Date.now();
 
     setSummaryData({
@@ -295,19 +375,19 @@ export default function DashboardPage() {
     const topSpenders = Object.entries(userExpenses)
       .map(([userId, totalSpent]) => {
         let displayName = `User ...${userId.slice(-6)}`;
-        let avatarFallbackInitials = userId.substring(0, 2).toUpperCase(); 
+        let avatarFallback = userId.substring(0, 2).toUpperCase(); 
 
         if (currentUser && userId === currentUser.uid) {
           displayName = currentUser.displayName || `User ...${userId.slice(-6)}`;
           if (currentUser.displayName && currentUser.displayName.trim() !== "") {
             const names = currentUser.displayName.split(' ');
-            avatarFallbackInitials = names.map(n => n[0]).slice(0,2).join('').toUpperCase();
+            avatarFallback = names.map(n => n[0]).slice(0,2).join('').toUpperCase();
           } else if (currentUser.email) {
-            avatarFallbackInitials = currentUser.email.substring(0, 2).toUpperCase();
+            avatarFallback = currentUser.email.substring(0, 2).toUpperCase();
           }
         }
         
-        return { userId, totalSpent, displayName, avatarFallback: avatarFallbackInitials };
+        return { userId, totalSpent, displayName, avatarFallback };
       })
       .sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 5); 
     setUserSpendingData(topSpenders);
@@ -327,6 +407,7 @@ export default function DashboardPage() {
     const topAnalyticsExpenseCategories = Object.entries(expensesByAccountForAnalytics)
       .map(([name, total]) => ({ name, total }))
       .sort((a, b) => b.total - a.total).slice(0, 5);
+    console.log("Dashboard: Calculated topAnalyticsExpenseCategories:", topAnalyticsExpenseCategories);
     setAnalyticsExpenseCategories(topAnalyticsExpenseCategories);
     console.log(`Dashboard: Analytics expense categories state update took ${Date.now() - sectionStartTime}ms.`);
     sectionStartTime = Date.now();
@@ -362,7 +443,7 @@ export default function DashboardPage() {
 
     const { revenueItems, expenseItems, totalRevenue, totalExpenses, netProfit, formattedDateRange } = profitLossReportData;
 
-    let csvContent = "KENESIS Accounting - Profit & Loss Statement\n";
+    let csvContent = "FinanceFlow AI - Profit & Loss Statement\n"; // Updated App Name
     csvContent += `Period: ${formattedDateRange}\n\n`;
     csvContent += "Account,Amount (INR)\n";
 
@@ -387,7 +468,7 @@ export default function DashboardPage() {
       const fromDateStr = dateRange?.from ? format(dateRange.from, "yyyyMMdd") : "alltime";
       const toDateStr = dateRange?.to ? format(dateRange.to, "yyyyMMdd") : "";
       link.setAttribute("href", url);
-      link.setAttribute("download", `Profit_Loss_Report_KENESIS_${fromDateStr}${toDateStr ? '-' + toDateStr : ''}.csv`);
+      link.setAttribute("download", `Profit_Loss_Report_FinanceFlow_${fromDateStr}${toDateStr ? '-' + toDateStr : ''}.csv`); // Updated App Name
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
@@ -417,7 +498,7 @@ export default function DashboardPage() {
                 <Button
                   id="date"
                   variant={"outline"}
-                  className="w-[260px] justify-start text-left font-normal bg-card hover:bg-muted"
+                  className="w-[260px] justify-start text-left font-normal bg-card" // Removed hover:bg-muted
                 >
                   <CalendarDays className="mr-2 h-4 w-4" />
                   {dateRange?.from ? (
@@ -500,3 +581,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
