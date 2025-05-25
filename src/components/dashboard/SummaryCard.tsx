@@ -6,14 +6,23 @@ import React, { useState, useEffect } from "react";
 
 interface SummaryCardProps {
   title: string;
-  value: number; // Changed to number
+  value: number;
   icon: LucideIcon;
-  change?: string;
-  changeType?: "positive" | "negative";
+  change?: string; // Optional, e.g., "+20.1%"
+  changeType?: "positive" | "negative"; // Optional
   className?: string;
+  isCurrency?: boolean; // New prop
 }
 
-export const SummaryCard = React.memo(function SummaryCard({ title, value, icon: Icon, change, changeType, className }: SummaryCardProps) {
+export const SummaryCard = React.memo(function SummaryCard({ 
+  title, 
+  value, 
+  icon: Icon, 
+  change, 
+  changeType, 
+  className,
+  isCurrency = true // Default to true
+}: SummaryCardProps) {
   const [clientLocale, setClientLocale] = useState('en-US');
 
   useEffect(() => {
@@ -21,6 +30,10 @@ export const SummaryCard = React.memo(function SummaryCard({ title, value, icon:
       setClientLocale(navigator.language || 'en-US');
     }
   }, []);
+
+  const formattedValue = isCurrency 
+    ? value.toLocaleString(clientLocale, { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 })
+    : value.toLocaleString(clientLocale);
 
   return (
     <Card className={cn("shadow-sm hover:shadow-md transition-shadow border-border", className)}>
@@ -32,8 +45,7 @@ export const SummaryCard = React.memo(function SummaryCard({ title, value, icon:
       </CardHeader>
       <CardContent className="px-4 pb-4">
         <div className="text-2xl font-bold text-foreground">
-           {/* Format value as INR currency */}
-          {value.toLocaleString(clientLocale, { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          {formattedValue}
         </div>
         {change && (
           <p className={cn(
@@ -41,7 +53,7 @@ export const SummaryCard = React.memo(function SummaryCard({ title, value, icon:
             changeType === "positive" && "text-green-600",
             changeType === "negative" && "text-red-600"
           )}>
-            {change}
+            {change} from last month
           </p>
         )}
       </CardContent>

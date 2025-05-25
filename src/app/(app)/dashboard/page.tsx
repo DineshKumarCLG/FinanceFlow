@@ -4,18 +4,20 @@
 import { PageTitle } from "@/components/shared/PageTitle";
 import { SummaryCard } from "@/components/dashboard/SummaryCard";
 import { IncomeExpenseChart } from "@/components/dashboard/IncomeExpenseChart";
+import { AnalyticsOverview } from "@/components/dashboard/AnalyticsOverview"; // New import
+import { ProfitLossReport } from "@/components/dashboard/ProfitLossReport"; // New import
 import { DollarSign, TrendingUp, TrendingDown, Activity, CalendarDays, Download } from "lucide-react"; 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { UserSpendingList, type UserSpending } from "@/components/dashboard/RecentSales"; 
-import { NotificationList } from "@/components/dashboard/NotificationList"; // Import NotificationList
+import { UserSpendingList, type UserSpending } from "@/components/dashboard/UserSpendingList"; 
+import { NotificationList } from "@/components/dashboard/NotificationList";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { useState, useEffect } from "react";
-import { getJournalEntries, type JournalEntry as StoredJournalEntry, getNotifications, type Notification } from "@/lib/data-service"; // Import getNotifications and Notification type
+import { useState, useEffect, useMemo } from "react";
+import { getJournalEntries, type JournalEntry as StoredJournalEntry, getNotifications, type Notification } from "@/lib/data-service";
 import type { DateRange } from "react-day-picker";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { format } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths, eachMonthOfInterval } from "date-fns";
 
 interface ChartPoint {
   month: string;
@@ -23,12 +25,20 @@ interface ChartPoint {
   expense: number; 
 }
 
+export const incomeKeywords = ['revenue', 'sales', 'income', 'service fee', 'interest received'];
+export const expenseKeywords = ['expense', 'cost', 'supply', 'rent', 'salary', 'utility', 'utilities', 'purchase', 'advertising', 'maintenance', 'insurance', 'interest paid'];
+
+
 export default function DashboardPage() {
   const [clientLocale, setClientLocale] = useState('en-US');
   const [isLoadingData, setIsLoadingData] = useState(true);
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: new Date(new Date().getFullYear(), 0, 1), 
-    to: new Date(), 
+  const [allJournalEntries, setAllJournalEntries] = useState<StoredJournalEntry[]>([]);
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    const today = new Date();
+    return {
+      from: startOfMonth(subMonths(today, 5)), // Default to last 6 months (current + 5 previous)
+      to: endOfMonth(today),
+    };
   });
 
   const [summaryData, setSummaryData] = useState({
@@ -46,85 +56,16 @@ export default function DashboardPage() {
     if (typeof navigator !== 'undefined') {
       setClientLocale(navigator.language || 'en-US');
     }
+  }, []);
 
+  useEffect(() => {
     async function loadDashboardData() {
       setIsLoadingData(true);
       setIsLoadingNotifications(true);
       try {
         const fetchedEntries = await getJournalEntries();
+        setAllJournalEntries(fetchedEntries); // Store all entries for other components
         
-        let calculatedTotalRevenue = 0; 
-        let calculatedTotalExpenses = 0;
-
-        const incomeKeywords = ['revenue', 'sales', 'income', 'service fee'];
-        const expenseKeywords = ['expense', 'cost', 'supply', 'rent', 'salary', 'utility', 'utilities', 'purchase'];
-        
-        const monthlyAggregates: Record<string, { income: number; expense: number; monthLabel: string; yearMonth: string }> = {};
-        const userExpenses: Record<string, number> = {};
-
-        const now = new Date();
-
-        for (let i = 11; i >= 0; i--) {
-          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-          const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-          const monthLabel = d.toLocaleString(clientLocale, { month: 'short' });
-          if (!monthlyAggregates[yearMonth]) {
-            monthlyAggregates[yearMonth] = { income: 0, expense: 0, monthLabel, yearMonth };
-          }
-        }
-        
-        fetchedEntries.forEach(entry => {
-          const entryDate = new Date(entry.date);
-          const entryYearMonth = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
-          const monthAggregate = monthlyAggregates[entryYearMonth];
-
-          let isIncome = false;
-          let isExpense = false;
-
-          if (incomeKeywords.some(keyword => entry.creditAccount.toLowerCase().includes(keyword) || entry.description.toLowerCase().includes(keyword))) {
-            isIncome = true;
-            calculatedTotalRevenue += entry.amount;
-            if (monthAggregate) monthAggregate.income += entry.amount;
-          }
-          
-          if (expenseKeywords.some(keyword => entry.debitAccount.toLowerCase().includes(keyword) || entry.description.toLowerCase().includes(keyword))) {
-             isExpense = true;
-          }
-          if (entry.creditAccount.toLowerCase().includes('cash') || entry.creditAccount.toLowerCase().includes('bank')) {
-            if(!isIncome) isExpense = true;
-          }
-
-          if(isExpense){
-            calculatedTotalExpenses += entry.amount;
-            if (monthAggregate) monthAggregate.expense += entry.amount;
-            const userId = entry.creatorUserId; // Use creatorUserId
-            userExpenses[userId] = (userExpenses[userId] || 0) + entry.amount;
-          }
-        });
-
-        setSummaryData({
-            totalRevenue: calculatedTotalRevenue,
-            totalExpenses: calculatedTotalExpenses,
-            netProfit: calculatedTotalRevenue - calculatedTotalExpenses,
-            transactionCount: fetchedEntries.length,
-        });
-
-        const newChartData = Object.values(monthlyAggregates)
-          .sort((a, b) => a.yearMonth.localeCompare(b.yearMonth)) 
-          .map(agg => ({ month: agg.monthLabel, income: agg.income, expense: agg.expense })); 
-        setChartDisplayData(newChartData);
-
-        const topSpenders = Object.entries(userExpenses)
-          .map(([userId, totalSpent]) => ({
-            userId,
-            totalSpent,
-            displayName: `User ...${userId.slice(-6)}`, 
-            avatarFallback: userId.substring(0, 2).toUpperCase(),
-          }))
-          .sort((a, b) => b.totalSpent - a.totalSpent)
-          .slice(0, 5); 
-        setUserSpendingData(topSpenders);
-
         // Fetch notifications
         const fetchedNotifications = await getNotifications();
         setNotifications(fetchedNotifications);
@@ -132,22 +73,135 @@ export default function DashboardPage() {
       } catch (error) {
         console.error("Failed to load dashboard data:", error);
          setSummaryData({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
-         setChartDisplayData( 
-            Array.from({ length: 12 }).map((_, i) => {
-                const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
-                return { month: d.toLocaleString(clientLocale, { month: 'short' }), income: 0, expense: 0 };
-            })
-         );
          setUserSpendingData([]);
          setNotifications([]);
+         setAllJournalEntries([]); // Clear entries on error
       } finally {
         setIsLoadingData(false);
         setIsLoadingNotifications(false);
       }
     }
     loadDashboardData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
+
+
+  // Recalculate dashboard overview data when allJournalEntries or dateRange changes
+  useEffect(() => {
+    if (allJournalEntries.length > 0 && dateRange?.from && dateRange?.to) {
+      let calculatedTotalRevenue = 0; 
+      let calculatedTotalExpenses = 0;
+      let transactionCountInRange = 0;
+      
+      const monthlyAggregates: Record<string, { income: number; expense: number; monthLabel: string; yearMonth: string }> = {};
+      const userExpenses: Record<string, number> = {};
+
+      // Initialize monthly aggregates for the chart (last 12 months for broader view regardless of dateRange)
+      const now = new Date();
+      const last12MonthsInterval = {
+        start: startOfMonth(subMonths(now, 11)),
+        end: endOfMonth(now),
+      };
+      const monthsForChart = eachMonthOfInterval(last12MonthsInterval);
+
+      monthsForChart.forEach(d => {
+        const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const monthLabel = d.toLocaleString(clientLocale, { month: 'short' });
+        if (!monthlyAggregates[yearMonth]) {
+          monthlyAggregates[yearMonth] = { income: 0, expense: 0, monthLabel, yearMonth };
+        }
+      });
+      
+      allJournalEntries.forEach(entry => {
+        const entryDate = new Date(entry.date);
+        const entryYearMonth = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
+        const monthAggregate = monthlyAggregates[entryYearMonth];
+
+        let isIncome = false;
+        let isExpense = false;
+
+        // Determine if entry is within selected dateRange for summary cards
+        const isWithinRange = entryDate >= dateRange.from! && entryDate <= dateRange.to!;
+        if (isWithinRange) transactionCountInRange++;
+
+        // Income calculation
+        if (incomeKeywords.some(keyword => 
+            (entry.creditAccount?.toLowerCase().includes(keyword) || entry.description.toLowerCase().includes(keyword)) ||
+            (entry.debitAccount?.toLowerCase().includes('cash') || entry.debitAccount?.toLowerCase().includes('bank')) // Cash inflow
+        )) {
+          isIncome = true;
+          if (isWithinRange) calculatedTotalRevenue += entry.amount;
+          if (monthAggregate) monthAggregate.income += entry.amount; // For chart (always last 12 months)
+        }
+        
+        // Expense calculation
+        if (expenseKeywords.some(keyword => 
+            (entry.debitAccount?.toLowerCase().includes(keyword) || entry.description.toLowerCase().includes(keyword)) ||
+            (entry.creditAccount?.toLowerCase().includes('cash') || entry.creditAccount?.toLowerCase().includes('bank')) // Cash outflow
+        )) {
+           isExpense = true;
+        }
+        
+        // Refined: If it's an income type (e.g. Sales Revenue credit), don't also mark it as expense if cash was debited.
+        // If it's clearly an expense (e.g. Rent Expense debit), and cash/bank was credited, it's definitely an expense.
+        if(entry.creditAccount?.toLowerCase().includes('cash') || entry.creditAccount?.toLowerCase().includes('bank')) {
+          if(!isIncome) isExpense = true; // If not already marked income, cash out is likely expense
+        }
+
+
+        if(isExpense){
+          if (isWithinRange) {
+            calculatedTotalExpenses += entry.amount;
+            const userId = entry.creatorUserId; 
+            userExpenses[userId] = (userExpenses[userId] || 0) + entry.amount;
+          }
+          if (monthAggregate) monthAggregate.expense += entry.amount; // For chart (always last 12 months)
+        }
+      });
+
+      setSummaryData({
+          totalRevenue: calculatedTotalRevenue,
+          totalExpenses: calculatedTotalExpenses,
+          netProfit: calculatedTotalRevenue - calculatedTotalExpenses,
+          transactionCount: transactionCountInRange,
+      });
+
+      const newChartData = Object.values(monthlyAggregates)
+        .sort((a, b) => a.yearMonth.localeCompare(b.yearMonth)) 
+        .map(agg => ({ month: agg.monthLabel, income: agg.income, expense: agg.expense })); 
+      setChartDisplayData(newChartData);
+
+      const topSpenders = Object.entries(userExpenses)
+        .map(([userId, totalSpent]) => ({
+          userId,
+          totalSpent,
+          displayName: `User ...${userId.slice(-6)}`, 
+          avatarFallback: userId.substring(0, 2).toUpperCase(),
+        }))
+        .sort((a, b) => b.totalSpent - a.totalSpent)
+        .slice(0, 5); 
+      setUserSpendingData(topSpenders);
+    } else if (allJournalEntries.length === 0 && !isLoadingData) {
+      // Reset data if no entries
+      setSummaryData({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
+      setChartDisplayData(
+        Array.from({ length: 12 }).map((_, i) => {
+            const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
+            return { month: d.toLocaleString(clientLocale, { month: 'short' }), income: 0, expense: 0 };
+        })
+      );
+      setUserSpendingData([]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allJournalEntries, dateRange, clientLocale]); 
+
+
+  const filteredEntriesForReport = useMemo(() => {
+    if (!dateRange?.from || !dateRange?.to) return allJournalEntries;
+    return allJournalEntries.filter(entry => {
+      const entryDate = new Date(entry.date);
+      return entryDate >= dateRange.from! && entryDate <= dateRange.to!;
+    });
+  }, [allJournalEntries, dateRange]);
 
 
   return (
@@ -209,17 +263,17 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                <SummaryCard title="Total Revenue" value={summaryData.totalRevenue} icon={DollarSign} change="+20.1%" changeType="positive" />
-                <SummaryCard title="Total Expenses" value={summaryData.totalExpenses} icon={TrendingDown} change="-5.2%" changeType="negative" />
-                <SummaryCard title="Net Profit" value={summaryData.netProfit} icon={TrendingUp} change="+15%" changeType="positive" />
-                <SummaryCard title="Transactions" value={summaryData.transactionCount} icon={Activity} />
+                <SummaryCard title="Total Revenue" value={summaryData.totalRevenue} icon={DollarSign} />
+                <SummaryCard title="Total Expenses" value={summaryData.totalExpenses} icon={TrendingDown} />
+                <SummaryCard title="Net Profit" value={summaryData.netProfit} icon={TrendingUp} />
+                <SummaryCard title="Transactions" value={summaryData.transactionCount} icon={Activity} isCurrency={false} />
               </div>
             )}
 
             <div className="grid gap-6 lg:grid-cols-3">
               <Card className="lg:col-span-2 shadow-sm border-border">
                 <CardHeader>
-                  <CardTitle className="text-lg font-semibold">Overview</CardTitle>
+                  <CardTitle className="text-lg font-semibold">Revenue & Expense Trend (Last 12 Months)</CardTitle>
                 </CardHeader>
                 <CardContent className="pl-2 pr-4 pb-4"> 
                    <IncomeExpenseChart chartData={chartDisplayData} isLoading={isLoadingData} />
@@ -232,16 +286,10 @@ export default function DashboardPage() {
           </div>
         </TabsContent>
         <TabsContent value="analytics">
-          <Card>
-            <CardHeader><CardTitle>Analytics</CardTitle></CardHeader>
-            <CardContent><p className="text-muted-foreground">Analytics content will go here.</p></CardContent>
-          </Card>
+          <AnalyticsOverview journalEntries={allJournalEntries} isLoading={isLoadingData} />
         </TabsContent>
         <TabsContent value="reports">
-           <Card>
-            <CardHeader><CardTitle>Reports</CardTitle></CardHeader>
-            <CardContent><p className="text-muted-foreground">Reports content will go here.</p></CardContent>
-          </Card>
+           <ProfitLossReport journalEntries={filteredEntriesForReport} dateRange={dateRange} isLoading={isLoadingData} />
         </TabsContent>
         <TabsContent value="notifications">
            <NotificationList notifications={notifications} isLoading={isLoadingNotifications} />

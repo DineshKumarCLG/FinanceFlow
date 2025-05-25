@@ -1,15 +1,15 @@
 
 "use client"
 
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis, Tooltip, LabelList } from "recharts"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from "recharts"
+import { ChartContainer, ChartTooltipContent, ChartLegendContent, type ChartConfig } from "@/components/ui/chart"
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect } from "react";
 
 interface ChartPoint {
   month: string;
-  income: number; 
+  income: number;
+  expense: number; // Added expense
 }
 
 interface IncomeExpenseChartProps {
@@ -19,9 +19,13 @@ interface IncomeExpenseChartProps {
 
 const chartConfig = {
   income: {
-    label: "Value", 
-    color: "hsl(var(--chart-1))", 
+    label: "Income", 
+    color: "hsl(var(--chart-1))", // Green
   },
+  expense: {
+    label: "Expense",
+    color: "hsl(var(--chart-2))", // Another color, e.g. a shade of red or blue
+  }
 } satisfies ChartConfig;
 
 export function IncomeExpenseChart({ chartData = [], isLoading = false }: IncomeExpenseChartProps) {
@@ -35,6 +39,9 @@ export function IncomeExpenseChart({ chartData = [], isLoading = false }: Income
   
   const formatCurrency = (value: number) => {
     if (value === 0) return new Intl.NumberFormat(clientLocale, { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(0);
+    if (Math.abs(value) >= 10000000) { // For crores
+      return `₹${(value / 10000000).toFixed(value % 10000000 === 0 ? 0 : 1)}Cr`;
+    }
     if (Math.abs(value) >= 100000) { // For lakhs
       return `₹${(value / 100000).toFixed(value % 100000 === 0 ? 0 : 1)}L`;
     }
@@ -56,7 +63,7 @@ export function IncomeExpenseChart({ chartData = [], isLoading = false }: Income
           <div className="h-[250px] w-full">
             <ChartContainer config={chartConfig} className="w-full h-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 5, right: 0, left: -25, bottom: 5 }} barGap={8} barCategoryGap="20%">
+                <BarChart data={chartData} margin={{ top: 5, right: 0, left: -25, bottom: 5 }} barGap={4}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                   <XAxis
                     dataKey="month"
@@ -75,14 +82,19 @@ export function IncomeExpenseChart({ chartData = [], isLoading = false }: Income
                   />
                   <Tooltip
                     cursor={{ fill: 'hsl(var(--muted))', radius: 4 }}
-                    content={<ChartTooltipContent formatter={(value, name) => (
-                        <div className="flex flex-col">
-                           <span className="text-xs text-muted-foreground">{name}</span>
-                           <span className="font-semibold">{typeof value === 'number' ? value.toLocaleString(clientLocale, { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }) : value}</span>
-                        </div>
-                    )} />}
+                    content={<ChartTooltipContent 
+                        formatter={(value, name) => (
+                          <div className="flex flex-col">
+                             <span className="text-xs capitalize text-muted-foreground">{name}</span>
+                             <span className="font-semibold">{typeof value === 'number' ? formatCurrency(value) : value}</span>
+                          </div>
+                      )} 
+                      nameKey="name" 
+                    />}
                   />
-                  <Bar dataKey="income" fill="var(--color-income)" radius={[4, 4, 0, 0]} name="Value" barSize={30} />
+                   <Legend content={<ChartLegendContent />} />
+                  <Bar dataKey="income" fill="var(--color-income)" radius={[4, 4, 0, 0]} name="Income" barSize={15} />
+                  <Bar dataKey="expense" fill="var(--color-expense)" radius={[4, 4, 0, 0]} name="Expense" barSize={15} />
                 </BarChart>
               </ResponsiveContainer>
             </ChartContainer>
