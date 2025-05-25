@@ -9,7 +9,7 @@ import { useState, useEffect } from "react";
 // Placeholder data fetch function (replace with actual API call)
 async function fetchJournalEntries(): Promise<JournalEntry[]> {
   // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise(resolve => setTimeout(resolve, 50)); // Reduced delay
   // In a real app, this would fetch from Supabase or your backend
   return [
     { id: "1", date: "2024-07-15", description: "Office Supplies Purchase", debitAccount: "Office Expenses", creditAccount: "Cash", amount: 150.75, tags: ["office", "expense"] },

@@ -38,7 +38,7 @@ async function fetchLedgerTransactions(
   dateRange?: DateRange, 
   searchTerm?: string
 ): Promise<{ accountName: string; transactions: LedgerTransaction[] }> {
-  await new Promise(resolve => setTimeout(resolve, 300)); // Simulate API delay
+  await new Promise(resolve => setTimeout(resolve, 50)); // Reduced API delay
   
   const selectedAccountKey = account || "cash"; // Default to cash if no account selected
   const accountName = accountsOptions.find(acc => acc.value === selectedAccountKey)?.label || "Cash";
