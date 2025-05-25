@@ -1,57 +1,102 @@
+
 "use client";
 
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { auth } from '@/lib/firebase'; // Import Firebase auth instance
+import type { User as FirebaseUser } from 'firebase/auth';
+import { 
+  onAuthStateChanged, 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut as firebaseSignOut 
+} from 'firebase/auth';
+import type { LoginFormInputs } from '@/components/auth/LoginForm'; // Assuming this type exists
+import type { SignupFormInputs } from '@/components/auth/SignupForm'; // Assuming this type exists
+
 
 interface AuthContextType {
+  user: FirebaseUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: () => void;
-  logout: () => void;
+  login: (credentials: LoginFormInputs) => Promise<void>;
+  signup: (credentials: SignupFormInputs) => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    // Simulate checking auth status from localStorage or an API
-    const storedAuthStatus = localStorage.getItem('isAuthenticated');
-    if (storedAuthStatus === 'true') {
-      setIsAuthenticated(true);
-    }
-    setIsLoading(false);
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
+      setIsLoading(false);
+    });
+    return () => unsubscribe(); // Cleanup subscription on unmount
   }, []);
 
+  const isAuthenticated = !!user;
+
   useEffect(() => {
-    if (!isLoading && !isAuthenticated && !pathname.startsWith('/auth') && pathname !== '/') {
-      router.push('/auth/login');
-    }
-    if (!isLoading && isAuthenticated && (pathname.startsWith('/auth') || pathname === '/')) {
-      router.push('/dashboard');
+    if (!isLoading) {
+      if (!isAuthenticated && !pathname.startsWith('/auth') && pathname !== '/') {
+        router.push('/auth/login');
+      }
+      if (isAuthenticated && (pathname.startsWith('/auth') || pathname === '/')) {
+        router.push('/dashboard');
+      }
     }
   }, [isAuthenticated, isLoading, router, pathname]);
 
-
-  const login = () => {
-    localStorage.setItem('isAuthenticated', 'true');
-    setIsAuthenticated(true);
-    router.push('/dashboard');
+  const login = async (credentials: LoginFormInputs) => {
+    setIsLoading(true);
+    try {
+      await signInWithEmailAndPassword(auth, credentials.email, credentials.password);
+      // onAuthStateChanged will handle setting user and redirecting
+    } catch (error: any) {
+      setIsLoading(false);
+      console.error("Firebase login error:", error);
+      throw error; // Re-throw to be caught by the form
+    }
+    // setIsLoading(false) is handled by onAuthStateChanged indirectly
   };
 
-  const logout = () => {
-    localStorage.removeItem('isAuthenticated');
-    setIsAuthenticated(false);
-    router.push('/');
+  const signup = async (credentials: SignupFormInputs) => {
+    setIsLoading(true);
+    try {
+      await createUserWithEmailAndPassword(auth, credentials.email, credentials.password);
+      // TODO: Optionally create a user profile document in Firestore here
+      // e.g., associate with KENESIS_COMPANY_ID
+      // onAuthStateChanged will handle setting user and redirecting
+    } catch (error: any) {
+      setIsLoading(false);
+      console.error("Firebase signup error:", error);
+      throw error; // Re-throw to be caught by the form
+    }
+  };
+
+  const logout = async () => {
+    setIsLoading(true);
+    try {
+      await firebaseSignOut(auth);
+      // onAuthStateChanged will handle setting user to null and redirecting
+      router.push('/'); // Explicit push to welcome page after logout
+    } catch (error) {
+      console.error("Firebase logout error:", error);
+      // Still set isLoading to false, as the user state will update via onAuthStateChanged
+      setIsLoading(false); 
+      throw error;
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, isLoading, login, signup, logout }}>
       {children}
     </AuthContext.Provider>
   );
