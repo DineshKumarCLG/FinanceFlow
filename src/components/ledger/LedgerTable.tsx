@@ -30,17 +30,12 @@ export interface LedgerTransaction {
   tags?: string[];
 }
 
-const sampleTransactions: LedgerTransaction[] = [
-  { id: "1", date: "2024-07-01", description: "Opening Balance", debit: null, credit: null, balance: 1000.00 },
-  { id: "2", date: "2024-07-05", description: "Invoice #101 Payment", debit: 500.00, credit: null, balance: 1500.00, tags: ["income", "client A"] },
-];
-
 interface LedgerTableProps {
   accountName: string;
   transactions?: LedgerTransaction[];
 }
 
-export function LedgerTable({ accountName, transactions = sampleTransactions }: LedgerTableProps) {
+export function LedgerTable({ accountName, transactions = [] }: LedgerTableProps) {
   const [currentTransactions, setCurrentTransactions] = useState(transactions);
   const [loadingTagsFor, setLoadingTagsFor] = useState<string | null>(null);
   const { toast } = useToast();
@@ -80,15 +75,15 @@ export function LedgerTable({ accountName, transactions = sampleTransactions }: 
 
 
   return (
-    <Card className="shadow-lg">
+    <Card className="shadow-lg flex flex-col flex-1 overflow-hidden"> {/* Allow card to grow and manage overflow */}
       <CardHeader>
         <CardTitle className="text-xl">Ledger: {accountName}</CardTitle>
         <CardDescription>Detailed transactions for the selected account.</CardDescription>
       </CardHeader>
-      <CardContent className="p-0">
-        <ScrollArea className="h-[calc(100vh-28rem)]"> 
+      <CardContent className="p-0 flex-1 overflow-hidden"> {/* Content takes up space and hides its own overflow */}
+        <ScrollArea className="h-full"> {/* ScrollArea takes full height of parent */}
           <Table>
-            <TableHeader className="sticky top-0 bg-background z-10">
+            <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
               <TableRow>
                 <TableHead className="w-[100px]">Date</TableHead>
                 <TableHead>Description</TableHead>
@@ -142,15 +137,17 @@ export function LedgerTable({ accountName, transactions = sampleTransactions }: 
                 ))
               )}
             </TableBody>
-            <TableFooter className="sticky bottom-0 bg-background z-10">
-              <TableRow>
-                <TableHead colSpan={2} className="text-right font-bold">Totals / Final Balance</TableHead>
-                <TableHead className="text-right font-bold">{totalDebits.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' })}</TableHead>
-                <TableHead className="text-right font-bold">{totalCredits.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' })}</TableHead>
-                <TableHead className="text-right font-bold">{finalBalance.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' })}</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableFooter>
+            {currentTransactions.length > 0 && (
+              <TableFooter className="sticky bottom-0 bg-background z-10 border-t">
+                <TableRow>
+                  <TableHead colSpan={2} className="text-right font-bold">Totals / Final Balance</TableHead>
+                  <TableHead className="text-right font-bold">{totalDebits.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' })}</TableHead>
+                  <TableHead className="text-right font-bold">{totalCredits.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' })}</TableHead>
+                  <TableHead className="text-right font-bold">{finalBalance.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' })}</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableFooter>
+            )}
           </Table>
         </ScrollArea>
       </CardContent>

@@ -12,14 +12,17 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Trash2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { JournalEntry } from "@/lib/data-service"; 
 
 interface JournalTableProps {
   entries: JournalEntry[]; 
+  onDelete: (entry: JournalEntry) => void;
 }
 
-export function JournalTable({ entries = [] }: JournalTableProps) { 
+export function JournalTable({ entries = [], onDelete }: JournalTableProps) { 
   const [clientLocale, setClientLocale] = useState('en-US'); 
 
   useEffect(() => {
@@ -29,24 +32,25 @@ export function JournalTable({ entries = [] }: JournalTableProps) {
   }, []);
 
   return (
-    <Card className="shadow-lg">
-      <CardContent className="p-0">
-        <ScrollArea className="h-[calc(100vh-20rem)]"> 
+    <Card className="shadow-lg flex flex-col flex-1 overflow-hidden"> {/* Allow card to grow and manage overflow */}
+      <CardContent className="p-0 flex-1 overflow-hidden"> {/* Content takes up space and hides its own overflow */}
+        <ScrollArea className="h-full"> {/* ScrollArea takes full height of parent */}
           <Table>
-            <TableHeader className="sticky top-0 bg-background z-10">
+            <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
               <TableRow>
                 <TableHead className="w-[120px]">Date</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Debit Account</TableHead>
                 <TableHead>Credit Account</TableHead>
                 <TableHead className="text-right w-[120px]">Amount</TableHead>
-                <TableHead className="w-[200px]">Tags</TableHead>
+                <TableHead className="w-[150px]">Tags</TableHead>
+                <TableHead className="w-[100px] text-center">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {entries.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center h-24 text-muted-foreground">
                     No journal entries found.
                   </TableCell>
                 </TableRow>
@@ -64,6 +68,11 @@ export function JournalTable({ entries = [] }: JournalTableProps) {
                       <div className="flex flex-wrap gap-1">
                         {entry.tags?.map(tag => <Badge key={tag} variant="outline">{tag}</Badge>)}
                       </div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Button variant="ghost" size="icon" onClick={() => onDelete(entry)} className="text-destructive hover:text-destructive-foreground hover:bg-destructive/10 h-8 w-8">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))

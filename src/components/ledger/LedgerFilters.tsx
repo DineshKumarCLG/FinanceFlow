@@ -15,29 +15,25 @@ import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon, FilterX, Search } from "lucide-react";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
-import { useState, useEffect } from "react"; // Added useEffect
+import { useState, useEffect } from "react";
 
-// Updated accounts to match LedgerPage
-const accounts = [
-  { value: "Cash", label: "Cash" },
-  { value: "Accounts Receivable", label: "Accounts Receivable" },
-  { value: "Office Expenses", label: "Office Expenses" },
-  { value: "Service Revenue", label: "Service Revenue" },
-  { value: "Bank Account", label: "Bank Account" },
-];
-
+interface AccountOption {
+  value: string;
+  label: string;
+}
 interface LedgerFiltersProps {
   onFilterChange: (filters: { account?: string; dateRange?: DateRange; searchTerm?: string }) => void;
+  accountsOptions: AccountOption[]; // Receive account options as a prop
 }
 
-export function LedgerFilters({ onFilterChange }: LedgerFiltersProps) {
-  const [selectedAccount, setSelectedAccount] = useState<string>("Cash"); // Default to Cash
+export function LedgerFilters({ onFilterChange, accountsOptions }: LedgerFiltersProps) {
+  const [selectedAccount, setSelectedAccount] = useState<string>(accountsOptions[0]?.value || "Cash");
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [searchTerm, setSearchTerm] = useState<string>("");
 
-  // Initialize with default filter for Cash account on mount
   useEffect(() => {
-    onFilterChange({ account: "Cash" });
+    // Initialize with default filter for the first account option on mount
+    onFilterChange({ account: accountsOptions[0]?.value || "Cash" });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run only once on mount
 
@@ -47,10 +43,11 @@ export function LedgerFilters({ onFilterChange }: LedgerFiltersProps) {
   };
 
   const handleClearFilters = () => {
-    setSelectedAccount("Cash"); // Reset to default account
+    const defaultAccount = accountsOptions[0]?.value || "Cash";
+    setSelectedAccount(defaultAccount); 
     setDateRange(undefined);
     setSearchTerm("");
-    onFilterChange({ account: "Cash" }); // Apply default filter on clear
+    onFilterChange({ account: defaultAccount }); 
   };
 
   return (
@@ -62,7 +59,7 @@ export function LedgerFilters({ onFilterChange }: LedgerFiltersProps) {
             <SelectValue placeholder="Select an account" />
           </SelectTrigger>
           <SelectContent>
-            {accounts.map((account) => (
+            {accountsOptions.map((account) => (
               <SelectItem key={account.value} value={account.value}>
                 {account.label}
               </SelectItem>
