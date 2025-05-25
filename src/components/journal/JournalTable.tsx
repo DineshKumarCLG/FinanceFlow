@@ -13,15 +13,13 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
 import { useState, useEffect } from "react";
-import type { JournalEntry } from "@/lib/data-service"; // Import type from data-service
-
-// Removed sampleJournalEntries as data will come from props
+import type { JournalEntry } from "@/lib/data-service"; 
 
 interface JournalTableProps {
-  entries: JournalEntry[]; // Use the type from data-service
+  entries: JournalEntry[]; 
 }
 
-export function JournalTable({ entries = [] }: JournalTableProps) { // Default to empty array
+export function JournalTable({ entries = [] }: JournalTableProps) { 
   const [clientLocale, setClientLocale] = useState('en-US'); 
 
   useEffect(() => {
@@ -33,7 +31,7 @@ export function JournalTable({ entries = [] }: JournalTableProps) { // Default t
   return (
     <Card className="shadow-lg">
       <CardContent className="p-0">
-        <ScrollArea className="h-[calc(100vh-20rem)]"> {/* Adjust height as needed */}
+        <ScrollArea className="h-[calc(100vh-20rem)]"> 
           <Table>
             <TableHeader className="sticky top-0 bg-background z-10">
               <TableRow>
@@ -60,7 +58,7 @@ export function JournalTable({ entries = [] }: JournalTableProps) { // Default t
                     <TableCell>{entry.debitAccount}</TableCell>
                     <TableCell>{entry.creditAccount}</TableCell>
                     <TableCell className="text-right">
-                      {entry.amount.toLocaleString(clientLocale, { style: 'currency', currency: 'USD' })}
+                      {entry.amount.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' })}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">

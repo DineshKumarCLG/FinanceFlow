@@ -5,11 +5,11 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis, Toolti
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { Skeleton } from "@/components/ui/skeleton";
+import { useState, useEffect } from "react";
 
 interface ChartPoint {
   month: string;
-  income: number; // Represents the single series in the "Overview" chart
-  // expense: number; // Kept for potential future use if dual series needed
+  income: number; 
 }
 
 interface IncomeExpenseChartProps {
@@ -17,38 +17,37 @@ interface IncomeExpenseChartProps {
   isLoading?: boolean;
 }
 
-// Chart config now uses 'income' which maps to the primary color from CSS variables
 const chartConfig = {
   income: {
-    label: "Value", // Generic label for the single series
-    color: "hsl(var(--chart-1))", // This will be the lime green
+    label: "Value", 
+    color: "hsl(var(--chart-1))", 
   },
-  // expense: { // Keep for potential future use
-  //   label: "Expenses",
-  //   color: "hsl(var(--chart-2))", 
-  // },
 } satisfies ChartConfig;
 
 export function IncomeExpenseChart({ chartData = [], isLoading = false }: IncomeExpenseChartProps) {
-  const formatCurrency = (value: number) => {
-    if (value === 0) return "$0";
-    if (Math.abs(value) >= 1000) {
-      return `$${(value / 1000).toFixed(0)}k`;
+  const [clientLocale, setClientLocale] = useState('en-US');
+
+  useEffect(() => {
+    if (typeof navigator !== 'undefined') {
+      setClientLocale(navigator.language || 'en-US');
     }
-    return `$${value.toFixed(0)}`;
+  }, []);
+  
+  const formatCurrency = (value: number) => {
+    if (value === 0) return new Intl.NumberFormat(clientLocale, { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(0);
+    if (Math.abs(value) >= 100000) { // For lakhs
+      return `₹${(value / 100000).toFixed(value % 100000 === 0 ? 0 : 1)}L`;
+    }
+    if (Math.abs(value) >= 1000) {
+      return `₹${(value / 1000).toFixed(value % 1000 === 0 ? 0 : 0)}k`;
+    }
+    return new Intl.NumberFormat(clientLocale, { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value);
   };
   
   return (
-    // Removed Card wrapper as it's in the parent now
-    // <Card className="shadow-sm border-border">
-    //   <CardHeader>
-    //     <CardTitle className="text-lg font-semibold">Overview</CardTitle>
-    //     {/* <CardDescription>Monthly overview for the last 12 months.</CardDescription> */}
-    //   </CardHeader>
-    //   <CardContent className="pl-2 pr-4 pb-4"> {/* Adjust padding for recharts */}
         <>
         {isLoading ? (
-          <Skeleton className="h-[250px] w-full" /> // Adjusted height
+          <Skeleton className="h-[250px] w-full" /> 
         ) : chartData.length === 0 ? (
           <div className="h-[250px] w-full flex items-center justify-center text-muted-foreground">
             No data available for chart.
@@ -72,14 +71,14 @@ export function IncomeExpenseChart({ chartData = [], isLoading = false }: Income
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={formatCurrency}
-                    domain={[0, 'dataMax + 1000']} // Dynamic domain based on data
+                    domain={[0, 'dataMax + 1000']} 
                   />
                   <Tooltip
                     cursor={{ fill: 'hsl(var(--muted))', radius: 4 }}
                     content={<ChartTooltipContent formatter={(value, name) => (
                         <div className="flex flex-col">
                            <span className="text-xs text-muted-foreground">{name}</span>
-                           <span className="font-semibold">{typeof value === 'number' ? value.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }) : value}</span>
+                           <span className="font-semibold">{typeof value === 'number' ? value.toLocaleString(clientLocale, { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }) : value}</span>
                         </div>
                     )} />}
                   />
@@ -90,7 +89,5 @@ export function IncomeExpenseChart({ chartData = [], isLoading = false }: Income
           </div>
         )}
         </>
-    //   </CardContent>
-    // </Card>
   )
 }

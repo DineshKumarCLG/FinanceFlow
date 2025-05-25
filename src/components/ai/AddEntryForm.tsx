@@ -33,7 +33,7 @@ export function AddEntryForm() {
   const { toast } = useToast();
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const [clientLocale, setClientLocale] = useState('en-US'); // Default locale
+  const [clientLocale, setClientLocale] = useState('en-US'); 
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -117,7 +117,6 @@ export function AddEntryForm() {
         debitAccount: parsedResult.debitAccount,
         creditAccount: parsedResult.creditAccount,
         amount: parsedResult.amount,
-        // tags could be derived or added later
       };
       await addJournalEntry(entryToSave);
       toast({ title: "Entry Saved!", description: "The accounting entry has been successfully recorded." });
@@ -148,7 +147,7 @@ export function AddEntryForm() {
                   <FormLabel>Transaction Description</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="e.g., 'Paid $200 for office supplies on July 15th' or 'Received 1000 from Client X for project completion'"
+                      placeholder="e.g., 'Paid ₹2000 for office supplies on July 15th' or 'Received ₹10000 from Client X for project completion'"
                       className="min-h-[100px] resize-none"
                       {...field}
                     />
@@ -187,7 +186,7 @@ export function AddEntryForm() {
                 <CardContent className="space-y-3 text-sm">
                   <div className="grid grid-cols-2 gap-2">
                     <div><strong>Date:</strong> {parsedResult.date}</div>
-                    <div><strong>Amount:</strong> {parsedResult.amount.toLocaleString(clientLocale, { style: 'currency', currency: 'USD' })}</div>
+                    <div><strong>Amount:</strong> {parsedResult.amount.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' })}</div>
                     <div><strong>Type:</strong> <span className="capitalize">{parsedResult.type}</span></div>
                     <div><strong>Purpose:</strong> {parsedResult.purpose}</div>
                     <div><strong>Debit Account:</strong> {parsedResult.debitAccount}</div>

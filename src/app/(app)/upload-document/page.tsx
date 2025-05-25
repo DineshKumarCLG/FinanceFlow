@@ -60,13 +60,11 @@ export default function UploadDocumentPage() {
         debitAccount: entry.debitAccount,
         creditAccount: entry.creditAccount,
         amount: entry.amount,
-        // Tags can be added later or via AI suggestion flow
       }));
       await addJournalEntries(entriesToSave);
       toast({ title: "Entries Saved!", description: "The extracted accounting entries have been recorded." });
       setExtractedData(null);
       setCurrentFile(null); 
-      // TODO: Ideally, clear FileUploader state too, or re-render it with a key change
     } catch (e: any) {
       toast({ variant: "destructive", title: "Saving Error", description: "Could not save the entries." });
       console.error("Saving error:", e);
@@ -125,7 +123,7 @@ export default function UploadDocumentPage() {
                     <p><strong>Entry #{index + 1}</strong></p>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mt-2">
                       <div><strong>Date:</strong> {entry.date}</div>
-                      <div><strong>Amount:</strong> {entry.amount.toLocaleString(clientLocale, { style: 'currency', currency: 'USD' })}</div>
+                      <div><strong>Amount:</strong> {entry.amount.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' })}</div>
                       <div><strong>Debit:</strong> {entry.debitAccount}</div>
                       <div><strong>Credit:</strong> {entry.creditAccount}</div>
                       <div className="col-span-2"><strong>Description:</strong> {entry.description}</div>

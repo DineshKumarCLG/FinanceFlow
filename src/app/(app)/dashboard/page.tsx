@@ -29,24 +29,24 @@ interface DashboardTransaction {
 
 interface ChartPoint {
   month: string;
-  income: number; // "Overview" chart in image has one series, we'll map 'income' to it
-  expense: number; // Keep for potential dual series later
+  income: number; 
+  expense: number; 
 }
 
 export default function DashboardPage() {
   const [clientLocale, setClientLocale] = useState('en-US');
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: new Date(new Date().getFullYear(), 0, 1), // Jan 1st of current year
-    to: new Date(), // Today
+    from: new Date(new Date().getFullYear(), 0, 1), 
+    to: new Date(), 
   });
 
 
   const [summaryData, setSummaryData] = useState({
-    totalRevenue: 0, // Matched to "Total Revenue"
-    subscriptions: 2350, // Placeholder from image
-    sales: 12234, // Placeholder from image
-    activeNow: 573, // Placeholder from image
+    totalRevenue: 0, 
+    subscriptions: 2350, // Placeholder - will not be formatted as currency
+    sales: 12234,       // Placeholder - will not be formatted as currency
+    activeNow: 573,     // Placeholder - will not be formatted as currency
   });
   const [chartDisplayData, setChartDisplayData] = useState<ChartPoint[]>([]);
 
@@ -60,14 +60,12 @@ export default function DashboardPage() {
       try {
         const fetchedEntries = await getJournalEntries();
         
-        let calculatedTotalRevenue = 0; // For "Total Revenue" card
+        let calculatedTotalRevenue = 0; 
         const incomeKeywords = ['revenue', 'income', 'sales', 'service fee'];
-        // For chart, we might use a simpler logic if not explicitly income/expense accounts
         
         const monthlyAggregates: Record<string, { income: number; expense: number; monthLabel: string; yearMonth: string }> = {};
         const now = new Date();
 
-        // Initialize last 12 months for the chart to match image
         for (let i = 11; i >= 0; i--) {
           const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
           const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -78,35 +76,30 @@ export default function DashboardPage() {
         }
         
         fetchedEntries.forEach(entry => {
-          // Calculate Total Revenue
           if (incomeKeywords.some(keyword => entry.creditAccount.toLowerCase().includes(keyword))) {
             calculatedTotalRevenue += entry.amount;
           }
 
-          // Process for chart data (entries within the last 12 months)
           const entryDate = new Date(entry.date);
           const entryYearMonth = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
 
           if (monthlyAggregates[entryYearMonth]) { 
-            // For the "Overview" chart (single green series), let's assume income increases it
-            // This logic might need refinement based on actual account types
              if (incomeKeywords.some(keyword => entry.creditAccount.toLowerCase().includes(keyword))) {
                 monthlyAggregates[entryYearMonth].income += entry.amount;
             } else if (entry.debitAccount.toLowerCase().includes('cash') || entry.debitAccount.toLowerCase().includes('bank')) {
-                 // If cash/bank is debited, consider it an inflow for chart purposes
                 monthlyAggregates[entryYearMonth].income += entry.amount;
             }
           }
         });
 
         setSummaryData(prev => ({
-            ...prev, // Keep placeholder values for other cards
+            ...prev, 
             totalRevenue: calculatedTotalRevenue,
         }));
 
         const newChartData = Object.values(monthlyAggregates)
           .sort((a, b) => a.yearMonth.localeCompare(b.yearMonth)) 
-          .map(agg => ({ month: agg.monthLabel, income: agg.income, expense: 0 })); // Only income for this chart style
+          .map(agg => ({ month: agg.monthLabel, income: agg.income, expense: 0 })); 
         setChartDisplayData(newChartData);
 
       } catch (error) {
@@ -164,7 +157,7 @@ export default function DashboardPage() {
                 />
               </PopoverContent>
             </Popover>
-          <Button variant="default"> {/* Primary button style from new theme */}
+          <Button variant="default"> 
             <Download className="mr-2 h-4 w-4" /> Download
           </Button>
         </div>
@@ -180,27 +173,26 @@ export default function DashboardPage() {
 
         <TabsContent value="overview">
           <div className="grid gap-6">
-            {/* Summary Cards */}
             {isLoadingData ? (
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                   {[...Array(4)].map((_, i) => ( <Card key={i} className="shadow-sm h-36 animate-pulse bg-muted/50 border-border"/> ))}
               </div>
             ) : (
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                <SummaryCard title="Total Revenue" value={summaryData.totalRevenue.toLocaleString(clientLocale, { style: 'currency', currency: 'USD' })} icon={DollarSign} change="+20.1% from last month" changeType="positive" />
-                <SummaryCard title="Subscriptions" value={`+${summaryData.subscriptions.toLocaleString(clientLocale)}`} icon={Users} change="+180.1% from last month" changeType="positive" />
-                <SummaryCard title="Sales" value={`+${summaryData.sales.toLocaleString(clientLocale)}`} icon={CreditCard} change="+19% from last month" changeType="positive" />
-                <SummaryCard title="Active Now" value={`+${summaryData.activeNow.toLocaleString(clientLocale)}`} icon={Activity} change="+201 since last hour" changeType="positive" />
+                <SummaryCard title="Total Revenue" value={summaryData.totalRevenue} icon={DollarSign} change="+20.1% from last month" changeType="positive" />
+                {/* Subscriptions, Sales, Active Now use simple number display, not currency */}
+                <SummaryCard title="Subscriptions" value={summaryData.subscriptions} icon={Users} change="+180.1% from last month" changeType="positive" />
+                <SummaryCard title="Sales" value={summaryData.sales} icon={CreditCard} change="+19% from last month" changeType="positive" />
+                <SummaryCard title="Active Now" value={summaryData.activeNow} icon={Activity} change="+201 since last hour" changeType="positive" />
               </div>
             )}
 
-            {/* Main Chart and Recent Sales */}
             <div className="grid gap-6 lg:grid-cols-3">
               <Card className="lg:col-span-2 shadow-sm border-border">
                 <CardHeader>
                   <CardTitle className="text-lg font-semibold">Overview</CardTitle>
                 </CardHeader>
-                <CardContent className="pl-2 pr-4 pb-4"> {/* Adjust padding for recharts */}
+                <CardContent className="pl-2 pr-4 pb-4"> 
                    <IncomeExpenseChart chartData={chartDisplayData} isLoading={isLoadingData} />
                 </CardContent>
               </Card>
@@ -208,8 +200,6 @@ export default function DashboardPage() {
                  <RecentSales />
               </div>
             </div>
-             {/* Quick Actions - Can be re-integrated or restyled if needed */}
-             {/* <QuickActions /> */}
           </div>
         </TabsContent>
         <TabsContent value="analytics">
