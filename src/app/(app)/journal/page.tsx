@@ -9,16 +9,19 @@ import { useState, useEffect } from "react";
 import { getJournalEntries, type JournalEntry } from "@/lib/data-service"; // Import service
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
+import { Timestamp } from "firebase/firestore"; // Added Timestamp import
+import { usePathname } from 'next/navigation'; // Import usePathname
 
 
 export default function JournalPage() {
   const { user: currentUser } = useAuth();
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const pathname = usePathname(); // Get current pathname
 
   useEffect(() => {
     async function loadEntries() {
-      if (!currentUser) { // Don't load if no user
+      if (!currentUser) { 
         setIsLoading(false);
         setEntries([]);
         return;
@@ -26,29 +29,28 @@ export default function JournalPage() {
       setIsLoading(true);
       try {
         const data = await getJournalEntries(); 
-        // Firestore already sorts by date desc, createdAt desc.
-        // Client-side sort for stability if `createdAt` are identical (less likely with serverTimestamps)
         const sortedData = data.sort((a, b) => {
           const dateComparison = b.date.localeCompare(a.date);
           if (dateComparison !== 0) return dateComparison;
-          // If createdAt is a Firestore Timestamp, convert to Date for comparison
+          
           const timeA = a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : new Date(a.createdAt as any).getTime();
           const timeB = b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : new Date(b.createdAt as any).getTime();
           const timeComparison = timeB - timeA;
           if (timeComparison !== 0) return timeComparison;
-          return b.id.localeCompare(a.id); 
+          return (b.id || "").localeCompare(a.id || ""); 
         });
         setEntries(sortedData);
       } catch (error) {
         console.error("Failed to load journal entries:", error);
-        // Optionally set an error state here to display to the user
-        setEntries([]); // Clear entries on error
+        setEntries([]); 
       } finally {
         setIsLoading(false);
       }
     }
-    loadEntries();
-  }, [currentUser]); // Reload if user changes
+    if (pathname === '/journal') { // Only load if on the journal page
+        loadEntries();
+    }
+  }, [currentUser, pathname]); // Reload if user or pathname changes and it's the journal page
 
   return (
     <div className="space-y-6">
@@ -77,3 +79,4 @@ export default function JournalPage() {
     </div>
   );
 }
+
