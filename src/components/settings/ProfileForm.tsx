@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -16,25 +17,18 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 const profileFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
-  email: z.string().email(),
+  email: z.string().email().optional(), // Email comes from Firebase Auth, not directly editable here
   businessName: z.string().min(2, "Business name must be at least 2 characters.").optional(),
   businessType: z.string().optional(),
 });
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
-
-// Placeholder: In a real app, fetch this from user data
-const defaultValues: Partial<ProfileFormValues> = {
-  name: "Demo User",
-  email: "demo@example.com",
-  businessName: "My Demo Business",
-  businessType: "sole_proprietorship",
-};
 
 const businessTypes = [
   { value: "sole_proprietorship", label: "Sole Proprietorship" },
@@ -47,33 +41,65 @@ const businessTypes = [
 ];
 
 export function ProfileForm() {
+  const { user, updateUserProfileName, isLoading: authIsLoading } = useAuth();
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
-    defaultValues,
+    defaultValues: {
+      name: user?.displayName || "",
+      email: user?.email || "",
+      businessName: "KENESIS", // Default or fetch from user profile if stored
+      businessType: "startup", // Default or fetch
+    },
     mode: "onChange",
   });
 
-  function onSubmit(data: ProfileFormValues) {
-    setIsLoading(true);
-    console.log("Profile updated:", data);
-    // Simulate API call
-    setTimeout(() => {
+  useEffect(() => {
+    if (user) {
+      form.reset({
+        name: user.displayName || "",
+        email: user.email || "",
+        // TODO: Fetch businessName and businessType from a user profile in Firestore if you store them
+        businessName: form.getValues("businessName") || "KENESIS", // Keep existing if already set, else default
+        businessType: form.getValues("businessType") || "startup",
+      });
+    }
+  }, [user, form]);
+
+  async function onSubmit(data: ProfileFormValues) {
+    setIsSaving(true);
+    try {
+      if (data.name !== user?.displayName) {
+        await updateUserProfileName(data.name);
+      }
+      // TODO: Add logic to save businessName and businessType to a Firestore user profile document
+      // For now, we just log them and show a success toast for the name change.
+      console.log("Profile data to save (potentially to Firestore):", { businessName: data.businessName, businessType: data.businessType });
+      
       toast({
         title: "Profile Updated",
         description: "Your profile information has been saved.",
       });
-      setIsLoading(false);
-    }, 1000);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Update Failed",
+        description: error.message || "Could not update profile.",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   }
+
+  const isLoading = authIsLoading || isSaving;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>User Profile</CardTitle>
-        <CardDescription>Manage your personal and business information.</CardDescription>
+        <CardDescription>Manage your personal and business information for KENESIS.</CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -101,7 +127,7 @@ export function ProfileForm() {
                     <Input type="email" placeholder="your@email.com" {...field} disabled />
                   </FormControl>
                   <FormMessage />
-                  <p className="text-xs text-muted-foreground">Email cannot be changed.</p>
+                  <p className="text-xs text-muted-foreground">Email is managed by your Google account.</p>
                 </FormItem>
               )}
             />
@@ -112,7 +138,8 @@ export function ProfileForm() {
                 <FormItem>
                   <FormLabel>Business Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Your business name" {...field} />
+                    {/* For KENESIS, this is likely fixed */}
+                    <Input placeholder="Your business name" {...field} value="KENESIS" disabled />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
