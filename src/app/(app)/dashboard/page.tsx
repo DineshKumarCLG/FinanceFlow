@@ -3,13 +3,20 @@
 
 import { PageTitle } from "@/components/shared/PageTitle";
 import { SummaryCard } from "@/components/dashboard/SummaryCard";
-import { QuickActions } from "@/components/dashboard/QuickActions";
+import { QuickActions } from "@/components/dashboard/QuickActions"; // This might be replaced or restyled
 import { IncomeExpenseChart } from "@/components/dashboard/IncomeExpenseChart";
-import { DollarSign, TrendingUp, TrendingDown, FileText } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, Users, CreditCard, Activity, CalendarDays, Download } from "lucide-react"; // Added Users, CreditCard, Activity
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { RecentSales } from "@/components/dashboard/RecentSales"; // New component
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import { getJournalEntries, type JournalEntry as StoredJournalEntry } from "@/lib/data-service";
+import type { DateRange } from "react-day-picker";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { format } from "date-fns";
+
 
 interface DashboardTransaction {
   id: string;
@@ -22,21 +29,24 @@ interface DashboardTransaction {
 
 interface ChartPoint {
   month: string;
-  income: number;
-  expense: number;
+  income: number; // "Overview" chart in image has one series, we'll map 'income' to it
+  expense: number; // Keep for potential dual series later
 }
 
 export default function DashboardPage() {
   const [clientLocale, setClientLocale] = useState('en-US');
-  const [recentTransactions, setRecentTransactions] = useState<DashboardTransaction[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
-  const [allEntries, setAllEntries] = useState<StoredJournalEntry[]>([]);
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: new Date(new Date().getFullYear(), 0, 1), // Jan 1st of current year
+    to: new Date(), // Today
+  });
+
 
   const [summaryData, setSummaryData] = useState({
-    totalIncome: 0,
-    totalExpenses: 0,
-    netProfit: 0,
-    transactionCount: 0,
+    totalRevenue: 0, // Matched to "Total Revenue"
+    subscriptions: 2350, // Placeholder from image
+    sales: 12234, // Placeholder from image
+    activeNow: 573, // Placeholder from image
   });
   const [chartDisplayData, setChartDisplayData] = useState<ChartPoint[]>([]);
 
@@ -49,32 +59,16 @@ export default function DashboardPage() {
       setIsLoadingData(true);
       try {
         const fetchedEntries = await getJournalEntries();
-        setAllEntries(fetchedEntries); // Store all entries for processing
-
-        // Process for Recent Transactions (first 5, sorted by date)
-        const sortedEntries = [...fetchedEntries].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        const latestEntries = sortedEntries.slice(0, 5);
-        const transformedTransactions: DashboardTransaction[] = latestEntries.map(entry => ({
-          id: entry.id,
-          date: entry.date,
-          description: entry.description,
-          amount: entry.amount,
-          debitAccount: entry.debitAccount,
-          creditAccount: entry.creditAccount,
-        }));
-        setRecentTransactions(transformedTransactions);
-
-        // Process for Summary Cards and Chart
-        let calculatedTotalIncome = 0;
-        let calculatedTotalExpenses = 0;
-        const incomeKeywords = ['revenue', 'income', 'sales', 'service fee', 'interest received'];
-        const expenseKeywords = ['expense', 'cost', 'payroll', 'rent', 'utilities', 'supplies', 'advertising', 'interest paid'];
-
+        
+        let calculatedTotalRevenue = 0; // For "Total Revenue" card
+        const incomeKeywords = ['revenue', 'income', 'sales', 'service fee'];
+        // For chart, we might use a simpler logic if not explicitly income/expense accounts
+        
         const monthlyAggregates: Record<string, { income: number; expense: number; monthLabel: string; yearMonth: string }> = {};
         const now = new Date();
 
-        // Initialize last 6 months for the chart
-        for (let i = 5; i >= 0; i--) {
+        // Initialize last 12 months for the chart to match image
+        for (let i = 11; i >= 0; i--) {
           const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
           const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
           const monthLabel = d.toLocaleString('default', { month: 'short' });
@@ -84,138 +78,151 @@ export default function DashboardPage() {
         }
         
         fetchedEntries.forEach(entry => {
-          let isClassifiedIncome = false;
-          let isClassifiedExpense = false;
-
-          // Classify for total summary
+          // Calculate Total Revenue
           if (incomeKeywords.some(keyword => entry.creditAccount.toLowerCase().includes(keyword))) {
-            calculatedTotalIncome += entry.amount;
-            isClassifiedIncome = true;
-          }
-          if (expenseKeywords.some(keyword => entry.debitAccount.toLowerCase().includes(keyword))) {
-            calculatedTotalExpenses += entry.amount;
-            isClassifiedExpense = true;
+            calculatedTotalRevenue += entry.amount;
           }
 
-          // Process for chart data (only entries within the last 6 months)
+          // Process for chart data (entries within the last 12 months)
           const entryDate = new Date(entry.date);
           const entryYearMonth = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
 
-          if (monthlyAggregates[entryYearMonth]) { // Check if the entry's month is one of the 6 we are tracking
-            if (isClassifiedIncome) {
-              monthlyAggregates[entryYearMonth].income += entry.amount;
-            } else if (isClassifiedExpense) {
-              monthlyAggregates[entryYearMonth].expense += entry.amount;
-            } else { 
-              // Fallback for chart: if not classified by keywords, check cash/bank accounts for flow direction
-              if (entry.debitAccount.toLowerCase().includes('cash') || entry.debitAccount.toLowerCase().includes('bank')) {
-                monthlyAggregates[entryYearMonth].income += entry.amount; // Inflow to cash/bank
-              } else if (entry.creditAccount.toLowerCase().includes('cash') || entry.creditAccount.toLowerCase().includes('bank')) {
-                monthlyAggregates[entryYearMonth].expense += entry.amount; // Outflow from cash/bank
-              }
+          if (monthlyAggregates[entryYearMonth]) { 
+            // For the "Overview" chart (single green series), let's assume income increases it
+            // This logic might need refinement based on actual account types
+             if (incomeKeywords.some(keyword => entry.creditAccount.toLowerCase().includes(keyword))) {
+                monthlyAggregates[entryYearMonth].income += entry.amount;
+            } else if (entry.debitAccount.toLowerCase().includes('cash') || entry.debitAccount.toLowerCase().includes('bank')) {
+                 // If cash/bank is debited, consider it an inflow for chart purposes
+                monthlyAggregates[entryYearMonth].income += entry.amount;
             }
           }
         });
 
-        setSummaryData({
-          totalIncome: calculatedTotalIncome,
-          totalExpenses: calculatedTotalExpenses,
-          netProfit: calculatedTotalIncome - calculatedTotalExpenses,
-          transactionCount: fetchedEntries.length,
-        });
+        setSummaryData(prev => ({
+            ...prev, // Keep placeholder values for other cards
+            totalRevenue: calculatedTotalRevenue,
+        }));
 
         const newChartData = Object.values(monthlyAggregates)
-          .sort((a, b) => a.yearMonth.localeCompare(b.yearMonth)) // Sort chronologically
-          .map(agg => ({ month: agg.monthLabel, income: agg.income, expense: agg.expense }));
+          .sort((a, b) => a.yearMonth.localeCompare(b.yearMonth)) 
+          .map(agg => ({ month: agg.monthLabel, income: agg.income, expense: 0 })); // Only income for this chart style
         setChartDisplayData(newChartData);
 
       } catch (error) {
         console.error("Failed to load dashboard data:", error);
-         setSummaryData({ totalIncome: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
-         setChartDisplayData( // Provide default empty structure for chart
-            Array.from({ length: 6 }).map((_, i) => {
-                const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+         setSummaryData({ totalRevenue: 0, subscriptions: 0, sales: 0, activeNow: 0 });
+         setChartDisplayData( 
+            Array.from({ length: 12 }).map((_, i) => {
+                const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
                 return { month: d.toLocaleString('default', { month: 'short' }), income: 0, expense: 0 };
             })
          );
       } finally {
-        setIsLoadingData(false);
+        setIsLoading(false);
       }
     }
     loadDashboardData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Re-fetch if needed, e.g., on a refresh button or when entries might change (requires more complex state management)
+  }, []); 
 
 
   return (
     <div className="space-y-6 md:space-y-8">
-      <PageTitle title="Dashboard" description="Welcome back! Here's a summary of your finances." />
-
-      {isLoadingData ? (
-         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {[...Array(4)].map((_, i) => ( <Card key={i} className="shadow-md h-32 animate-pulse bg-muted/50"/> ))}
-         </div>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <SummaryCard title="Total Income" value={summaryData.totalIncome.toLocaleString(clientLocale, { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 })} icon={TrendingUp} />
-          <SummaryCard title="Total Expenses" value={summaryData.totalExpenses.toLocaleString(clientLocale, { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 })} icon={TrendingDown} />
-          <SummaryCard title="Net Profit" value={summaryData.netProfit.toLocaleString(clientLocale, { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 })} icon={DollarSign} />
-          <SummaryCard title="Transactions" value={String(summaryData.transactionCount)} icon={FileText} />
-        </div>
-      )}
-
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="md:col-span-2">
-           <IncomeExpenseChart chartData={chartDisplayData} isLoading={isLoadingData} />
-        </div>
-        <div className="md:col-span-1">
-            <QuickActions />
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
+        <div className="flex items-center gap-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  id="date"
+                  variant={"outline"}
+                  className="w-[260px] justify-start text-left font-normal bg-card hover:bg-muted"
+                >
+                  <CalendarDays className="mr-2 h-4 w-4" />
+                  {dateRange?.from ? (
+                    dateRange.to ? (
+                      <>
+                        {format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}
+                      </>
+                    ) : (
+                      format(dateRange.from, "LLL dd, y")
+                    )
+                  ) : (
+                    <span>Pick a date</span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar
+                  initialFocus
+                  mode="range"
+                  defaultMonth={dateRange?.from}
+                  selected={dateRange}
+                  onSelect={setDateRange}
+                  numberOfMonths={2}
+                />
+              </PopoverContent>
+            </Popover>
+          <Button variant="default"> {/* Primary button style from new theme */}
+            <Download className="mr-2 h-4 w-4" /> Download
+          </Button>
         </div>
       </div>
 
-      <Card className="shadow-md">
-        <CardHeader>
-          <CardTitle className="text-xl">Recent Transactions</CardTitle>
-          <CardDescription>Your latest financial activities.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoadingData ? (
-            <div className="flex justify-center items-center h-40">
-              <p className="text-muted-foreground">Loading transactions...</p>
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList className="border-b-0 justify-start bg-transparent p-0 mb-6">
+          <TabsTrigger value="overview" className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none px-3 py-1.5 hover:bg-muted">Overview</TabsTrigger>
+          <TabsTrigger value="analytics" className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none px-3 py-1.5 hover:bg-muted">Analytics</TabsTrigger>
+          <TabsTrigger value="reports" className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none px-3 py-1.5 hover:bg-muted">Reports</TabsTrigger>
+          <TabsTrigger value="notifications" className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none px-3 py-1.5 hover:bg-muted">Notifications</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview">
+          <div className="grid gap-6">
+            {/* Summary Cards */}
+            {isLoadingData ? (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  {[...Array(4)].map((_, i) => ( <Card key={i} className="shadow-sm h-36 animate-pulse bg-muted/50 border-border"/> ))}
+              </div>
+            ) : (
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                <SummaryCard title="Total Revenue" value={summaryData.totalRevenue.toLocaleString(clientLocale, { style: 'currency', currency: 'USD' })} icon={DollarSign} change="+20.1% from last month" changeType="positive" />
+                <SummaryCard title="Subscriptions" value={`+${summaryData.subscriptions.toLocaleString(clientLocale)}`} icon={Users} change="+180.1% from last month" changeType="positive" />
+                <SummaryCard title="Sales" value={`+${summaryData.sales.toLocaleString(clientLocale)}`} icon={CreditCard} change="+19% from last month" changeType="positive" />
+                <SummaryCard title="Active Now" value={`+${summaryData.activeNow.toLocaleString(clientLocale)}`} icon={Activity} change="+201 since last hour" changeType="positive" />
+              </div>
+            )}
+
+            {/* Main Chart and Recent Sales */}
+            <div className="grid gap-6 lg:grid-cols-3">
+              <Card className="lg:col-span-2 shadow-sm border-border">
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold">Overview</CardTitle>
+                </CardHeader>
+                <CardContent className="pl-2 pr-4 pb-4"> {/* Adjust padding for recharts */}
+                   <IncomeExpenseChart chartData={chartDisplayData} isLoading={isLoadingData} />
+                </CardContent>
+              </Card>
+              <div className="lg:col-span-1">
+                 <RecentSales />
+              </div>
             </div>
-          ) : recentTransactions.length === 0 ? (
-             <div className="flex justify-center items-center h-40">
-              <p className="text-muted-foreground">No recent transactions found.</p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Debit</TableHead>
-                  <TableHead>Credit</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentTransactions.map((transaction) => (
-                  <TableRow key={transaction.id}>
-                    <TableCell>{transaction.date}</TableCell>
-                    <TableCell className="font-medium">{transaction.description}</TableCell>
-                    <TableCell>{transaction.debitAccount}</TableCell>
-                    <TableCell>{transaction.creditAccount}</TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {transaction.amount.toLocaleString(clientLocale, { style: 'currency', currency: 'USD' })}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+             {/* Quick Actions - Can be re-integrated or restyled if needed */}
+             {/* <QuickActions /> */}
+          </div>
+        </TabsContent>
+        <TabsContent value="analytics">
+          <p className="text-muted-foreground">Analytics content will go here.</p>
+        </TabsContent>
+        <TabsContent value="reports">
+           <p className="text-muted-foreground">Reports content will go here.</p>
+        </TabsContent>
+        <TabsContent value="notifications">
+           <p className="text-muted-foreground">Notifications content will go here.</p>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
+```

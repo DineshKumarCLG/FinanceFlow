@@ -3,106 +3,32 @@
 @tailwind utilities;
 
 body {
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  /* font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif; */ /* Removed Geist Sans variable */
+  font-family: Arial, Helvetica, sans-serif; /* Fallback to system fonts */
 }
 
 @layer base {
   :root {
-    --background-hsl: 208 100% 97%;
-    --foreground-hsl: 222 47% 11%;
-    --card-hsl: 208 100% 97%;
-    --card-foreground-hsl: 222 47% 11%;
-    --popover-hsl: 208 100% 97%;
-    --popover-foreground-hsl: 222 47% 11%;
-    --primary-hsl: 199 75% 58%; /* Updated Lightness for Deep Sky Blue */
-    --primary-foreground-hsl: 210 40% 98%; /* Adjusted for potentially better contrast with deeper primary */
-    --secondary-hsl: 200 80% 93%;
-    --secondary-foreground-hsl: 222 47% 11%;
-    --muted-hsl: 200 70% 90%;
-    --muted-foreground-hsl: 222 47% 45%;
-    --accent-hsl: 174 72% 56%;
-    --accent-foreground-hsl: 210 40% 5%;
-    --destructive-hsl: 0 84% 60%;
+    /* Inspired by the provided image: Light theme with green accent */
+    --background-hsl: 0 0% 98%; /* Very light gray, almost white */
+    --foreground-hsl: 220 9% 23%; /* Dark gray for text */
+    --card-hsl: 0 0% 100%; /* White */
+    --card-foreground-hsl: 220 9% 23%; /* Dark gray for text on cards */
+    --popover-hsl: 0 0% 100%; /* White */
+    --popover-foreground-hsl: 220 9% 23%;
+    --primary-hsl: 220 9% 23%; /* Dark gray/black for primary buttons like "Download" */
+    --primary-foreground-hsl: 0 0% 98%; /* Light text for primary buttons */
+    --secondary-hsl: 240 4.8% 95.9%; /* Light gray for secondary elements */
+    --secondary-foreground-hsl: 220 9% 23%;
+    --muted-hsl: 240 4.8% 95.9%;
+    --muted-foreground-hsl: 240 3.8% 46.1%; /* Lighter gray for muted text */
+    --accent-hsl: 100 60% 50%; /* Vibrant Lime Green for charts and active states */
+    --accent-foreground-hsl: 220 9% 23%; /* Dark text on green accent */
+    --destructive-hsl: 0 84.2% 60.2%;
     --destructive-foreground-hsl: 0 0% 98%;
-    --border-hsl: 200 50% 88%;
-    --input-hsl: 200 50% 88%;
-    --ring-hsl: 199 75% 58%; /* Updated Lightness for Deep Sky Blue */
-
-    --background: hsl(var(--background-hsl)); /* #F0F8FF Alice Blue */
-    --foreground: hsl(var(--foreground-hsl)); /* Dark blue/grey for text */
-
-    --card: hsl(var(--card-hsl));
-    --card-foreground: hsl(var(--card-foreground-hsl));
-
-    --popover: hsl(var(--popover-hsl));
-    --popover-foreground: hsl(var(--popover-foreground-hsl));
-
-    --primary: hsl(var(--primary-hsl)); /* #41B6E6 Deep Sky Blue */
-    --primary-foreground: hsl(var(--primary-foreground-hsl)); 
-
-    --secondary: hsl(var(--secondary-hsl)); /* Lighter shade of sky blue */
-    --secondary-foreground: hsl(var(--secondary-foreground-hsl));
-
-    --muted: hsl(var(--muted-hsl));
-    --muted-foreground: hsl(var(--muted-foreground-hsl)); /* Softer text */
-
-    --accent: hsl(var(--accent-hsl)); /* #40E0D0 Turquoise */
-    --accent-foreground: hsl(var(--accent-foreground-hsl)); /* Dark text for accent elements */
-
-    --destructive: hsl(var(--destructive-hsl));
-    --destructive-foreground: hsl(var(--destructive-foreground-hsl));
-
-    --border: hsl(var(--border-hsl)); /* Softer border */
-    --input: hsl(var(--input-hsl));
-    --ring: hsl(var(--ring-hsl)); /* Primary color for rings */
-
-    --chart-1: 199 75% 58%; /* Aligned with new primary */
-    --chart-2: 174 72% 46%;
-    --chart-3: 210 70% 50%;
-    --chart-4: 30 80% 65%;
-    --chart-5: 270 70% 60%;
-    --radius: 0.5rem;
-
-    /* Sidebar specific theme */
-    --sidebar-background-hsl: 208 100% 95%;
-    --sidebar-foreground-hsl: 222 47% 11%;
-    --sidebar-primary-hsl: 199 75% 58%; /* Updated Lightness for Deep Sky Blue */
-    --sidebar-primary-foreground-hsl: 210 40% 98%; /* Adjusted for potentially better contrast */
-    --sidebar-accent-hsl: 174 72% 56%;
-    --sidebar-accent-foreground-hsl: 210 40% 5%;
-    --sidebar-border-hsl: 200 50% 85%;
-    --sidebar-ring-hsl: 199 75% 58%; /* Updated Lightness for Deep Sky Blue */
-
-    --sidebar-background: hsl(var(--sidebar-background-hsl));
-    --sidebar-foreground: hsl(var(--sidebar-foreground-hsl));
-    --sidebar-primary: hsl(var(--sidebar-primary-hsl));
-    --sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground-hsl));
-    --sidebar-accent: hsl(var(--sidebar-accent-hsl));
-    --sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground-hsl));
-    --sidebar-border: hsl(var(--sidebar-border-hsl));
-    --sidebar-ring: hsl(var(--sidebar-ring-hsl));
-  }
-
-  .dark {
-    --background-hsl: 222 47% 11%;
-    --foreground-hsl: 208 100% 97%;
-    --card-hsl: 222 47% 11%;
-    --card-foreground-hsl: 208 100% 97%;
-    --popover-hsl: 222 47% 11%;
-    --popover-foreground-hsl: 208 100% 97%;
-    --primary-hsl: 199 75% 58%; /* Updated Lightness for Deep Sky Blue */
-    --primary-foreground-hsl: 210 40% 98%; /* Adjusted for potentially better contrast */
-    --secondary-hsl: 222 47% 18%;
-    --secondary-foreground-hsl: 208 100% 97%;
-    --muted-hsl: 222 47% 18%;
-    --muted-foreground-hsl: 208 80% 85%;
-    --accent-hsl: 174 72% 56%;
-    --accent-foreground-hsl: 210 40% 5%;
-    --destructive-hsl: 0 62% 30%;
-    --destructive-foreground-hsl: 0 0% 98%;
-    --border-hsl: 222 47% 25%;
-    --input-hsl: 222 47% 25%;
-    --ring-hsl: 199 75% 58%; /* Updated Lightness for Deep Sky Blue */
+    --border-hsl: 240 5.9% 90%; /* Light gray border */
+    --input-hsl: 240 5.9% 90%;
+    --ring-hsl: 100 60% 50%; /* Green for focus rings */
 
     --background: hsl(var(--background-hsl));
     --foreground: hsl(var(--foreground-hsl));
@@ -124,15 +50,22 @@ body {
     --input: hsl(var(--input-hsl));
     --ring: hsl(var(--ring-hsl));
 
-    /* Sidebar dark theme */
-    --sidebar-background-hsl: 222 47% 9%;
-    --sidebar-foreground-hsl: 208 100% 97%;
-    --sidebar-primary-hsl: 199 75% 58%; /* Updated Lightness for Deep Sky Blue */
-    --sidebar-primary-foreground-hsl: 210 40% 98%; /* Adjusted for potentially better contrast */
-    --sidebar-accent-hsl: 174 72% 56%;
-    --sidebar-accent-foreground-hsl: 210 40% 5%;
-    --sidebar-border-hsl: 222 47% 20%;
-    --sidebar-ring-hsl: 199 75% 58%; /* Updated Lightness for Deep Sky Blue */
+    --chart-1: 100 60% 50%; /* Lime Green */
+    --chart-2: 100 70% 60%; /* Lighter Lime Green */
+    --chart-3: 220 50% 65%; /* A contrasting blue/gray if needed */
+    --chart-4: 30 80% 65%;
+    --chart-5: 270 70% 60%;
+    --radius: 0.5rem;
+
+    /* Sidebar specific theme - keep it clean and simple */
+    --sidebar-background-hsl: 0 0% 100%; /* White */
+    --sidebar-foreground-hsl: 220 9% 23%;
+    --sidebar-primary-hsl: 100 60% 50%; /* Green accent for active items */
+    --sidebar-primary-foreground-hsl: 0 0% 100%;
+    --sidebar-accent-hsl: 100 60% 50%;
+    --sidebar-accent-foreground-hsl: 0 0% 100%; /* White text on green */
+    --sidebar-border-hsl: 240 5.9% 90%;
+    --sidebar-ring-hsl: 100 60% 50%;
 
     --sidebar-background: hsl(var(--sidebar-background-hsl));
     --sidebar-foreground: hsl(var(--sidebar-foreground-hsl));
@@ -142,6 +75,44 @@ body {
     --sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground-hsl));
     --sidebar-border: hsl(var(--sidebar-border-hsl));
     --sidebar-ring: hsl(var(--sidebar-ring-hsl));
+  }
+
+  .dark {
+    /* Dark theme inspired by the provided image's potential dark mode equivalent */
+    --background-hsl: 220 14% 10%; /* Very dark gray */
+    --foreground-hsl: 0 0% 95%; /* Light gray for text */
+    --card-hsl: 220 13% 14%; /* Slightly lighter dark gray for cards */
+    --card-foreground-hsl: 0 0% 95%;
+    --popover-hsl: 220 14% 10%;
+    --popover-foreground-hsl: 0 0% 95%;
+    --primary-hsl: 0 0% 95%; /* Light gray/white for primary buttons */
+    --primary-foreground-hsl: 220 14% 10%; /* Dark text for primary buttons */
+    --secondary-hsl: 240 3.7% 15.9%;
+    --secondary-foreground-hsl: 0 0% 95%;
+    --muted-hsl: 240 3.7% 15.9%;
+    --muted-foreground-hsl: 240 5% 64.9%;
+    --accent-hsl: 100 60% 55%; /* Vibrant Lime Green */
+    --accent-foreground-hsl: 220 14% 10%; /* Dark text on green accent */
+    --destructive-hsl: 0 62.8% 30.6%;
+    --destructive-foreground-hsl: 0 0% 98%;
+    --border-hsl: 240 3.7% 20%; /* Darker border */
+    --input-hsl: 240 3.7% 20%;
+    --ring-hsl: 100 60% 55%;
+
+    --chart-1: 100 60% 55%;
+    --chart-2: 100 70% 65%;
+    --chart-3: 200 50% 60%;
+    --chart-4: 30 70% 60%;
+    --chart-5: 270 60% 65%;
+
+    --sidebar-background-hsl: 220 14% 12%; /* Darker sidebar */
+    --sidebar-foreground-hsl: 0 0% 95%;
+    --sidebar-primary-hsl: 100 60% 55%;
+    --sidebar-primary-foreground-hsl: 220 14% 10%;
+    --sidebar-accent-hsl: 100 60% 55%;
+    --sidebar-accent-foreground-hsl: 220 14% 10%;
+    --sidebar-border-hsl: 240 3.7% 18%;
+    --sidebar-ring-hsl: 100 60% 55%;
   }
 }
 
@@ -154,12 +125,4 @@ body {
   }
 }
 
-.glassmorphic {
-  background: hsla(var(--card-hsl), 0.7); /* Semi-transparent background */
-  @apply backdrop-blur-md shadow-lg rounded-xl border border-[hsla(var(--border-hsl),0.3)];
-}
-
-.dark .glassmorphic {
-  background: hsla(var(--card-hsl), 0.1); /* Darker semi-transparent background for dark mode */
-   @apply backdrop-blur-md shadow-lg rounded-xl border border-[hsla(var(--border-hsl),0.2)];
-}
+/* Removed glassmorphic as it doesn't fit the new design */
