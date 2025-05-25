@@ -175,10 +175,26 @@ const Sidebar = React.forwardRef<
     },
     ref
   ) => {
-    const { state } = useSidebar() // isMobile and openMobile not needed here if BottomNavBar handles mobile
+    const { state, isMobile } = useSidebar()
 
-    // Sidebar is now primarily for desktop, controlled by AppLayout's responsive classes
-    // No need for Sheet logic here if BottomNavBar is used for mobile.
+    // Mobile sidebar content (now using Sheet from shadcn)
+    if (isMobile) {
+      return (
+        <Sheet open={state === "expanded"} onOpenChange={(open) => {
+          // This assumes setOpen in SidebarContext can handle the toggle for mobile sheet
+          // For a dedicated mobile sheet, you might need a separate openMobile state.
+          // For now, we'll use the main 'open' state for simplicity of the toggle.
+          const { setOpen } = useSidebar(); // Get setOpen from context
+          setOpen(open);
+         }}>
+          <SheetContent side={side} className="w-[--sidebar-width] p-0">
+            <SheetTitle className="sr-only">Main Navigation</SheetTitle> {/* Accessibility */}
+            {children}
+          </SheetContent>
+        </Sheet>
+      )
+    }
+
 
     return (
       <div
@@ -283,14 +299,17 @@ const SidebarRail = React.forwardRef<
 SidebarRail.displayName = "SidebarRail"
 
 const SidebarInset = React.forwardRef<
-  HTMLDivElement,
+  HTMLElement, // Changed from HTMLDivElement to HTMLElement as it's a <main> tag
   React.ComponentProps<"main">
 >(({ className, ...props }, ref) => {
   return (
     <main
       ref={ref}
       className={cn(
-        "relative flex min-h-svh flex-1 flex-col bg-background",
+        "relative flex flex-1 flex-col bg-background", // Removed min-h-svh
+        // The following classes are for the "inset" variant styling.
+        // If variant="inset" is used on the <Sidebar> peer, these apply.
+        // If not using variant="inset", these min-h classes won't apply.
         "peer-data-[variant=inset]:min-h-[calc(100svh-theme(spacing.4))] md:peer-data-[variant=inset]:m-2 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow",
         className
       )}
