@@ -72,6 +72,13 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function loadInitialData() {
+      if (!currentUser) {
+        setIsLoadingData(false);
+        setIsLoadingNotifications(false);
+        setAllJournalEntries([]);
+        setNotifications([]);
+        return;
+      }
       console.log("Dashboard: Starting to load initial data...");
       setIsLoadingData(true); 
       setIsLoadingNotifications(true);
@@ -108,32 +115,32 @@ export default function DashboardPage() {
       } finally {
         setIsLoadingNotifications(false);
         console.log("Dashboard: Finished loading initial notifications.");
-        // setIsLoadingData will be set to false by the processing useEffect
+        // setIsLoadingData will be set to false by the processing useEffect,
+        // or if currentUser is null initially and causes an early return in this effect.
+        if (!currentUser) setIsLoadingData(false);
       }
     }
-    if (currentUser) { // Only load data if user is authenticated
-        loadInitialData();
-    } else {
-        setIsLoadingData(false); // Not loading if no user
-        setIsLoadingNotifications(false);
-    }
+    loadInitialData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser, toast]); // Added toast as dependency as it's used inside
+  }, [currentUser, toast]); 
 
 
   // Centralized data processing useEffect
   useEffect(() => {
-    console.log("Dashboard: Processing effect triggered. allJournalEntries count:", allJournalEntries.length, "dateRange:", dateRange);
+    console.log("Dashboard: Processing effect triggered. allJournalEntries count:", allJournalEntries.length, "dateRange from:", dateRange?.from, "to:", dateRange?.to);
+    const overallProcessingStartTime = Date.now();
 
     if (!dateRange?.from || !dateRange?.to) {
       console.log("Dashboard: Date range not fully set, skipping processing.");
+      // Don't set isLoadingData to false here if we're skipping, 
+      // as initial data might still be loading or this effect might run before initial load completes.
       return;
     }
     
-    setIsLoadingData(true);
+    setIsLoadingData(true); 
 
-    if (allJournalEntries.length === 0) {
-        console.log("Dashboard: No journal entries to process. Setting defaults.");
+    if (!currentUser && allJournalEntries.length === 0) { 
+        console.log("Dashboard: No current user and no journal entries. Setting defaults for empty state.");
         setSummaryData({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
         const now = new Date();
         setChartDisplayData(
@@ -144,17 +151,17 @@ export default function DashboardPage() {
         setUserSpendingData([]);
         setAnalyticsKpis({ avgTransactionValue: 0, profitMargin: 0, incomeTransactions: 0, expenseTransactions: 0 });
         setAnalyticsExpenseCategories([]);
-        const formattedRange = dateRange?.from && dateRange?.to ? `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}` : "All Time";
+        const formattedRange = `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}`;
         setProfitLossReportData({
             revenueItems: [], expenseItems: [], totalRevenue: 0, totalExpenses: 0, netProfit: 0, formattedDateRange: formattedRange
         });
         setIsLoadingData(false);
-        console.log("Dashboard: Finished processing (no entries).");
+        console.log(`Dashboard: Finished processing (no user/entries) in ${Date.now() - overallProcessingStartTime}ms.`);
         return;
     }
-
+    
     console.log("Dashboard: Starting calculations for", allJournalEntries.length, "entries.");
-    const processingStartTime = Date.now();
+    let sectionStartTime = Date.now();
 
     let calculatedTotalRevenue = 0; 
     let calculatedTotalExpenses = 0;
@@ -185,16 +192,17 @@ export default function DashboardPage() {
         monthlyAggregates[yearMonth] = { income: 0, expense: 0, monthLabel, yearMonth };
       }
     });
+    console.log(`Dashboard: Initial month setup for chart took ${Date.now() - sectionStartTime}ms.`);
+    sectionStartTime = Date.now();
     
     allJournalEntries.forEach(entry => {
-      const entryDate = new Date(entry.date); // Assuming entry.date is a valid date string
+      const entryDate = new Date(entry.date); 
       const entryYearMonth = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
       
       const isWithinRange = entryDate >= dateRange.from! && entryDate <= dateRange.to!;
       let isIncomeEntry = false;
       let isExpenseEntry = false;
 
-      // Income/Expense classification (simplified)
       if (incomeKeywords.some(keyword => (entry.creditAccount?.toLowerCase().includes(keyword) || entry.description.toLowerCase().includes(keyword))) ||
           (entry.debitAccount?.toLowerCase().includes('cash') || entry.debitAccount?.toLowerCase().includes('bank'))) {
           isIncomeEntry = true;
@@ -215,13 +223,11 @@ export default function DashboardPage() {
         }
       }
 
-      // Aggregate for chart (only last 12 months)
       if (entryDate >= chartIntervalStart && entryDate <= chartIntervalEnd && monthlyAggregates[entryYearMonth]) {
         if (isIncomeEntry) monthlyAggregates[entryYearMonth].income += entry.amount;
         if (isExpenseEntry) monthlyAggregates[entryYearMonth].expense += entry.amount;
       }
       
-      // Analytics KPIs (based on ALL entries, not just date range)
       analyticsTotalTransactionAmount += entry.amount;
       if (isIncomeEntry) {
         analyticsIncomeTransactions++;
@@ -234,7 +240,6 @@ export default function DashboardPage() {
         expensesByAccountForAnalytics[analyticsAccount] = (expensesByAccountForAnalytics[analyticsAccount] || 0) + entry.amount;
       }
       
-      // P&L Report (based on selected date range)
       if (isWithinRange) {
         if (isIncomeEntry) {
           const account = entry.creditAccount || "Uncategorized Revenue";
@@ -247,6 +252,8 @@ export default function DashboardPage() {
         }
       }
     });
+    console.log(`Dashboard: Main entry iteration (${allJournalEntries.length} entries) took ${Date.now() - sectionStartTime}ms.`);
+    sectionStartTime = Date.now();
 
     setSummaryData({
         totalRevenue: calculatedTotalRevenue,
@@ -254,20 +261,24 @@ export default function DashboardPage() {
         netProfit: calculatedTotalRevenue - calculatedTotalExpenses,
         transactionCount: transactionCountInRange,
     });
+    console.log(`Dashboard: Summary data state update took ${Date.now() - sectionStartTime}ms.`);
+    sectionStartTime = Date.now();
 
     const newChartData = Object.values(monthlyAggregates)
       .sort((a, b) => a.yearMonth.localeCompare(b.yearMonth)) 
       .map(agg => ({ month: agg.monthLabel, income: agg.income, expense: agg.expense })); 
     setChartDisplayData(newChartData);
+    console.log(`Dashboard: Chart data state update took ${Date.now() - sectionStartTime}ms.`);
+    sectionStartTime = Date.now();
 
     const topSpenders = Object.entries(userExpenses)
       .map(([userId, totalSpent]) => {
         let displayName = `User ...${userId.slice(-6)}`;
-        let avatarFallback = userId.substring(0, 2).toUpperCase(); // Default fallback
+        let avatarFallback = userId.substring(0, 2).toUpperCase(); 
 
         if (currentUser && userId === currentUser.uid) {
           displayName = currentUser.displayName || `User ...${userId.slice(-6)}`;
-          if (currentUser.displayName) {
+          if (currentUser.displayName && currentUser.displayName.trim() !== "") {
             const names = currentUser.displayName.split(' ');
             avatarFallback = names.map(n => n[0]).slice(0,2).join('').toUpperCase();
           } else if (currentUser.email) {
@@ -279,6 +290,8 @@ export default function DashboardPage() {
       })
       .sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 5); 
     setUserSpendingData(topSpenders);
+    console.log(`Dashboard: Top spenders state update took ${Date.now() - sectionStartTime}ms.`);
+    sectionStartTime = Date.now();
 
     const calculatedAnalyticsKpis: AnalyticsKpiData = {
       avgTransactionValue: allJournalEntries.length > 0 ? analyticsTotalTransactionAmount / allJournalEntries.length : 0,
@@ -287,11 +300,15 @@ export default function DashboardPage() {
       expenseTransactions: analyticsExpenseTransactions,
     };
     setAnalyticsKpis(calculatedAnalyticsKpis);
+    console.log(`Dashboard: Analytics KPIs state update took ${Date.now() - sectionStartTime}ms.`);
+    sectionStartTime = Date.now();
 
     const topAnalyticsExpenseCategories = Object.entries(expensesByAccountForAnalytics)
       .map(([name, total]) => ({ name, total }))
       .sort((a, b) => b.total - a.total).slice(0, 5);
     setAnalyticsExpenseCategories(topAnalyticsExpenseCategories);
+    console.log(`Dashboard: Analytics expense categories state update took ${Date.now() - sectionStartTime}ms.`);
+    sectionStartTime = Date.now();
 
     const plRevenueItemsList: PLReportLineItem[] = Object.entries(revenuesForReport).map(([accountName, amount]) => ({ accountName, amount }));
     const plExpenseItemsList: PLReportLineItem[] = Object.entries(expensesForReport).map(([accountName, amount]) => ({ accountName, amount }));
@@ -304,12 +321,12 @@ export default function DashboardPage() {
       netProfit: reportTotalRevenue - reportTotalExpenses,
       formattedDateRange: formattedRange,
     });
-
+    console.log(`Dashboard: P&L report data state update took ${Date.now() - sectionStartTime}ms.`);
+    
     setIsLoadingData(false);
-    const processingEndTime = Date.now();
-    console.log(`Dashboard: Finished processing calculations in ${processingEndTime - processingStartTime}ms.`);
+    console.log(`Dashboard: Finished overall processing calculations in ${Date.now() - overallProcessingStartTime}ms.`);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allJournalEntries, dateRange, clientLocale, currentUser]); // currentUser added as a dependency
+  }, [allJournalEntries, dateRange, clientLocale, currentUser]); 
 
 
   const handleDownloadReport = () => {
