@@ -1,57 +1,134 @@
+
 "use client";
 
-import Link from 'next/link';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { AppLogo } from '@/components/layout/AppLogo';
 import { useAuth } from '@/contexts/AuthContext';
-import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-export default function WelcomePage() {
-  const { isAuthenticated, isLoading } = useAuth();
+const VALID_COMPANY_ID = "KENESIS";
+
+const GoogleIcon = () => (
+  <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-.97 2.47-1.94 3.21v2.75h3.57c2.08-1.92 3.28-4.74 3.28-8.01z" fill="#4285F4"/>
+    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.75c-.98.66-2.23 1.06-3.71 1.06-2.83 0-5.22-1.9-6.08-4.42H2.27v2.84C3.91 20.91 7.69 23 12 23z" fill="#34A853"/>
+    <path d="M5.92 14.41c-.2-.59-.31-1.21-.31-1.84s.11-1.25.31-1.84V7.93H2.27C1.47 9.54 1 11.21 1 13s.47 3.46 1.27 5.07l3.65-2.84z" fill="#FBBC05"/>
+    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.69 1 3.91 3.09 2.27 6.09l3.65 2.84c.86-2.52 3.25-4.42 6.08-4.42z" fill="#EA4335"/>
+  </svg>
+);
+
+export default function CompanyLoginPage() {
+  const { user, isAuthenticated, isLoading: authIsLoading, signInWithGoogle } = useAuth();
   const router = useRouter();
+  const [companyId, setCompanyId] = useState("");
+  const [isCompanyIdValid, setIsCompanyIdValid] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [uiIsLoading, setUiIsLoading] = useState(false); // For Google Sign-In button click
 
   useEffect(() => {
-    if (!isLoading && isAuthenticated) {
+    if (!authIsLoading && isAuthenticated) {
       router.push('/dashboard');
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, authIsLoading, router]);
 
-  if (isLoading || (!isLoading && isAuthenticated)) {
+  const handleCompanyIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newCompanyId = e.target.value;
+    setCompanyId(newCompanyId);
+    if (newCompanyId.trim().toUpperCase() === VALID_COMPANY_ID) {
+      setIsCompanyIdValid(true);
+      setError(null);
+    } else {
+      setIsCompanyIdValid(false);
+      if (newCompanyId.trim() !== "") {
+        setError("Invalid Company ID. Please enter 'KENESIS'.");
+      } else {
+        setError(null);
+      }
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    if (!isCompanyIdValid) {
+      setError("Please enter a valid Company ID first.");
+      return;
+    }
+    setUiIsLoading(true);
+    setError(null);
+    try {
+      await signInWithGoogle();
+      // AuthContext will handle redirect on successful login via onAuthStateChanged
+    } catch (e: any) {
+      if (e.code === 'auth/popup-closed-by-user') {
+        setError("Sign-in process was cancelled. Please try again.");
+      } else {
+        setError(e.message || "An unexpected error occurred during Google Sign-In.");
+      }
+      setUiIsLoading(false); // Stop loading on error
+    }
+    // uiIsLoading will be reset implicitly by page navigation on success or stay true if an error occurred and wasn't caught above
+  };
+
+  if (authIsLoading || (!authIsLoading && isAuthenticated)) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="mt-4 text-muted-foreground">Loading your FinanceFlow...</p>
+        <p className="mt-4 text-muted-foreground">Loading FinanceFlow AI...</p>
       </div>
     );
   }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-background to-secondary p-4">
-      <main className="flex w-full max-w-md flex-col items-center justify-center space-y-8">
-        <div className="glassmorphic p-8 md:p-12 text-center w-full">
-          <AppLogo className="justify-center mb-6" iconClassName="h-12 w-12 text-primary" textClassName="text-3xl font-bold text-foreground" />
-          
-          <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
-            Welcome to FinanceFlow AI
-          </h1>
-          <p className="mt-6 text-lg leading-8 text-muted-foreground">
-            Your AI-powered accounting assistant. Manage your business finances with zero accounting knowledge required.
-          </p>
-          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <Button asChild size="lg" className="w-full sm:w-auto">
-              <Link href="/auth/signup">Sign Up</Link>
-            </Button>
-            <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
-              <Link href="/auth/login">Log In</Link>
-            </Button>
+      <Card className="w-full max-w-md shadow-xl">
+        <CardHeader className="text-center">
+          <div className="mx-auto mb-4">
+            <AppLogo iconClassName="h-10 w-10 text-primary" textClassName="text-2xl font-semibold" />
           </div>
-        </div>
-        <footer className="mt-12 text-center text-sm text-muted-foreground">
-          <p>&copy; {new Date().getFullYear()} FinanceFlow AI. All rights reserved.</p>
-        </footer>
-      </main>
+          <CardTitle className="text-2xl">Welcome to FinanceFlow AI</CardTitle>
+          <CardDescription>Enter your Company ID to proceed with Google Sign-In.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <label htmlFor="companyId" className="block text-sm font-medium text-foreground">Company ID</label>
+            <Input
+              id="companyId"
+              type="text"
+              placeholder="Enter Company ID (e.g., KENESIS)"
+              value={companyId}
+              onChange={handleCompanyIdChange}
+              className={error && !isCompanyIdValid && companyId.trim() !== "" ? "border-destructive" : ""}
+            />
+          </div>
+          {error && (
+            <Alert variant="destructive" className="py-2 px-3">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle className="text-sm">Error</AlertTitle>
+              <AlertDescription className="text-xs">{error}</AlertDescription>
+            </Alert>
+          )}
+          <Button 
+            onClick={handleGoogleSignIn} 
+            className="w-full" 
+            disabled={!isCompanyIdValid || uiIsLoading || authIsLoading}
+          >
+            {(uiIsLoading || authIsLoading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <GoogleIcon />
+            Sign in with Google
+          </Button>
+        </CardContent>
+        <CardFooter>
+           <p className="text-xs text-muted-foreground text-center w-full">
+            &copy; {new Date().getFullYear()} FinanceFlow AI. All rights reserved.
+          </p>
+        </CardFooter>
+      </Card>
     </div>
   );
 }
+
+    

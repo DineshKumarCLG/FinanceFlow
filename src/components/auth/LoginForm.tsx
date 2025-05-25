@@ -1,39 +1,22 @@
 
+// This component is no longer used in the primary authentication flow.
+// Kept for reference or if needed for other purposes, but can be deleted.
+// For example, if you re-introduce email/password alongside Google.
+
 "use client";
 
-// import { zodResolver } from "@hookform/resolvers/zod"; // No longer needed for this form
-// import { useForm } from "react-hook-form"; // No longer needed
-// import * as z from "zod"; // No longer needed
 import { Button } from "@/components/ui/button";
-// import {
-//   Form,
-//   FormControl,
-//   FormField,
-//   FormItem,
-//   FormLabel,
-//   FormMessage,
-// } from "@/components/ui/form"; // No longer needed
-// import { Input } from "@/components/ui/input"; // No longer needed
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import Link from "next/link";
+import Link from "next/link"; // Link might still be useful if this component were reused
 import { useState } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-// const formSchema = z.object({ // No longer needed
-//   email: z.string().email({ message: "Invalid email address." }),
-//   password: z.string().min(6, { message: "Password must be at least 6 characters." }),
-// });
-
-// export type LoginFormInputs = z.infer<typeof formSchema>; // Kept for AuthContext type, though form changed
-
-// Placeholder type for consistency if AuthContext still refers to it
 export interface LoginFormInputs {
-  email?: string;
+  email?: string; // Retaining for type consistency if AuthContext still references it
   password?: string;
 }
-
 
 const GoogleIcon = () => (
   <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
@@ -46,23 +29,14 @@ const GoogleIcon = () => (
 
 export function LoginForm() {
   const { signInWithGoogle, isLoading: authLoading } = useAuth();
-  const [isLoading, setIsLoading] = useState(false); // Local loading for button click
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // const form = useForm<LoginFormInputs>({ // No longer needed
-  //   resolver: zodResolver(formSchema),
-  //   defaultValues: {
-  //     email: "",
-  //     password: "",
-  //   },
-  // });
 
   async function handleGoogleSignIn() {
     setIsLoading(true);
     setError(null);
     try {
       await signInWithGoogle();
-      // AuthContext will handle redirect on successful login via onAuthStateChanged
     } catch (e: any) {
       if (e.code === 'auth/popup-closed-by-user') {
         setError("Sign-in process was cancelled. Please try again.");
@@ -71,7 +45,6 @@ export function LoginForm() {
       }
       setIsLoading(false);
     }
-    // setIsLoading(false) is handled by AuthContext success or error catch
   }
 
   return (
@@ -98,10 +71,13 @@ export function LoginForm() {
         <p className="text-sm text-muted-foreground">
           New to KENESIS?{" "}
           <Button variant="link" asChild className="p-0 h-auto">
-            <Link href="/auth/signup">Create an account</Link>
+            {/* Link should point to the new root login/company ID page if this component were used. */}
+            <Link href="/">Create an account</Link> 
           </Button>
         </p>
       </CardFooter>
     </Card>
   );
 }
+
+    
