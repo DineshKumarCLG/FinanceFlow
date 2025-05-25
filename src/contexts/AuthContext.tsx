@@ -4,7 +4,7 @@
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { auth, db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase'; // Ensure db is imported if needed elsewhere, not directly used here
 import type { User as FirebaseUser } from 'firebase/auth';
 import {
   onAuthStateChanged,
@@ -12,11 +12,10 @@ import {
   updateProfile,
   GoogleAuthProvider,
   signInWithPopup,
-  getAdditionalUserInfo
+  getAdditionalUserInfo,
 } from 'firebase/auth';
-import { addNotification, type UserProfile } from '@/lib/data-service'; // UserProfile might be needed later
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-
+import { addNotification } from '@/lib/data-service'; // UserProfile might be needed later
+// import { doc, getDoc, setDoc } from 'firebase/firestore'; // Not used currently in this file
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -26,7 +25,7 @@ interface AuthContextType {
   updateUserProfileName: (newName: string) => Promise<void>;
   logout: () => Promise<void>;
   currentCompanyId: string | null;
-  setCurrentCompanyId: (companyId: string | null) => void; // Expose setter if needed by other parts
+  setCurrentCompanyId: (companyId: string | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -35,66 +34,79 @@ const googleProvider = new GoogleAuthProvider();
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true); // Start as true
   const [currentCompanyIdState, setCurrentCompanyIdState] = useState<string | null>(null);
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
     console.log("AuthContext: Initializing onAuthStateChanged listener.");
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       console.log("AuthContext: onAuthStateChanged triggered. Firebase user:", firebaseUser ? firebaseUser.uid : null);
-      setUser(firebaseUser);
+      let companyIdToSet: string | null = null;
+
       if (firebaseUser) {
+        setUser(firebaseUser); // Set user first
         const storedCompanyId = localStorage.getItem('financeFlowCurrentCompanyId');
         if (storedCompanyId) {
-          console.log(`AuthContext: User authenticated (${firebaseUser.uid}). Found companyId in localStorage: '${storedCompanyId}'. Setting it in context.`);
-          setCurrentCompanyIdState(storedCompanyId);
+          console.log(`AuthContext: User authenticated (${firebaseUser.uid}). Found companyId in localStorage: '${storedCompanyId}'. Path: ${pathname}`);
+          companyIdToSet = storedCompanyId;
         } else {
-          console.warn(`AuthContext: User authenticated (${firebaseUser.uid}) but no companyId found in localStorage. Current path: ${pathname}`);
-          setCurrentCompanyIdState(null);
-          if (pathname !== "/") { // If authenticated but no companyId, and not on company select page
-            console.log("AuthContext: Redirecting to / for company ID entry.");
-            router.push('/');
-          }
+          console.warn(`AuthContext: User authenticated (${firebaseUser.uid}) but no companyId found in localStorage. Path: ${pathname}`);
         }
       } else {
+        setUser(null);
         // User is signed out
-        console.log("AuthContext: User signed out. Clearing companyId from localStorage and context state.");
+        console.log("AuthContext: User signed out. Clearing companyId from localStorage.");
         localStorage.removeItem('financeFlowCurrentCompanyId');
-        setCurrentCompanyIdState(null);
       }
-      setIsLoading(false);
-      console.log("AuthContext: setIsLoading(false). User:", firebaseUser ? firebaseUser.uid : null, "CompanyId:", currentCompanyIdState);
+      setCurrentCompanyIdState(companyIdToSet); // Set company ID (or null)
+      setIsLoading(false); // Set loading to false AFTER user and companyId are processed
+      console.log("AuthContext: Initial load complete. User:", firebaseUser ? firebaseUser.uid : null, "CompanyId:", companyIdToSet, "Path:", pathname);
     });
     return () => {
       console.log("AuthContext: Cleaning up onAuthStateChanged listener.");
       unsubscribe();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Pathname dependency removed to avoid re-subscribing excessively. Relies on initial setup.
+  }, []); // Run once on mount to set up listener, pathname removed as dependency here to avoid re-subscribing excessively
 
   const isAuthenticated = !!user;
 
+  // Centralized redirection logic
   useEffect(() => {
-    console.log(`AuthContext: isLoading=${isLoading}, isAuthenticated=${isAuthenticated}, currentCompanyIdState=${currentCompanyIdState}, pathname=${pathname}`);
-    if (!isLoading) {
-      if (!isAuthenticated && pathname !== '/') {
-        console.log("AuthContext: Not authenticated and not on company login page. Redirecting to /.");
+    console.log(`AuthContext: Redirection check. isLoading=${isLoading}, isAuthenticated=${isAuthenticated}, currentCompanyId=${currentCompanyIdState}, pathname=${pathname}`);
+    if (isLoading) { // If AuthContext is still determining initial state, don't redirect yet.
+      return;
+    }
+
+    if (!isAuthenticated) {
+      // Not authenticated
+      if (pathname !== '/') { // Avoid redirect loop if already on company login page
+        console.log("AuthContext: Not authenticated. Redirecting to /.");
         router.push('/');
-      } else if (isAuthenticated && !currentCompanyIdState && pathname !== '/') {
-        console.log("AuthContext: Authenticated but no currentCompanyId and not on company login page. Redirecting to /.");
-        router.push('/');
-      } else if (isAuthenticated && currentCompanyIdState && pathname === '/') {
-        console.log("AuthContext: Authenticated with companyId and on company login page. Redirecting to /dashboard.");
-        router.push('/dashboard');
+      }
+    } else {
+      // Is Authenticated
+      if (!currentCompanyIdState) {
+        // Authenticated, but no company ID selected/stored
+        if (pathname !== '/') { // Avoid redirect loop if already on company login page
+          console.log("AuthContext: Authenticated but no currentCompanyId. Redirecting to / to select company.");
+          router.push('/');
+        }
+      } else {
+        // Authenticated AND has company ID
+        if (pathname === '/') { // If on the company login page, redirect to dashboard
+          console.log("AuthContext: Authenticated with companyId and on /. Redirecting to /dashboard.");
+          router.push('/dashboard');
+        }
       }
     }
-  }, [isAuthenticated, isLoading, router, pathname, currentCompanyIdState]);
+  }, [isAuthenticated, isLoading, currentCompanyIdState, pathname, router]);
 
 
   const signInWithGoogle = async () => {
-    setIsLoading(true);
+    setIsLoading(true); // Indicate loading starts for the sign-in process
     console.log("AuthContext: Attempting Google Sign-In...");
     try {
       const result = await signInWithPopup(auth, googleProvider);
@@ -103,37 +115,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log("AuthContext: Google Sign-In successful. User UID:", firebaseUser.uid);
 
       if (firebaseUser) {
-        // Check for companyId immediately after login, as it's set by the page.tsx before calling this
-        const companyIdFromStorage = localStorage.getItem('financeFlowCurrentCompanyId');
+        const companyIdFromStorage = localStorage.getItem('financeFlowCurrentCompanyId'); // Should be set by page.tsx
         if (companyIdFromStorage) {
-          console.log(`AuthContext (signInWithGoogle): Company ID from localStorage: '${companyIdFromStorage}'. Setting in context.`);
-          setCurrentCompanyIdState(companyIdFromStorage);
+          console.log(`AuthContext (signInWithGoogle): Company ID from localStorage: '${companyIdFromStorage}'. Setting in context state.`);
+          setCurrentCompanyIdState(companyIdFromStorage); // Update context state
         } else {
-          console.warn(`AuthContext (signInWithGoogle): No Company ID found in localStorage immediately after sign-in. This might indicate an issue or require re-entry.`);
-          // Don't push to '/' here, let the main useEffect handle it if needed.
+          console.warn(`AuthContext (signInWithGoogle): No Company ID found in localStorage immediately after sign-in. This might indicate an issue.`);
         }
 
         if (additionalUserInfo?.isNewUser) {
           console.log("AuthContext: New user signed up via Google:", firebaseUser.displayName, firebaseUser.uid);
           await addNotification(
-            `User ${firebaseUser.displayName || 'New User'} (...${firebaseUser.uid.slice(-6)}) joined KENESIS via Google.`,
+            `User ${firebaseUser.displayName || 'New User'} (...${firebaseUser.uid.slice(-6)}) joined via Google.`,
             'user_joined',
             firebaseUser.uid,
-            undefined, // No relatedId for user_joined
-            companyIdFromStorage || "UNKNOWN_COMPANY" // Pass companyId if available
+            undefined,
+            companyIdFromStorage || "UNKNOWN_COMPANY"
           );
-          // Optionally create a user profile document in Firestore
-          // Example: await setDoc(doc(db, "users", firebaseUser.uid), { email: firebaseUser.email, displayName: firebaseUser.displayName, joinedAt: serverTimestamp(), companyAffiliations: companyIdFromStorage ? [companyIdFromStorage] : [] });
         }
       }
-      // onAuthStateChanged will also fire and set the user, which will trigger the main redirection useEffect.
-      // No explicit redirect here to avoid race conditions with onAuthStateChanged.
+      // onAuthStateChanged will also fire and set user/companyId, and isLoading to false.
+      // The redirection useEffect will then handle navigation.
     } catch (error: any) {
-      setIsLoading(false);
+      setIsLoading(false); // Ensure loading stops on error
       console.error("AuthContext: Google Sign-In error:", error.code, error.message);
+      // Propagate the error so the form can display it
       throw error;
     }
-    // setIsLoading(false) is handled by onAuthStateChanged
   };
 
   const updateUserProfileName = async (newName: string) => {
@@ -141,15 +149,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error("AuthContext: No user currently signed in to update profile.");
       throw new Error("No user currently signed in to update profile.");
     }
-    setIsLoading(true);
+    // No need to set isLoading for this, it's a quick operation generally
     console.log(`AuthContext: Attempting to update profile name for user ${auth.currentUser.uid} to '${newName}'`);
     try {
       await updateProfile(auth.currentUser, { displayName: newName });
-      setUser(prevUser => prevUser ? { ...prevUser, displayName: newName } : null); // Optimistic update
+      setUser(prevUser => prevUser ? { ...prevUser, displayName: newName } : null);
       console.log("AuthContext: Profile name updated successfully.");
-      setIsLoading(false);
     } catch (error: any) {
-      setIsLoading(false);
       console.error("AuthContext: Error updating user profile name:", error);
       throw error;
     }
@@ -157,26 +163,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     console.log("AuthContext: Attempting to log out...");
-    setIsLoading(true);
+    setIsLoading(true); // Indicate loading for logout process
     try {
       await firebaseSignOut(auth);
       console.log("AuthContext: User signed out from Firebase. Clearing companyId from localStorage and context state.");
       localStorage.removeItem('financeFlowCurrentCompanyId');
-      setCurrentCompanyIdState(null);
+      setCurrentCompanyIdState(null); // Clear companyId in context
       setUser(null); // Explicitly set user to null
-      router.push('/');
-      console.log("AuthContext: Redirected to / after logout.");
+      // The onAuthStateChanged listener will also fire, setting isLoading to false.
+      // The redirection useEffect will then push to '/'.
     } catch (error) {
-      setIsLoading(false);
+      setIsLoading(false); // Ensure loading stops on error
       console.error("AuthContext: Firebase logout error:", error);
       throw error;
     }
-    // setIsLoading(false) is set within onAuthStateChanged usually, but explicitly here too.
-    setIsLoading(false);
+  };
+
+  const handleSetCurrentCompanyId = (companyId: string | null) => {
+    if (companyId) {
+      localStorage.setItem('financeFlowCurrentCompanyId', companyId);
+    } else {
+      localStorage.removeItem('financeFlowCurrentCompanyId');
+    }
+    setCurrentCompanyIdState(companyId);
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, isLoading, signInWithGoogle, updateUserProfileName, logout, currentCompanyId: currentCompanyIdState, setCurrentCompanyId: setCurrentCompanyIdState }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, isLoading, signInWithGoogle, updateUserProfileName, logout, currentCompanyId: currentCompanyIdState, setCurrentCompanyId: handleSetCurrentCompanyId }}>
       {children}
     </AuthContext.Provider>
   );
@@ -189,5 +202,3 @@ export function useAuth() {
   }
   return context;
 }
-
-    
