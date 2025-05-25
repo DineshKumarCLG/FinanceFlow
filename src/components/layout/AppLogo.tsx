@@ -43,4 +43,3 @@ export function AppLogo({ className, iconClassName, textClassName, collapsed = f
     </div>
   );
 }
-```
