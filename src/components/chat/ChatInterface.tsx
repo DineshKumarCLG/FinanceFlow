@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useRef, useEffect, FormEvent, ChangeEvent } from 'react';
@@ -35,6 +36,7 @@ export function ChatInterface() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [filePreviews, setFilePreviews] = useState<string[]>([]);
+  const [isMicSupported, setIsMicSupported] = useState(false);
 
   useEffect(() => {
     // Scroll to bottom when messages change
@@ -52,19 +54,35 @@ export function ChatInterface() {
         recognitionRef.current.continuous = false;
         recognitionRef.current.interimResults = false;
         recognitionRef.current.lang = 'en-US';
-        recognitionRef.current.onresult = (event) => {
+        recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
           setInput(prev => prev + event.results[0][0].transcript);
           setIsListening(false);
         };
-        recognitionRef.current.onerror = (event) => {
-          console.error("Speech recognition error", event.error);
-          toast({ variant: "destructive", title: "Voice Error", description: "Could not recognize speech." });
+        recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
+          if (event.error === "no-speech") {
+            console.info("Speech recognition: No speech detected.");
+            toast({ variant: "default", title: "Voice Input", description: "No speech detected. Please try speaking again." });
+          } else if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+            console.warn("Speech recognition error: Mic access denied.", event.error);
+            toast({ variant: "destructive", title: "Voice Error", description: "Microphone access denied. Please check your browser permissions." });
+          } else {
+            console.error("Speech recognition error", event.error);
+            toast({ variant: "destructive", title: "Voice Error", description: "Could not recognize speech." });
+          }
           setIsListening(false);
         };
         recognitionRef.current.onend = () => setIsListening(false);
+        setIsMicSupported(true);
+      } else {
+        setIsMicSupported(false);
+        console.warn("SpeechRecognition API not found in this browser.");
       }
+    } else {
+      setIsMicSupported(false);
+      console.warn("SpeechRecognition API not supported by this browser.");
     }
-  }, [toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount
 
   const handleVoiceInput = () => {
     if (!recognitionRef.current) {
@@ -73,9 +91,16 @@ export function ChatInterface() {
     }
     if (isListening) {
       recognitionRef.current.stop();
+      setIsListening(false); // Explicitly set here too
     } else {
-      recognitionRef.current.start();
-      setIsListening(true);
+      try {
+        recognitionRef.current.start();
+        setIsListening(true);
+      } catch (error) {
+        console.error("Error starting speech recognition:", error);
+        toast({ variant: "destructive", title: "Voice Error", description: "Could not start voice input. Please check microphone permissions." });
+        setIsListening(false);
+      }
     }
   };
 
@@ -102,7 +127,7 @@ export function ChatInterface() {
 
     const userMessageContent = input.trim();
     const userMessage: Message = {
-      id: String(messages.length + 1),
+      id: String(Date.now()), // Using Date.now() for simplicity for unique ID
       role: "user",
       content: userMessageContent,
       timestamp: new Date(),
@@ -126,14 +151,14 @@ export function ChatInterface() {
       
       setMessages((prev) => [
         ...prev,
-        { id: String(prev.length + 1), role: "assistant", content: aiResponse.response, timestamp: new Date() },
+        { id: String(Date.now() + 1), role: "assistant", content: aiResponse.response, timestamp: new Date() },
       ]);
     } catch (error: any) {
       console.error("Chat error:", error);
       toast({ variant: "destructive", title: "AI Error", description: error.message || "Failed to get response from AI." });
        setMessages((prev) => [
         ...prev,
-        { id: String(prev.length + 1), role: "system", content: "Error: Could not connect to AI assistant.", timestamp: new Date() },
+        { id: String(Date.now() + 1), role: "system", content: "Error: Could not connect to AI assistant.", timestamp: new Date() },
       ]);
     } finally {
       setIsLoading(false);
@@ -141,7 +166,7 @@ export function ChatInterface() {
   };
 
   return (
-    <Card className="h-[calc(100vh-10rem)] flex flex-col shadow-xl">
+    <Card className="h-full flex flex-col shadow-xl"> {/* Changed to h-full */}
       <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
         <div className="space-y-2">
           {messages.map((msg) => (
@@ -202,7 +227,7 @@ export function ChatInterface() {
             <Paperclip className="h-5 w-5" />
           </Button>
           <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" multiple accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv"/>
-          {recognitionRef.current && (
+          {isMicSupported && (
             <Button type="button" variant="ghost" size="icon" onClick={handleVoiceInput} disabled={isLoading} title="Use voice input">
               <Mic className={cn("h-5 w-5", isListening && "text-destructive animate-pulse")} />
             </Button>
