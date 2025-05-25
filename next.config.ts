@@ -25,10 +25,25 @@ const nextConfig: NextConfig = {
     serverComponentsExternalPackages: [
       '@genkit-ai/googleai',
       '@opentelemetry/api',
-      '@opentelemetry/sdk-trace-node', // More specific than sdk-node for tracing
-      // Removed @opentelemetry/sdk-node and @opentelemetry/sdk-trace-base
-      // to see if this more minimal set resolves the issue.
+      '@opentelemetry/sdk-trace-node', 
     ],
+  },
+  webpack: (config, { isServer, webpack }) => {
+    if (!isServer) {
+      // Prevent client-side bundling of server-only packages
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        '@opentelemetry/exporter-jaeger': false, // Stub out Jaeger exporter
+        // You could add other problematic optional exporters here if needed
+      };
+    }
+    
+    // Ensure 'async_hooks' is treated as external, especially if client-side code indirectly tries to resolve it.
+    // This is a Node.js built-in and shouldn't be bundled for the browser.
+    config.externals = [...config.externals, 'async_hooks'];
+
+    // Important: return the modified config
+    return config;
   },
 };
 
