@@ -1,92 +1,93 @@
 
 // src/lib/data-service.ts
-import { auth, db } from './firebase'; // Import Firebase instances
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  query, 
-  where, 
+import { auth, db } from './firebase';
+import {
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  where,
   orderBy,
-  Timestamp, 
-  serverTimestamp, 
+  Timestamp,
+  serverTimestamp,
   writeBatch,
-  doc
+  doc,
+  deleteDoc
 } from 'firebase/firestore';
 
 export interface JournalEntry {
-  id: string; // Firestore document ID
-  date: string; // YYYY-MM-DD string format
+  id: string;
+  date: string;
   description: string;
   debitAccount: string;
   creditAccount: string;
   amount: number;
   tags?: string[];
-  creatorUserId: string; // Firebase user ID of the person who created the entry
-  companyId: string; // ID of the company this entry belongs to
-  createdAt: Timestamp; // Firestore Timestamp for ordering
+  creatorUserId: string;
+  companyId: string;
+  createdAt: Timestamp;
 }
 
 export interface Notification {
   id: string;
   message: string;
-  type: 'new_entry' | 'user_joined' | 'document_upload';
+  type: 'new_entry' | 'user_joined' | 'document_upload' | 'deleted_entry';
   timestamp: Timestamp;
-  userId?: string; // User who performed the action
-  relatedId?: string; // e.g., journal entry ID
+  userId?: string;
+  relatedId?: string;
   companyId: string;
 }
 
 const JOURNAL_COLLECTION = 'journalEntries';
 const NOTIFICATION_COLLECTION = 'notifications';
-const KENESIS_COMPANY_ID = 'KENESIS_GLOBAL_CORP'; 
-
-// --- Notification Service Functions ---
 
 export async function addNotification(
-  message: string, 
-  type: Notification['type'], 
+  message: string,
+  type: Notification['type'],
   userId?: string,
-  relatedId?: string
+  relatedId?: string,
+  companyId?: string // Added companyId parameter
 ): Promise<void> {
   const currentUser = auth.currentUser;
+  const activeCompanyId = companyId || "UNKNOWN_COMPANY"; // Fallback if not provided
+  console.log(`DataService (addNotification): Attempting to add notification for company '${activeCompanyId}'. Message: ${message}`);
   try {
     await addDoc(collection(db, NOTIFICATION_COLLECTION), {
       message,
       type,
-      userId: userId || (currentUser ? currentUser.uid : null),
+      userId: userId || (currentUser ? currentUser.uid : "SYSTEM"),
       relatedId: relatedId || null,
-      companyId: KENESIS_COMPANY_ID,
+      companyId: activeCompanyId, // Use the provided or resolved companyId
       timestamp: serverTimestamp(),
     });
+    console.log(`DataService (addNotification): Notification added successfully for company '${activeCompanyId}'.`);
   } catch (error) {
-    console.error("Error adding notification to Firestore:", error);
+    console.error(`DataService (addNotification): Error adding notification to Firestore for company '${activeCompanyId}':`, error);
   }
 }
 
-export async function getNotifications(): Promise<Notification[]> {
-  console.log("DataService: Fetching notifications...");
-  const startTime = Date.now();
+export async function getNotifications(companyId: string): Promise<Notification[]> {
   const currentUser = auth.currentUser;
-  if (!currentUser && KENESIS_COMPANY_ID !== 'KENESIS_GLOBAL_CORP') { 
-    console.warn("User not authenticated or not authorized for notifications of this company.");
-    return []; 
+  if (!currentUser) {
+    console.warn("DataService (getNotifications): No authenticated user. Cannot fetch notifications.");
+    return [];
   }
-   if (!currentUser) {
-     console.warn("No authenticated user found. Cannot fetch notifications for KENESIS.");
-     return [];
+  if (!companyId) {
+    console.warn("DataService (getNotifications): No companyId provided. Cannot fetch notifications.");
+    return [];
   }
-
-
+  console.log(`DataService: User '${currentUser.uid}' attempting to fetch notifications for company '${companyId}'...`);
+  const startTime = Date.now();
   try {
     const q = query(
       collection(db, NOTIFICATION_COLLECTION),
-      where("companyId", "==", KENESIS_COMPANY_ID),
+      where("companyId", "==", companyId),
       orderBy("timestamp", "desc")
     );
+    console.log(`DataService (getNotifications): Query for company '${companyId}':`, q);
     const querySnapshot = await getDocs(q);
     const notifications: Notification[] = [];
-    querySnapshot.forEach((docSnap) => { 
+    querySnapshot.forEach((docSnap) => {
       const data = docSnap.data();
       notifications.push({
         id: docSnap.id,
@@ -99,42 +100,40 @@ export async function getNotifications(): Promise<Notification[]> {
       });
     });
     const endTime = Date.now();
-    console.log(`DataService: Fetched ${notifications.length} notifications in ${endTime - startTime}ms.`);
+    console.log(`DataService (getNotifications): Fetched ${notifications.length} notifications for company '${companyId}' in ${endTime - startTime}ms.`);
     return notifications;
   } catch (error) {
     const endTime = Date.now();
-    console.error(`Error fetching KENESIS notifications from Firestore (took ${endTime - startTime}ms):`, error);
+    console.error(`DataService (getNotifications): Error fetching notifications for company '${companyId}' (took ${endTime - startTime}ms):`, error);
     throw error;
   }
 }
 
-
-// --- Journal Entry Service Functions ---
-
-export async function getJournalEntries(): Promise<JournalEntry[]> {
-  console.log("DataService: Fetching journal entries...");
-  const startTime = Date.now();
-
+export async function getJournalEntries(companyId: string): Promise<JournalEntry[]> {
   const currentUser = auth.currentUser;
   if (!currentUser) {
-     console.warn("No authenticated user found. Cannot fetch journal entries for KENESIS.");
-     return [];
+    console.warn("DataService (getJournalEntries): No authenticated user. Cannot fetch journal entries.");
+    return [];
   }
-
+  if (!companyId) {
+    console.warn("DataService (getJournalEntries): No companyId provided. Cannot fetch journal entries.");
+    return [];
+  }
+  console.log(`DataService: User '${currentUser.uid}' attempting to fetch journal entries for company '${companyId}'...`);
+  const startTime = Date.now();
   try {
+    // Querying all entries for the company, not filtering by creatorUserId here
+    // Security rules should enforce company-level access.
     const q = query(
-      collection(db, JOURNAL_COLLECTION), 
-      where("companyId", "==", KENESIS_COMPANY_ID),
-      // Apply user-specific filter if not for the global company
-      // For KENESIS, we assume all authenticated users can see all entries.
-      // If this needs to be per-user, uncomment and adjust:
-      // where("creatorUserId", "==", currentUser.uid), 
-      orderBy("date", "desc"), 
-      orderBy("createdAt", "desc") 
+      collection(db, JOURNAL_COLLECTION),
+      where("companyId", "==", companyId),
+      orderBy("date", "desc"),
+      orderBy("createdAt", "desc")
     );
+    console.log(`DataService (getJournalEntries): Query for company '${companyId}':`, q);
     const querySnapshot = await getDocs(q);
     const entries: JournalEntry[] = [];
-    querySnapshot.forEach((docSnap) => { 
+    querySnapshot.forEach((docSnap) => {
       const data = docSnap.data();
       entries.push({
         id: docSnap.id,
@@ -150,145 +149,170 @@ export async function getJournalEntries(): Promise<JournalEntry[]> {
       });
     });
     const endTime = Date.now();
-    console.log(`DataService: Fetched ${entries.length} journal entries in ${endTime - startTime}ms.`);
+    console.log(`DataService (getJournalEntries): Fetched ${entries.length} journal entries for company '${companyId}' in ${endTime - startTime}ms.`);
     return entries;
   } catch (error) {
     const endTime = Date.now();
-    console.error(`Error fetching KENESIS journal entries from Firestore (took ${endTime - startTime}ms):`, error);
+    console.error(`DataService (getJournalEntries): Error fetching journal entries for company '${companyId}' (took ${endTime - startTime}ms):`, error);
     throw error;
   }
 }
 
-export async function addJournalEntry(newEntryData: Omit<JournalEntry, 'id' | 'creatorUserId' | 'companyId' | 'createdAt'>): Promise<JournalEntry> {
+export async function addJournalEntry(
+  newEntryData: Omit<JournalEntry, 'id' | 'creatorUserId' | 'companyId' | 'createdAt'>,
+  companyId: string
+): Promise<JournalEntry> {
   const currentUser = auth.currentUser;
   if (!currentUser) {
-    console.error("No authenticated user. Cannot add journal entry for KENESIS.");
-    throw new Error("User not authenticated. Cannot add entry for KENESIS.");
+    console.error("DataService (addJournalEntry): No authenticated user. Cannot add journal entry.");
+    throw new Error("User not authenticated. Cannot add entry.");
+  }
+  if (!companyId) {
+    console.error("DataService (addJournalEntry): No companyId provided. Cannot add journal entry.");
+    throw new Error("No companyId specified. Cannot add entry.");
   }
 
+  const entryToSave = {
+    ...newEntryData,
+    creatorUserId: currentUser.uid,
+    companyId: companyId,
+    createdAt: serverTimestamp() as Timestamp,
+    tags: newEntryData.tags || [],
+  };
+  console.log(`DataService (addJournalEntry): Adding journal entry for company '${companyId}' by user '${currentUser.uid}'. Data:`, JSON.stringify(entryToSave, null, 2));
+
   try {
-    const entryToSave = {
-      ...newEntryData,
-      creatorUserId: currentUser.uid,
-      companyId: KENESIS_COMPANY_ID, 
-      createdAt: serverTimestamp() as Timestamp,
-      tags: newEntryData.tags || [],
-    };
     const docRef = await addDoc(collection(db, JOURNAL_COLLECTION), entryToSave);
-    
     const savedEntry: JournalEntry = {
       id: docRef.id,
-      date: entryToSave.date,
-      description: entryToSave.description,
-      debitAccount: entryToSave.debitAccount,
-      creditAccount: entryToSave.creditAccount,
-      amount: entryToSave.amount,
-      tags: entryToSave.tags,
-      creatorUserId: entryToSave.creatorUserId,
-      companyId: entryToSave.companyId,
-      createdAt: Timestamp.now() // Approximate client-side timestamp for immediate use
+      ...entryToSave,
+      createdAt: Timestamp.now() // Approximate for immediate return
     };
+    console.log(`DataService (addJournalEntry): Journal entry added successfully with ID ${docRef.id} for company '${companyId}'.`);
 
-    // Fire-and-forget notification
+    const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
     const shortDesc = savedEntry.description.length > 30 ? savedEntry.description.substring(0, 27) + "..." : savedEntry.description;
     const amountFormatted = savedEntry.amount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' });
     addNotification(
-      `User ...${currentUser.uid.slice(-6)} added entry: '${shortDesc}' (${amountFormatted})`, 
-      'new_entry', 
+      `${userName} added entry: '${shortDesc}' (${amountFormatted})`,
+      'new_entry',
       currentUser.uid,
-      savedEntry.id
-    ).catch(err => console.error("Failed to add notification for single entry:", err));
+      savedEntry.id,
+      companyId
+    ).catch(err => console.error("DataService (addJournalEntry): Failed to add notification for single entry:", err));
 
     return savedEntry;
-
   } catch (error) {
-    console.error("Error adding journal entry to Firestore for KENESIS:", error);
+    console.error(`DataService (addJournalEntry): Error adding journal entry to Firestore for company '${companyId}':`, error);
     throw error;
   }
 }
 
-export async function addJournalEntries(newEntriesData: Omit<JournalEntry, 'id' | 'creatorUserId' | 'companyId' | 'createdAt'>[]): Promise<JournalEntry[]> {
+export async function addJournalEntries(
+  newEntriesData: Omit<JournalEntry, 'id' | 'creatorUserId' | 'companyId' | 'createdAt'>[],
+  companyId: string
+): Promise<JournalEntry[]> {
   const currentUser = auth.currentUser;
   if (!currentUser) {
-    console.error("No authenticated user. Cannot add journal entries for KENESIS.");
-    throw new Error("User not authenticated. Cannot add entries for KENESIS.");
+    console.error("DataService (addJournalEntries): No authenticated user. Cannot add journal entries.");
+    throw new Error("User not authenticated. Cannot add entries.");
+  }
+   if (!companyId) {
+    console.error("DataService (addJournalEntries): No companyId provided. Cannot add journal entries.");
+    throw new Error("No companyId specified. Cannot add entries.");
   }
 
   const batch = writeBatch(db);
   const preparedEntries: JournalEntry[] = [];
+  console.log(`DataService (addJournalEntries): Preparing to add ${newEntriesData.length} entries for company '${companyId}' by user '${currentUser.uid}'.`);
 
   newEntriesData.forEach(newData => {
-    const docRef = doc(collection(db, JOURNAL_COLLECTION)); // Creates a new doc reference with an auto-generated ID
+    const docRef = doc(collection(db, JOURNAL_COLLECTION));
     const entryToSave = {
       ...newData,
       creatorUserId: currentUser.uid,
-      companyId: KENESIS_COMPANY_ID,
-      createdAt: serverTimestamp() as Timestamp, // Use server timestamp for consistency
+      companyId: companyId,
+      createdAt: serverTimestamp() as Timestamp,
       tags: newData.tags || [],
     };
+    console.log(`DataService (addJournalEntries): Staging entry for batch. Data:`, JSON.stringify(entryToSave, null, 2));
     batch.set(docRef, entryToSave);
-
-    // For immediate return, use client-approximated data
     preparedEntries.push({
-      id: docRef.id, // The auto-generated ID
-      date: newData.date,
-      description: newData.description,
-      debitAccount: newData.debitAccount,
-      creditAccount: newData.creditAccount,
-      amount: newData.amount,
-      tags: newData.tags || [],
-      creatorUserId: currentUser.uid,
-      companyId: KENESIS_COMPANY_ID,
-      createdAt: Timestamp.now() // Approximate client-side timestamp
+      id: docRef.id,
+      ...entryToSave,
+      createdAt: Timestamp.now()
     });
   });
 
   try {
-    await batch.commit(); // Commit all journal entries first
-    
-    // After entries are saved, create notifications in the background (fire-and-forget)
-    // This makes the UI responsive faster as it doesn't wait for notifications.
+    await batch.commit();
+    console.log(`DataService (addJournalEntries): Batch of ${preparedEntries.length} journal entries committed successfully for company '${companyId}'.`);
+
     const processNotificationsInBackground = async () => {
       try {
+        const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
         const notificationPromises = preparedEntries.map(savedEntry => {
           const shortDesc = savedEntry.description.length > 30 ? savedEntry.description.substring(0, 27) + "..." : savedEntry.description;
           const amountFormatted = savedEntry.amount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' });
           return addNotification(
-            `User ...${currentUser.uid.slice(-6)} added entry from document: '${shortDesc}' (${amountFormatted})`,
-            'document_upload', 
+            `${userName} added entry from document: '${shortDesc}' (${amountFormatted})`,
+            'document_upload',
             currentUser.uid,
-            savedEntry.id
+            savedEntry.id,
+            companyId
           );
         });
-        
-        // We don't await Promise.allSettled here to make the original function return faster
-        // Log errors from background processing if any
         Promise.allSettled(notificationPromises).then(results => {
           results.forEach(result => {
             if (result.status === 'rejected') {
-              console.error("Background: Failed to add a notification for a batch entry:", result.reason);
+              console.error("DataService (addJournalEntries Background): Failed to add a notification for a batch entry:", result.reason);
             }
           });
-        }).catch(err => console.error("Error in background notification processing wrapper itself:", err));
-
+        }).catch(err => console.error("DataService (addJournalEntries Background): Error in notification processing wrapper:", err));
       } catch (err) {
-        // Catch any synchronous error in the async wrapper itself
-        console.error("Error setting up background notification processing:", err);
+        console.error("DataService (addJournalEntries Background): Error setting up background notification processing:", err);
       }
     };
-    
-    processNotificationsInBackground(); // Fire and forget for notifications
-    
-    return preparedEntries; // Return immediately after journal entries are committed
+    processNotificationsInBackground();
+    return preparedEntries;
   } catch (error) {
-    console.error("Error adding KENESIS journal entries to Firestore in batch:", error);
+    console.error(`DataService (addJournalEntries): Error adding journal entries to Firestore in batch for company '${companyId}':`, error);
     throw error;
   }
 }
 
-export interface UserProfile {
-  uid: string;
-  email: string | null;
-  displayName: string | null;
-  companyIds: string[]; 
+export async function deleteJournalEntry(entryId: string, companyId: string): Promise<void> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    console.error("DataService (deleteJournalEntry): No authenticated user. Cannot delete entry.");
+    throw new Error("User not authenticated");
+  }
+  if (!companyId) {
+    console.error("DataService (deleteJournalEntry): No companyId provided. Cannot delete entry.");
+    throw new Error("No companyId specified for deletion.");
+  }
+  console.log(`DataService: User '${currentUser.uid}' attempting to delete journal entry '${entryId}' for company '${companyId}'...`);
+  try {
+    // Firestore rules will verify if this user can delete this entry based on companyId and creatorUserId.
+    const entryRef = doc(db, JOURNAL_COLLECTION, entryId);
+    // Optionally, you might want to fetch the entry first to get details for the notification,
+    // but for deletion, the rules should be the primary gatekeeper.
+    await deleteDoc(entryRef);
+    console.log(`DataService (deleteJournalEntry): Journal entry '${entryId}' deleted successfully for company '${companyId}'.`);
+
+    const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
+    addNotification(
+      `${userName} deleted entry ID: ${entryId.slice(0,10)}...`,
+      'deleted_entry',
+      currentUser.uid,
+      entryId,
+      companyId
+    ).catch(err => console.error("DataService (deleteJournalEntry): Failed to add notification for deleted entry:", err));
+
+  } catch (error) {
+    console.error(`DataService (deleteJournalEntry): Error deleting journal entry '${entryId}' for company '${companyId}':`, error);
+    throw error;
+  }
 }
+
+    
