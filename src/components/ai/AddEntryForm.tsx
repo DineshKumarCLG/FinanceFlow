@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -31,13 +32,15 @@ export function AddEntryForm() {
   const { toast } = useToast();
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const [clientLocale, setClientLocale] = useState('en-US'); // Default locale
 
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      entryText: "",
-    },
-  });
+  useEffect(() => {
+    // This effect runs only on the client, after hydration
+    if (typeof navigator !== 'undefined') {
+      setClientLocale(navigator.language || 'en-US');
+    }
+  }, []); // Empty dependency array ensures this runs once on mount
+
 
   useEffect(() => {
     // Check for SpeechRecognition API
@@ -161,7 +164,7 @@ export function AddEntryForm() {
                 <CardContent className="space-y-3 text-sm">
                   <div className="grid grid-cols-2 gap-2">
                     <div><strong>Date:</strong> {parsedResult.date}</div>
-                    <div><strong>Amount:</strong> ${parsedResult.amount.toFixed(2)}</div>
+                    <div><strong>Amount:</strong> {parsedResult.amount.toLocaleString(clientLocale, { style: 'currency', currency: 'USD' })}</div>
                     <div><strong>Type:</strong> <span className="capitalize">{parsedResult.type}</span></div>
                     <div><strong>Purpose:</strong> {parsedResult.purpose}</div>
                     <div><strong>Debit Account:</strong> {parsedResult.debitAccount}</div>

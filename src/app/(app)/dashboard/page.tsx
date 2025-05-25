@@ -1,3 +1,4 @@
+
 "use client";
 
 import { PageTitle } from "@/components/shared/PageTitle";
@@ -8,9 +9,10 @@ import { DollarSign, TrendingUp, TrendingDown, FileText, Users } from "lucide-re
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { useState, useEffect } from "react";
 
 // Placeholder data for recent transactions
-const recentTransactions = [
+const recentTransactionsData = [
   { id: "1", date: "2024-07-15", description: "Software Subscription", amount: -49.99, category: "Software" },
   { id: "2", date: "2024-07-14", description: "Client Payment - Project Alpha", amount: 1200.00, category: "Income" },
   { id: "3", date: "2024-07-13", description: "Office Supplies", amount: -75.50, category: "Office Expense" },
@@ -20,6 +22,20 @@ const recentTransactions = [
 
 
 export default function DashboardPage() {
+  const [clientLocale, setClientLocale] = useState('en-US'); // Default locale
+  const [recentTransactions, setRecentTransactions] = useState(recentTransactionsData);
+
+  useEffect(() => {
+    // This effect runs only on the client, after hydration
+    if (typeof navigator !== 'undefined') {
+      setClientLocale(navigator.language || 'en-US');
+    }
+    // In a real app, you might fetch recentTransactions here
+    // For now, we just use the static data
+    setRecentTransactions(recentTransactionsData);
+  }, []);
+
+
   return (
     <div className="space-y-6 md:space-y-8">
       <PageTitle title="Dashboard" description="Welcome back! Here's a summary of your finances." />
@@ -67,7 +83,7 @@ export default function DashboardPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className={`text-right font-semibold ${transaction.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {transaction.amount > 0 ? `+` : ``}${transaction.amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}
+                    {transaction.amount > 0 ? `+` : ``}{transaction.amount.toLocaleString(clientLocale, { style: 'currency', currency: 'USD' })}
                   </TableCell>
                 </TableRow>
               ))}

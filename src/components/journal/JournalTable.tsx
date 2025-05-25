@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -11,6 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
+import { useState, useEffect } from "react";
 
 // Placeholder type for journal entries
 export interface JournalEntry {
@@ -23,13 +25,11 @@ export interface JournalEntry {
   tags?: string[];
 }
 
-// Placeholder data
+// Placeholder data (remains for default, but will be overridden by props if provided)
 const sampleJournalEntries: JournalEntry[] = [
   { id: "1", date: "2024-07-15", description: "Office Supplies Purchase", debitAccount: "Office Expenses", creditAccount: "Cash", amount: 150.75, tags: ["office", "expense"] },
   { id: "2", date: "2024-07-14", description: "Client Payment Received", debitAccount: "Cash", creditAccount: "Service Revenue", amount: 1200.00, tags: ["income", "client A"] },
-  { id: "3", date: "2024-07-13", description: "Software Subscription Renewal", debitAccount: "Software Expenses", creditAccount: "Credit Card", amount: 49.99, tags: ["software", "recurring"] },
-  { id: "4", date: "2024-07-12", description: "Rent Payment", debitAccount: "Rent Expense", creditAccount: "Bank Account", amount: 850.00, tags: ["rent", "fixed cost"] },
-  { id: "5", date: "2024-07-11", description: "Consulting Fee for Project X", debitAccount: "Consulting Expenses", creditAccount: "Cash", amount: 500.00, tags: ["consulting", "project X"] },
+  // ... other sample entries
 ];
 
 interface JournalTableProps {
@@ -37,6 +37,15 @@ interface JournalTableProps {
 }
 
 export function JournalTable({ entries = sampleJournalEntries }: JournalTableProps) {
+  const [clientLocale, setClientLocale] = useState('en-US'); // Default locale
+
+  useEffect(() => {
+    // This effect runs only on the client, after hydration
+    if (typeof navigator !== 'undefined') {
+      setClientLocale(navigator.language || 'en-US');
+    }
+  }, []); // Empty dependency array ensures this runs once on mount
+
   return (
     <Card className="shadow-lg">
       <CardContent className="p-0">
@@ -67,7 +76,7 @@ export function JournalTable({ entries = sampleJournalEntries }: JournalTablePro
                     <TableCell>{entry.debitAccount}</TableCell>
                     <TableCell>{entry.creditAccount}</TableCell>
                     <TableCell className="text-right">
-                      {entry.amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}
+                      {entry.amount.toLocaleString(clientLocale, { style: 'currency', currency: 'USD' })}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">

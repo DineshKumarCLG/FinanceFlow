@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PageTitle } from "@/components/shared/PageTitle";
 import { FileUploader } from "@/components/shared/FileUploader";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,14 @@ export default function UploadDocumentPage() {
   const [error, setError] = useState<string | null>(null);
   const [currentFile, setCurrentFile] = useState<File | null>(null);
   const { toast } = useToast();
+  const [clientLocale, setClientLocale] = useState('en-US'); // Default locale
+
+  useEffect(() => {
+    // This effect runs only on the client, after hydration
+    if (typeof navigator !== 'undefined') {
+      setClientLocale(navigator.language || 'en-US');
+    }
+  }, []); // Empty dependency array ensures this runs once on mount
 
   const handleFileUpload = async (file: File, dataUri: string) => {
     setCurrentFile(file);
@@ -97,7 +106,7 @@ export default function UploadDocumentPage() {
                     <p><strong>Entry #{index + 1}</strong></p>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mt-2">
                       <div><strong>Date:</strong> {entry.date}</div>
-                      <div><strong>Amount:</strong> ${entry.amount.toFixed(2)}</div>
+                      <div><strong>Amount:</strong> {entry.amount.toLocaleString(clientLocale, { style: 'currency', currency: 'USD' })}</div>
                       <div><strong>Debit:</strong> {entry.debitAccount}</div>
                       <div><strong>Credit:</strong> {entry.creditAccount}</div>
                       <div className="col-span-2"><strong>Description:</strong> {entry.description}</div>

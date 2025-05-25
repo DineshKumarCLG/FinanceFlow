@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -14,7 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { suggestLedgerTags } from "@/ai/flows/suggest-ledger-tags";
 import { Button } from "@/components/ui/button";
-import { Wand2 } from "lucide-react";
+import { Wand2, Loader2 } from "lucide-react"; // Added Loader2
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -30,13 +31,11 @@ export interface LedgerTransaction {
   tags?: string[];
 }
 
-// Placeholder data
+// Placeholder data (remains for default, but will be overridden by props if provided)
 const sampleTransactions: LedgerTransaction[] = [
   { id: "1", date: "2024-07-01", description: "Opening Balance", debit: null, credit: null, balance: 1000.00 },
   { id: "2", date: "2024-07-05", description: "Invoice #101 Payment", debit: 500.00, credit: null, balance: 1500.00, tags: ["income", "client A"] },
-  { id: "3", date: "2024-07-08", description: "Office Supplies", debit: null, credit: 75.50, balance: 1424.50, tags: ["expense", "office"] },
-  { id: "4", date: "2024-07-12", description: "Software Subscription", debit: null, credit: 29.99, balance: 1394.51, tags: ["expense", "software"] },
-  { id: "5", date: "2024-07-15", description: "Invoice #102 Payment", debit: 850.00, credit: null, balance: 2244.51, tags: ["income", "client B"] },
+  // ... other sample entries
 ];
 
 interface LedgerTableProps {
@@ -48,6 +47,14 @@ export function LedgerTable({ accountName, transactions = sampleTransactions }: 
   const [currentTransactions, setCurrentTransactions] = useState(transactions);
   const [loadingTagsFor, setLoadingTagsFor] = useState<string | null>(null);
   const { toast } = useToast();
+  const [clientLocale, setClientLocale] = useState('en-US'); // Default locale
+
+  useEffect(() => {
+    // This effect runs only on the client, after hydration
+    if (typeof navigator !== 'undefined') {
+      setClientLocale(navigator.language || 'en-US');
+    }
+  }, []); // Empty dependency array ensures this runs once on mount
 
   useEffect(() => {
     setCurrentTransactions(transactions);
@@ -108,13 +115,13 @@ export function LedgerTable({ accountName, transactions = sampleTransactions }: 
                     <TableCell>{tx.date}</TableCell>
                     <TableCell className="font-medium">{tx.description}</TableCell>
                     <TableCell className="text-right">
-                      {tx.debit ? tx.debit.toLocaleString('en-US', { style: 'currency', currency: 'USD' }) : '-'}
+                      {tx.debit ? tx.debit.toLocaleString(clientLocale, { style: 'currency', currency: 'USD' }) : '-'}
                     </TableCell>
                     <TableCell className="text-right">
-                      {tx.credit ? tx.credit.toLocaleString('en-US', { style: 'currency', currency: 'USD' }) : '-'}
+                      {tx.credit ? tx.credit.toLocaleString(clientLocale, { style: 'currency', currency: 'USD' }) : '-'}
                     </TableCell>
                     <TableCell className="text-right font-semibold">
-                      {tx.balance.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}
+                      {tx.balance.toLocaleString(clientLocale, { style: 'currency', currency: 'USD' })}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-1">
@@ -142,9 +149,9 @@ export function LedgerTable({ accountName, transactions = sampleTransactions }: 
             <TableFooter className="sticky bottom-0 bg-background z-10">
               <TableRow>
                 <TableHead colSpan={2} className="text-right font-bold">Totals / Final Balance</TableHead>
-                <TableHead className="text-right font-bold">{totalDebits.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</TableHead>
-                <TableHead className="text-right font-bold">{totalCredits.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</TableHead>
-                <TableHead className="text-right font-bold">{finalBalance.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</TableHead>
+                <TableHead className="text-right font-bold">{totalDebits.toLocaleString(clientLocale, { style: 'currency', currency: 'USD' })}</TableHead>
+                <TableHead className="text-right font-bold">{totalCredits.toLocaleString(clientLocale, { style: 'currency', currency: 'USD' })}</TableHead>
+                <TableHead className="text-right font-bold">{finalBalance.toLocaleString(clientLocale, { style: 'currency', currency: 'USD' })}</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableFooter>
