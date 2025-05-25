@@ -25,10 +25,9 @@ const nextConfig: NextConfig = {
     serverComponentsExternalPackages: [
       '@genkit-ai/googleai',
       '@opentelemetry/api',
-      '@opentelemetry/sdk-node',
-      '@opentelemetry/sdk-trace-base',
-      '@opentelemetry/sdk-trace-node',
-      // Add other OpenTelemetry packages if specific errors point to them
+      '@opentelemetry/sdk-trace-node', // More specific than sdk-node for tracing
+      // Removed @opentelemetry/sdk-node and @opentelemetry/sdk-trace-base
+      // to see if this more minimal set resolves the issue.
     ],
   },
 };
