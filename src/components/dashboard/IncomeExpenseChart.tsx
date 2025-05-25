@@ -94,4 +94,3 @@ export function IncomeExpenseChart({ chartData = [], isLoading = false }: Income
     // </Card>
   )
 }
-```

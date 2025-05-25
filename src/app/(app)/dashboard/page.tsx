@@ -119,7 +119,7 @@ export default function DashboardPage() {
             })
          );
       } finally {
-        setIsLoading(false);
+        setIsLoadingData(false);
       }
     }
     loadDashboardData();
@@ -225,4 +225,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-```
