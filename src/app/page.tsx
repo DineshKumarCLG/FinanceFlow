@@ -35,9 +35,8 @@ export default function CompanyLoginPage() {
   const handleCompanyIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newCompanyId = e.target.value;
     setCompanyIdInput(newCompanyId);
-    setError(null); // Clear error on input change
-    // Conditionally show Google Sign In based on this, or after a submit action
-    if (newCompanyId.trim().toUpperCase() === "KENESIS") { // Or any other validation logic
+    setError(null); 
+    if (newCompanyId.trim().toUpperCase() === "KENESIS") { 
       setShowGoogleSignIn(true);
     } else {
       setShowGoogleSignIn(false);
@@ -47,16 +46,12 @@ export default function CompanyLoginPage() {
     }
   };
   
-  // This function isn't strictly necessary if Google button appears on valid input,
-  // but could be used for a "Set Company ID" button before showing Google sign-in.
-  // For now, we'll rely on direct validation from handleCompanyIdChange to show Google button.
   const handleCompanyIdSubmit = () => {
     const trimmedCompanyId = companyIdInput.trim();
     if (trimmedCompanyId) {
-      localStorage.setItem(COMPANY_ID_LOCAL_STORAGE_KEY, trimmedCompanyId);
-      // Set in AuthContext if needed immediately before Google Sign-In (though Google sign-in will re-check localStorage)
-      // setCurrentCompanyId(trimmedCompanyId); 
-      if (trimmedCompanyId.toUpperCase() === "KENESIS") {
+      const companyIdToStore = trimmedCompanyId.toUpperCase();
+      localStorage.setItem(COMPANY_ID_LOCAL_STORAGE_KEY, companyIdToStore);
+      if (companyIdToStore === "KENESIS") {
         setShowGoogleSignIn(true); 
         setError(null);
       } else {
@@ -72,20 +67,20 @@ export default function CompanyLoginPage() {
 
   const handleGoogleSignIn = async () => {
     const trimmedCompanyId = companyIdInput.trim();
-    if (trimmedCompanyId.toUpperCase() !== "KENESIS") { // Ensure it's KENESIS before sign-in
+    const companyIdForStorage = trimmedCompanyId.toUpperCase();
+
+    if (companyIdForStorage !== "KENESIS") { 
       setError("Please ensure Company ID 'KENESIS' is entered to use Google Sign-In.");
-      setShowGoogleSignIn(false); // Hide button if ID becomes invalid
+      setShowGoogleSignIn(false); 
       return;
     }
-    // Store the Company ID from input just before initiating Google Sign In
-    localStorage.setItem(COMPANY_ID_LOCAL_STORAGE_KEY, trimmedCompanyId);
+    
+    localStorage.setItem(COMPANY_ID_LOCAL_STORAGE_KEY, companyIdForStorage);
 
     setUiIsLoading(true);
     setError(null);
     try {
       await signInWithGoogle();
-      // AuthContext's useEffect will handle redirecting to /dashboard
-      // after successful sign-in and companyId is set in context.
     } catch (e: any) {
       if (e.code === 'auth/popup-closed-by-user') {
         setError("Sign-in process was cancelled. Please try again.");
@@ -106,9 +101,6 @@ export default function CompanyLoginPage() {
     );
   }
 
-  // If authenticated AND currentCompanyId is set, AuthContext should redirect from '/' to '/dashboard'.
-  // This page primarily handles the state where companyId is needed or user is not authenticated.
-
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-background to-secondary p-4">
       <Card className="w-full max-w-md shadow-xl">
@@ -120,12 +112,12 @@ export default function CompanyLoginPage() {
           <CardDescription>
             {!showGoogleSignIn
               ? "Enter your Company ID to proceed."
-              : "Company ID verified. Proceed with Google Sign-In."}
+              : `Company ID: ${companyIdInput.trim().toUpperCase()}. Proceed with Google Sign-In.`}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           
-          {!showGoogleSignIn && ( // Show Company ID input if Google Sign-In is not yet shown
+          {!showGoogleSignIn && ( 
             <div className="space-y-2">
               <label htmlFor="companyId" className="block text-sm font-medium text-foreground">Company ID</label>
               <Input
@@ -148,7 +140,7 @@ export default function CompanyLoginPage() {
             </Alert>
           )}
 
-          {showGoogleSignIn && ( // Show Google Sign-In if Company ID is validated
+          {showGoogleSignIn && ( 
             <Button
               onClick={handleGoogleSignIn}
               className="w-full"
