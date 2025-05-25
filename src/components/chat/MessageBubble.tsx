@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Bot, User } from "lucide-react";
+import React from "react"; // Import React for React.memo
 
 export interface Message {
   id: string;
@@ -14,7 +15,7 @@ interface MessageBubbleProps {
   message: Message;
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export const MessageBubble = React.memo(function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === "user";
 
   return (
@@ -62,4 +63,5 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       )}
     </div>
   );
-}
+});
+MessageBubble.displayName = 'MessageBubble'; // Optional: for better debugging

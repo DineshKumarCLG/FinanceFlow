@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import React from "react"; // Import React for React.memo
 
 interface SummaryCardProps {
   title: string;
@@ -11,7 +12,7 @@ interface SummaryCardProps {
   className?: string;
 }
 
-export function SummaryCard({ title, value, icon: Icon, change, changeType, className }: SummaryCardProps) {
+export const SummaryCard = React.memo(function SummaryCard({ title, value, icon: Icon, change, changeType, className }: SummaryCardProps) {
   return (
     <Card className={cn("shadow-md hover:shadow-lg transition-shadow", className)}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -34,4 +35,5 @@ export function SummaryCard({ title, value, icon: Icon, change, changeType, clas
       </CardContent>
     </Card>
   );
-}
+});
+SummaryCard.displayName = 'SummaryCard'; // Optional: for better debugging
