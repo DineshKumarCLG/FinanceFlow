@@ -10,8 +10,6 @@ import { Download } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { getJournalEntries, type JournalEntry as StoredJournalEntry } from "@/lib/data-service";
 
-// Removed allAccountsData (static data)
-
 // Accounts options can remain static for now, or be dynamically generated later
 const accountsOptions = [
   { value: "Cash", label: "Cash" }, // Ensure value matches account names used in entries
@@ -28,7 +26,7 @@ async function fetchLedgerTransactions(
   dateRange?: DateRange, 
   searchTerm?: string
 ): Promise<{ accountName: string; transactions: LedgerTransaction[] }> {
-  await new Promise(resolve => setTimeout(resolve, 0)); // Minimal delay
+  // Removed: await new Promise(resolve => setTimeout(resolve, 0)); 
   
   const selectedAccountKey = account || "Cash"; // Default to Cash
   const accountName = accountsOptions.find(acc => acc.value === selectedAccountKey)?.label || selectedAccountKey;
