@@ -3,29 +3,19 @@
 
 import { PageTitle } from "@/components/shared/PageTitle";
 import { SummaryCard } from "@/components/dashboard/SummaryCard";
-// import { QuickActions } from "@/components/dashboard/QuickActions"; // This might be replaced or restyled
 import { IncomeExpenseChart } from "@/components/dashboard/IncomeExpenseChart";
-import { DollarSign, TrendingUp, TrendingDown, Users, CreditCard, Activity, CalendarDays, Download } from "lucide-react"; // Added Users, CreditCard, Activity
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { UserSpendingList, type UserSpending } from "@/components/dashboard/RecentSales"; // Updated import name
+import { DollarSign, TrendingUp, TrendingDown, Activity, CalendarDays, Download } from "lucide-react"; 
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { UserSpendingList, type UserSpending } from "@/components/dashboard/RecentSales"; 
+import { NotificationList } from "@/components/dashboard/NotificationList"; // Import NotificationList
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
-import { getJournalEntries, type JournalEntry as StoredJournalEntry } from "@/lib/data-service";
+import { getJournalEntries, type JournalEntry as StoredJournalEntry, getNotifications, type Notification } from "@/lib/data-service"; // Import getNotifications and Notification type
 import type { DateRange } from "react-day-picker";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { format } from "date-fns";
-
-
-interface DashboardTransaction {
-  id: string;
-  date: string;
-  description: string;
-  amount: number;
-  debitAccount: string;
-  creditAccount: string;
-}
 
 interface ChartPoint {
   month: string;
@@ -43,12 +33,14 @@ export default function DashboardPage() {
 
   const [summaryData, setSummaryData] = useState({
     totalRevenue: 0, 
-    totalExpenses: 0, // Added for clarity
-    netProfit: 0,     // Added for clarity
-    transactionCount: 0, // Added for clarity
+    totalExpenses: 0,
+    netProfit: 0,    
+    transactionCount: 0,
   });
   const [chartDisplayData, setChartDisplayData] = useState<ChartPoint[]>([]);
   const [userSpendingData, setUserSpendingData] = useState<UserSpending[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState(true);
 
   useEffect(() => {
     if (typeof navigator !== 'undefined') {
@@ -57,6 +49,7 @@ export default function DashboardPage() {
 
     async function loadDashboardData() {
       setIsLoadingData(true);
+      setIsLoadingNotifications(true);
       try {
         const fetchedEntries = await getJournalEntries();
         
@@ -71,7 +64,6 @@ export default function DashboardPage() {
 
         const now = new Date();
 
-        // Initialize monthly aggregates for the last 12 months
         for (let i = 11; i >= 0; i--) {
           const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
           const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -89,33 +81,25 @@ export default function DashboardPage() {
           let isIncome = false;
           let isExpense = false;
 
-          // Check for income
           if (incomeKeywords.some(keyword => entry.creditAccount.toLowerCase().includes(keyword) || entry.description.toLowerCase().includes(keyword))) {
             isIncome = true;
             calculatedTotalRevenue += entry.amount;
             if (monthAggregate) monthAggregate.income += entry.amount;
           }
           
-          // Check for expenses based on debit account
           if (expenseKeywords.some(keyword => entry.debitAccount.toLowerCase().includes(keyword) || entry.description.toLowerCase().includes(keyword))) {
              isExpense = true;
           }
-          // Check for expenses based on credit account (cash/bank outflow)
           if (entry.creditAccount.toLowerCase().includes('cash') || entry.creditAccount.toLowerCase().includes('bank')) {
-            // If it wasn't already classified as income, it's likely an expense or transfer
-            // For simplicity, if not income, treat as expense for chart if cash/bank is credited.
             if(!isIncome) isExpense = true;
           }
-
 
           if(isExpense){
             calculatedTotalExpenses += entry.amount;
             if (monthAggregate) monthAggregate.expense += entry.amount;
-            // Aggregate user spending
-            const userId = entry.creatorUserId;
+            const userId = entry.creatorUserId; // Use creatorUserId
             userExpenses[userId] = (userExpenses[userId] || 0) + entry.amount;
           }
-
         });
 
         setSummaryData({
@@ -134,12 +118,16 @@ export default function DashboardPage() {
           .map(([userId, totalSpent]) => ({
             userId,
             totalSpent,
-            displayName: `User ...${userId.slice(-6)}`, // Basic display name
+            displayName: `User ...${userId.slice(-6)}`, 
             avatarFallback: userId.substring(0, 2).toUpperCase(),
           }))
           .sort((a, b) => b.totalSpent - a.totalSpent)
-          .slice(0, 5); // Top 5 spenders
+          .slice(0, 5); 
         setUserSpendingData(topSpenders);
+
+        // Fetch notifications
+        const fetchedNotifications = await getNotifications();
+        setNotifications(fetchedNotifications);
 
       } catch (error) {
         console.error("Failed to load dashboard data:", error);
@@ -151,8 +139,10 @@ export default function DashboardPage() {
             })
          );
          setUserSpendingData([]);
+         setNotifications([]);
       } finally {
         setIsLoadingData(false);
+        setIsLoadingNotifications(false);
       }
     }
     loadDashboardData();
@@ -242,13 +232,19 @@ export default function DashboardPage() {
           </div>
         </TabsContent>
         <TabsContent value="analytics">
-          <p className="text-muted-foreground">Analytics content will go here.</p>
+          <Card>
+            <CardHeader><CardTitle>Analytics</CardTitle></CardHeader>
+            <CardContent><p className="text-muted-foreground">Analytics content will go here.</p></CardContent>
+          </Card>
         </TabsContent>
         <TabsContent value="reports">
-           <p className="text-muted-foreground">Reports content will go here.</p>
+           <Card>
+            <CardHeader><CardTitle>Reports</CardTitle></CardHeader>
+            <CardContent><p className="text-muted-foreground">Reports content will go here.</p></CardContent>
+          </Card>
         </TabsContent>
         <TabsContent value="notifications">
-           <p className="text-muted-foreground">Notifications content will go here.</p>
+           <NotificationList notifications={notifications} isLoading={isLoadingNotifications} />
         </TabsContent>
       </Tabs>
     </div>

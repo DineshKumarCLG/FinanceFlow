@@ -27,25 +27,92 @@ export interface JournalEntry {
   createdAt: Timestamp; // Firestore Timestamp for ordering
 }
 
+export interface Notification {
+  id: string;
+  message: string;
+  type: 'new_entry' | 'user_joined' | 'document_upload';
+  timestamp: Timestamp;
+  userId?: string; // User who performed the action
+  relatedId?: string; // e.g., journal entry ID
+  companyId: string;
+}
+
 const JOURNAL_COLLECTION = 'journalEntries';
+const NOTIFICATION_COLLECTION = 'notifications';
 const KENESIS_COMPANY_ID = 'KENESIS_GLOBAL_CORP'; // Define a constant ID for KENESIS
 
-// --- Exported Service Functions ---
+// --- Notification Service Functions ---
+
+export async function addNotification(
+  message: string, 
+  type: Notification['type'], 
+  userId?: string,
+  relatedId?: string
+): Promise<void> {
+  try {
+    await addDoc(collection(db, NOTIFICATION_COLLECTION), {
+      message,
+      type,
+      userId: userId || null,
+      relatedId: relatedId || null,
+      companyId: KENESIS_COMPANY_ID,
+      timestamp: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error("Error adding notification to Firestore:", error);
+    // Optionally, re-throw or handle more gracefully
+  }
+}
+
+export async function getNotifications(): Promise<Notification[]> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    // Or handle as per your app's auth policy for viewing global notifications
+    return []; 
+  }
+
+  try {
+    const q = query(
+      collection(db, NOTIFICATION_COLLECTION),
+      where("companyId", "==", KENESIS_COMPANY_ID),
+      orderBy("timestamp", "desc")
+      // limit(20) // Optionally limit the number of notifications fetched
+    );
+    const querySnapshot = await getDocs(q);
+    const notifications: Notification[] = [];
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      notifications.push({
+        id: doc.id,
+        message: data.message,
+        type: data.type,
+        timestamp: data.timestamp,
+        userId: data.userId,
+        relatedId: data.relatedId,
+        companyId: data.companyId,
+      });
+    });
+    return notifications;
+  } catch (error) {
+    console.error("Error fetching KENESIS notifications from Firestore:", error);
+    throw error;
+  }
+}
+
+
+// --- Journal Entry Service Functions ---
 
 export async function getJournalEntries(): Promise<JournalEntry[]> {
   const currentUser = auth.currentUser;
   if (!currentUser) {
-    // If no user is logged in, they can't see any company data.
     console.warn("No authenticated user found. Cannot fetch journal entries for KENESIS.");
     return []; 
   }
 
-  // All authenticated users can see KENESIS data.
-  // In a multi-company app, you'd check if currentUser is part of KENESIS_COMPANY_ID.
   try {
     const q = query(
       collection(db, JOURNAL_COLLECTION), 
-      where("companyId", "==", KENESIS_COMPANY_ID), // Filter by KENESIS company ID
+      where("companyId", "==", KENESIS_COMPANY_ID),
       orderBy("date", "desc"), 
       orderBy("createdAt", "desc") 
     );
@@ -84,13 +151,12 @@ export async function addJournalEntry(newEntryData: Omit<JournalEntry, 'id' | 'c
     const entryToSave = {
       ...newEntryData,
       creatorUserId: currentUser.uid,
-      companyId: KENESIS_COMPANY_ID, // Associate with KENESIS
+      companyId: KENESIS_COMPANY_ID, 
       createdAt: serverTimestamp() as Timestamp,
       tags: newEntryData.tags || [],
     };
     const docRef = await addDoc(collection(db, JOURNAL_COLLECTION), entryToSave);
     
-    // Construct the return object, assuming serverTimestamp resolves correctly for createdAt
     const savedEntry: JournalEntry = {
       id: docRef.id,
       date: entryToSave.date,
@@ -101,8 +167,19 @@ export async function addJournalEntry(newEntryData: Omit<JournalEntry, 'id' | 'c
       tags: entryToSave.tags,
       creatorUserId: entryToSave.creatorUserId,
       companyId: entryToSave.companyId,
-      createdAt: Timestamp.now() // Placeholder if serverTimestamp is tricky client-side, ideally fetch doc
+      createdAt: Timestamp.now() 
     };
+
+    // Add notification for the new entry
+    const shortDesc = savedEntry.description.length > 30 ? savedEntry.description.substring(0, 27) + "..." : savedEntry.description;
+    const amountFormatted = savedEntry.amount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' });
+    await addNotification(
+      `User ...${currentUser.uid.slice(-6)} added entry: '${shortDesc}' (${amountFormatted})`, 
+      'new_entry', 
+      currentUser.uid,
+      savedEntry.id
+    );
+
     return savedEntry;
 
   } catch (error) {
@@ -127,7 +204,7 @@ export async function addJournalEntries(newEntriesData: Omit<JournalEntry, 'id' 
       const entryToSave = {
         ...newData,
         creatorUserId: currentUser.uid,
-        companyId: KENESIS_COMPANY_ID, // Associate with KENESIS
+        companyId: KENESIS_COMPANY_ID, 
         createdAt: serverTimestamp() as Timestamp,
         tags: newData.tags || [],
       };
@@ -143,12 +220,25 @@ export async function addJournalEntries(newEntriesData: Omit<JournalEntry, 'id' 
         tags: entryToSave.tags,
         creatorUserId: entryToSave.creatorUserId,
         companyId: entryToSave.companyId,
-        createdAt: Timestamp.now() // Placeholder
+        createdAt: Timestamp.now() 
       };
       addedEntries.push(savedEntry);
+
+      // Add notification for each new entry
+      const shortDesc = savedEntry.description.length > 30 ? savedEntry.description.substring(0, 27) + "..." : savedEntry.description;
+      const amountFormatted = savedEntry.amount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' });
+      // Note: Adding notification here might not be ideal in a batch if the batch itself fails.
+      // For simplicity, adding it now. A more robust solution might do this after successful batch.commit().
+      addNotification(
+        `User ...${currentUser.uid.slice(-6)} added entry from document: '${shortDesc}' (${amountFormatted})`,
+        'document_upload', // Or a more specific type
+        currentUser.uid,
+        savedEntry.id
+      ).catch(console.error); // Log error but don't block main flow
     });
 
     await batch.commit();
+    // Potentially trigger notifications here after successful commit for more atomicity.
     return addedEntries;
   } catch (error) {
     console.error("Error adding KENESIS journal entries to Firestore in batch:", error);

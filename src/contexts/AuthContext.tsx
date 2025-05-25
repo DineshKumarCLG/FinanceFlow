@@ -10,10 +10,12 @@ import {
   onAuthStateChanged, 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
-  signOut as firebaseSignOut 
+  signOut as firebaseSignOut,
+  updateProfile
 } from 'firebase/auth';
-import type { LoginFormInputs } from '@/components/auth/LoginForm'; // Assuming this type exists
-import type { SignupFormInputs } from '@/components/auth/SignupForm'; // Assuming this type exists
+import type { LoginFormInputs } from '@/components/auth/LoginForm';
+import type { SignupFormInputs } from '@/components/auth/SignupForm';
+import { addNotification } from '@/lib/data-service';
 
 
 interface AuthContextType {
@@ -48,8 +50,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!isAuthenticated && !pathname.startsWith('/auth') && pathname !== '/') {
         router.push('/auth/login');
       }
-      if (isAuthenticated && (pathname.startsWith('/auth') || pathname === '/')) {
-        router.push('/dashboard');
+      // Allow authenticated users to stay on '/' if they explicitly navigate there.
+      // Redirect from '/auth' pages to '/dashboard' if authenticated.
+      if (isAuthenticated && pathname.startsWith('/auth')) {
+         router.push('/dashboard');
       }
     }
   }, [isAuthenticated, isLoading, router, pathname]);
@@ -58,26 +62,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     try {
       await signInWithEmailAndPassword(auth, credentials.email, credentials.password);
-      // onAuthStateChanged will handle setting user and redirecting
     } catch (error: any) {
       setIsLoading(false);
       console.error("Firebase login error:", error);
-      throw error; // Re-throw to be caught by the form
+      throw error; 
     }
-    // setIsLoading(false) is handled by onAuthStateChanged indirectly
   };
 
   const signup = async (credentials: SignupFormInputs) => {
     setIsLoading(true);
     try {
-      await createUserWithEmailAndPassword(auth, credentials.email, credentials.password);
-      // TODO: Optionally create a user profile document in Firestore here
-      // e.g., associate with KENESIS_COMPANY_ID
-      // onAuthStateChanged will handle setting user and redirecting
+      const userCredential = await createUserWithEmailAndPassword(auth, credentials.email, credentials.password);
+      // Set display name
+      if (userCredential.user) {
+        await updateProfile(userCredential.user, {
+          displayName: credentials.name
+        });
+        // Refresh user state to include displayName
+        setUser(auth.currentUser); 
+
+        // Add notification for new user joining
+        await addNotification(
+          `User ${credentials.name} (...${userCredential.user.uid.slice(-6)}) joined KENESIS.`,
+          'user_joined',
+          userCredential.user.uid
+        );
+      }
     } catch (error: any) {
       setIsLoading(false);
       console.error("Firebase signup error:", error);
-      throw error; // Re-throw to be caught by the form
+      throw error; 
     }
   };
 
@@ -85,11 +99,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     try {
       await firebaseSignOut(auth);
-      // onAuthStateChanged will handle setting user to null and redirecting
-      router.push('/'); // Explicit push to welcome page after logout
+      router.push('/'); 
     } catch (error) {
       console.error("Firebase logout error:", error);
-      // Still set isLoading to false, as the user state will update via onAuthStateChanged
       setIsLoading(false); 
       throw error;
     }
