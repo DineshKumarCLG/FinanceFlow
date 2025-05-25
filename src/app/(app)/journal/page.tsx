@@ -32,10 +32,11 @@ export default function JournalPage() {
         const dateComparison = b.date.localeCompare(a.date);
         if (dateComparison !== 0) return dateComparison;
         
-        const timeA = a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : (typeof a.createdAt === 'object' && a.createdAt && 'seconds' in a.createdAt && 'nanoseconds' in a.createdAt) ? new Timestamp(a.createdAt.seconds, a.createdAt.nanoseconds).toMillis() : new Date(a.createdAt as any).getTime();
-        const timeB = b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : (typeof b.createdAt === 'object' && b.createdAt && 'seconds' in b.createdAt && 'nanoseconds' in b.createdAt) ? new Timestamp(b.createdAt.seconds, b.createdAt.nanoseconds).toMillis() : new Date(b.createdAt as any).getTime();
+        // Ensure Timestamp objects are handled correctly for createdAt
+        const timeA = a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : (typeof a.createdAt === 'object' && a.createdAt && 'seconds' in a.createdAt && 'nanoseconds' in a.createdAt) ? new Timestamp((a.createdAt as any).seconds, (a.createdAt as any).nanoseconds).toMillis() : new Date(a.createdAt as any).getTime();
+        const timeB = b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : (typeof b.createdAt === 'object' && b.createdAt && 'seconds' in b.createdAt && 'nanoseconds' in b.createdAt) ? new Timestamp((b.createdAt as any).seconds, (b.createdAt as any).nanoseconds).toMillis() : new Date(b.createdAt as any).getTime();
         
-        const timeComparison = timeB - timeA;
+        const timeComparison = timeB - timeA; // Descending by time
         if (timeComparison !== 0) return timeComparison;
         return (b.id || "").localeCompare(a.id || ""); 
       });
