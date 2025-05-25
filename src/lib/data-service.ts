@@ -39,7 +39,7 @@ export interface Notification {
 
 const JOURNAL_COLLECTION = 'journalEntries';
 const NOTIFICATION_COLLECTION = 'notifications';
-const KENESIS_COMPANY_ID = 'KENESIS_GLOBAL_CORP'; // Define a constant ID for KENESIS
+const KENESIS_COMPANY_ID = 'KENESIS_GLOBAL_CORP'; 
 
 // --- Notification Service Functions ---
 
@@ -49,26 +49,25 @@ export async function addNotification(
   userId?: string,
   relatedId?: string
 ): Promise<void> {
-  const currentUser = auth.currentUser; // Re-check auth status if necessary or rely on calling context
+  const currentUser = auth.currentUser;
   try {
     await addDoc(collection(db, NOTIFICATION_COLLECTION), {
       message,
       type,
-      userId: userId || (currentUser ? currentUser.uid : null), // Ensure userId is captured if available
+      userId: userId || (currentUser ? currentUser.uid : null),
       relatedId: relatedId || null,
       companyId: KENESIS_COMPANY_ID,
       timestamp: serverTimestamp(),
     });
   } catch (error) {
     console.error("Error adding notification to Firestore:", error);
-    // Optionally, re-throw or handle more gracefully
   }
 }
 
 export async function getNotifications(): Promise<Notification[]> {
+  console.log("DataService: Fetching notifications...");
   const currentUser = auth.currentUser;
-  if (!currentUser && KENESIS_COMPANY_ID !== 'KENESIS_GLOBAL_CORP') { // Example: only restrict if not global company
-    // Or handle as per your app's auth policy for viewing global notifications
+  if (!currentUser && KENESIS_COMPANY_ID !== 'KENESIS_GLOBAL_CORP') { 
     console.warn("User not authenticated or not authorized for notifications of this company.");
     return []; 
   }
@@ -78,11 +77,10 @@ export async function getNotifications(): Promise<Notification[]> {
       collection(db, NOTIFICATION_COLLECTION),
       where("companyId", "==", KENESIS_COMPANY_ID),
       orderBy("timestamp", "desc")
-      // limit(20) // Optionally limit the number of notifications fetched
     );
     const querySnapshot = await getDocs(q);
     const notifications: Notification[] = [];
-    querySnapshot.forEach((docSnap) => { // Renamed doc to docSnap to avoid conflict
+    querySnapshot.forEach((docSnap) => { 
       const data = docSnap.data();
       notifications.push({
         id: docSnap.id,
@@ -94,6 +92,7 @@ export async function getNotifications(): Promise<Notification[]> {
         companyId: data.companyId,
       });
     });
+    console.log(`DataService: Fetched ${notifications.length} notifications.`);
     return notifications;
   } catch (error) {
     console.error("Error fetching KENESIS notifications from Firestore:", error);
@@ -105,18 +104,18 @@ export async function getNotifications(): Promise<Notification[]> {
 // --- Journal Entry Service Functions ---
 
 export async function getJournalEntries(): Promise<JournalEntry[]> {
+  console.log("DataService: Fetching journal entries...");
+  const startTime = Date.now();
+
   const currentUser = auth.currentUser;
   if (!currentUser && KENESIS_COMPANY_ID !== 'KENESIS_GLOBAL_CORP') {
     console.warn("No authenticated user found. Cannot fetch journal entries for this company unless it's global.");
     return []; 
   }
-  // For a global company like KENESIS, we might allow fetching even without specific user check,
-  // or enforce that a user must be logged in anyway. For now, let's assume logged-in users see KENESIS data.
   if (!currentUser) {
      console.warn("No authenticated user found. Cannot fetch journal entries for KENESIS.");
      return [];
   }
-
 
   try {
     const q = query(
@@ -127,7 +126,7 @@ export async function getJournalEntries(): Promise<JournalEntry[]> {
     );
     const querySnapshot = await getDocs(q);
     const entries: JournalEntry[] = [];
-    querySnapshot.forEach((docSnap) => { // Renamed doc to docSnap
+    querySnapshot.forEach((docSnap) => { 
       const data = docSnap.data();
       entries.push({
         id: docSnap.id,
@@ -142,9 +141,12 @@ export async function getJournalEntries(): Promise<JournalEntry[]> {
         createdAt: data.createdAt,
       });
     });
+    const endTime = Date.now();
+    console.log(`DataService: Fetched ${entries.length} journal entries in ${endTime - startTime}ms.`);
     return entries;
   } catch (error) {
-    console.error("Error fetching KENESIS journal entries from Firestore:", error);
+    const endTime = Date.now();
+    console.error(`Error fetching KENESIS journal entries from Firestore (took ${endTime - startTime}ms):`, error);
     throw error;
   }
 }
@@ -176,20 +178,17 @@ export async function addJournalEntry(newEntryData: Omit<JournalEntry, 'id' | 'c
       tags: entryToSave.tags,
       creatorUserId: entryToSave.creatorUserId,
       companyId: entryToSave.companyId,
-      createdAt: Timestamp.now() // Client-side placeholder, Firestore has server timestamp
+      createdAt: Timestamp.now() 
     };
 
-    // Add notification for the new entry
     const shortDesc = savedEntry.description.length > 30 ? savedEntry.description.substring(0, 27) + "..." : savedEntry.description;
     const amountFormatted = savedEntry.amount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' });
-    // Fire and forget for single entry notification too for consistency, or await if preferred for single entries
     addNotification(
       `User ...${currentUser.uid.slice(-6)} added entry: '${shortDesc}' (${amountFormatted})`, 
       'new_entry', 
       currentUser.uid,
       savedEntry.id
     ).catch(err => console.error("Failed to add notification for single entry:", err));
-
 
     return savedEntry;
 
@@ -235,36 +234,35 @@ export async function addJournalEntries(newEntriesData: Omit<JournalEntry, 'id' 
   });
 
   try {
-    await batch.commit(); // Commit all journal entries first
-
+    await batch.commit(); 
+    
     // Process notifications in the background (fire-and-forget)
+    // Do not await this promise chain here to make the UI responsive faster
     const processNotificationsInBackground = async () => {
-      const notificationPromises = preparedEntries.map(savedEntry => {
-        const shortDesc = savedEntry.description.length > 30 ? savedEntry.description.substring(0, 27) + "..." : savedEntry.description;
-        const amountFormatted = savedEntry.amount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' });
-        return addNotification(
-          `User ...${currentUser.uid.slice(-6)} added entry from document: '${shortDesc}' (${amountFormatted})`,
-          'document_upload', 
-          currentUser.uid,
-          savedEntry.id
-        );
-      });
-
-      // Use Promise.allSettled to ensure all notification attempts are made,
-      // even if some fail, without stopping others or throwing an error for the whole process.
-      const notificationResults = await Promise.allSettled(notificationPromises);
-      notificationResults.forEach(result => {
-        if (result.status === 'rejected') {
-          console.error("Background: Failed to add a notification for a batch entry:", result.reason);
-        }
-      });
+      try {
+        const notificationPromises = preparedEntries.map(savedEntry => {
+          const shortDesc = savedEntry.description.length > 30 ? savedEntry.description.substring(0, 27) + "..." : savedEntry.description;
+          const amountFormatted = savedEntry.amount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' });
+          return addNotification(
+            `User ...${currentUser.uid.slice(-6)} added entry from document: '${shortDesc}' (${amountFormatted})`,
+            'document_upload', 
+            currentUser.uid,
+            savedEntry.id
+          );
+        });
+        
+        const results = await Promise.allSettled(notificationPromises);
+        results.forEach(result => {
+          if (result.status === 'rejected') {
+            console.error("Background: Failed to add a notification for a batch entry:", result.reason);
+          }
+        });
+      } catch (err) {
+        console.error("Error in background notification processing wrapper:", err);
+      }
     };
     
-    // Start processing notifications but don't wait for it to complete here
-    processNotificationsInBackground().catch(err => {
-        // Catch any errors from the async wrapper itself, though individual errors inside are handled
-        console.error("Error in overall background notification processing:", err);
-    });
+    processNotificationsInBackground(); // Fire and forget
     
     return preparedEntries; 
   } catch (error) {
@@ -273,10 +271,9 @@ export async function addJournalEntries(newEntriesData: Omit<JournalEntry, 'id' 
   }
 }
 
-// Helper type for user profile if you decide to create a users collection
 export interface UserProfile {
   uid: string;
   email: string | null;
   displayName: string | null;
-  companyIds: string[]; // List of company IDs the user belongs to, e.g., [KENESIS_COMPANY_ID]
+  companyIds: string[]; 
 }

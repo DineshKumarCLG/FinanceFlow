@@ -12,14 +12,16 @@ import { UserSpendingList, type UserSpending } from "@/components/dashboard/User
 import { NotificationList, type Notification } from "@/components/dashboard/NotificationList";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { getJournalEntries, type JournalEntry as StoredJournalEntry, getNotifications } from "@/lib/data-service";
 import type { DateRange } from "react-day-picker";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { format, startOfMonth, endOfMonth, subMonths, eachMonthOfInterval } from "date-fns";
-import { useAuth } from "@/contexts/AuthContext"; // Import useAuth
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
+
 
 interface ChartPoint {
   month: string;
@@ -32,9 +34,9 @@ export const expenseKeywords = ['expense', 'cost', 'supply', 'rent', 'salary', '
 
 
 export default function DashboardPage() {
-  const { user: currentUser } = useAuth(); // Get the currently authenticated user
+  const { user: currentUser } = useAuth();
   const [clientLocale, setClientLocale] = useState('en-US');
-  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [isLoadingData, setIsLoadingData] = useState(true); // Start true
   const [allJournalEntries, setAllJournalEntries] = useState<StoredJournalEntry[]>([]);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const today = new Date();
@@ -45,28 +47,20 @@ export default function DashboardPage() {
   });
   const { toast } = useToast();
 
-  // State for Summary Cards
   const [summaryData, setSummaryData] = useState({
     totalRevenue: 0, 
     totalExpenses: 0,
     netProfit: 0,    
     transactionCount: 0,
   });
-  // State for Income/Expense Chart
   const [chartDisplayData, setChartDisplayData] = useState<ChartPoint[]>([]);
-  // State for User Spending List
   const [userSpendingData, setUserSpendingData] = useState<UserSpending[]>([]);
-  // State for Notifications
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [isLoadingNotifications, setIsLoadingNotifications] = useState(true);
-
-  // NEW: State for Analytics Overview
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState(true); // Start true
   const [analyticsKpis, setAnalyticsKpis] = useState<AnalyticsKpiData>({
     avgTransactionValue: 0, profitMargin: 0, incomeTransactions: 0, expenseTransactions: 0,
   });
   const [analyticsExpenseCategories, setAnalyticsExpenseCategories] = useState<AnalyticsExpenseCategoryData[]>([]);
-
-  // NEW: State for Profit & Loss Report
   const [profitLossReportData, setProfitLossReportData] = useState<ProfitLossReportData | undefined>();
 
 
@@ -78,7 +72,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function loadInitialData() {
-      setIsLoadingData(true);
+      console.log("Dashboard: Starting to load initial data...");
+      setIsLoadingData(true); // Covers both journal and notification initial load
       setIsLoadingNotifications(true);
       try {
         const fetchedEntries = await getJournalEntries();
@@ -87,28 +82,58 @@ export default function DashboardPage() {
         const fetchedNotifications = await getNotifications();
         setNotifications(fetchedNotifications);
 
-      } catch (error) {
+      } catch (error: any) {
         console.error("Failed to load dashboard data:", error);
+        toast({
+          variant: "destructive",
+          title: "Error Loading Dashboard Data",
+          description: error.message || "Could not fetch initial financial data or notifications. Please try again later.",
+        });
+        // Reset all data states to empty/default on error
          setSummaryData({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
          setUserSpendingData([]);
          setNotifications([]);
-         setAllJournalEntries([]);
+         setAllJournalEntries([]); // Critical to ensure processing useEffect handles empty state
+         const now = new Date();
+         setChartDisplayData(
+             Array.from({ length: 12 }).map((_, i) => {
+                 const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
+                 return { month: d.toLocaleString(clientLocale, { month: 'short' }), income: 0, expense: 0 };
+             })
+         );
          setAnalyticsKpis({ avgTransactionValue: 0, profitMargin: 0, incomeTransactions: 0, expenseTransactions: 0 });
          setAnalyticsExpenseCategories([]);
          setProfitLossReportData(undefined);
       } finally {
-        // setIsLoadingData(false); // Moved to the processing useEffect
+        // setIsLoadingData will be set to false by the processing useEffect
         setIsLoadingNotifications(false);
+        console.log("Dashboard: Finished loading initial notifications.");
       }
     }
     loadInitialData();
-  }, []); 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount
 
 
   // Centralized data processing useEffect
   useEffect(() => {
-    if (allJournalEntries.length === 0 && !isLoadingData && typeof dateRange?.from !== 'undefined' && typeof dateRange?.to !== 'undefined') {
-        // Handle case with no entries but processing should still set defaults
+    console.log("Dashboard: Processing effect triggered. isLoadingData:", isLoadingData, "allJournalEntries count:", allJournalEntries.length, "dateRange:", dateRange);
+
+    if (!dateRange?.from || !dateRange?.to) {
+      console.log("Dashboard: Date range not fully set, skipping processing.");
+      // Data might still be loading from `loadInitialData`, so don't set isLoadingData to false here
+      // unless `loadInitialData` has definitively finished.
+      // If `allJournalEntries` is also empty, it means `loadInitialData` is likely still running or failed.
+      return;
+    }
+    
+    // This effect should control isLoadingData for the main content.
+    // If `loadInitialData` is still running, `allJournalEntries` might not be populated yet.
+    // We set `isLoadingData` true here to cover the processing time itself.
+    setIsLoadingData(true);
+
+    if (allJournalEntries.length === 0) {
+        console.log("Dashboard: No journal entries to process. Setting defaults.");
         setSummaryData({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
         const now = new Date();
         setChartDisplayData(
@@ -124,187 +149,168 @@ export default function DashboardPage() {
         setProfitLossReportData({
             revenueItems: [], expenseItems: [], totalRevenue: 0, totalExpenses: 0, netProfit: 0, formattedDateRange: formattedRange
         });
-        setIsLoadingData(false); // Ensure loading is set to false
+        setIsLoadingData(false);
+        console.log("Dashboard: Finished processing (no entries).");
         return;
     }
 
+    console.log("Dashboard: Starting calculations for", allJournalEntries.length, "entries.");
+    // --- Calculations for Summary Cards, Chart, User Spending ---
+    let calculatedTotalRevenue = 0; 
+    let calculatedTotalExpenses = 0;
+    let transactionCountInRange = 0;
+    const monthlyAggregates: Record<string, { income: number; expense: number; monthLabel: string; yearMonth: string }> = {};
+    const userExpenses: Record<string, number> = {};
 
-    if (allJournalEntries.length > 0 && dateRange?.from && dateRange?.to) {
-      setIsLoadingData(true); // Start loading before heavy processing
+    // --- Calculations for AnalyticsOverview ---
+    let analyticsTotalTransactionAmount = 0;
+    let analyticsIncomeTransactions = 0;
+    let analyticsExpenseTransactions = 0;
+    const expensesByAccountForAnalytics: Record<string, number> = {};
+    let analyticsTotalRevenueForMargin = 0; 
+    let analyticsTotalExpensesForMargin = 0; 
+    
+    // --- Calculations for ProfitLossReport ---
+    const revenuesForReport: Record<string, number> = {};
+    const expensesForReport: Record<string, number> = {};
+    let reportTotalRevenue = 0;
+    let reportTotalExpenses = 0;
 
-      // --- Calculations for Summary Cards, Chart, User Spending ---
-      let calculatedTotalRevenue = 0; 
-      let calculatedTotalExpenses = 0;
-      let transactionCountInRange = 0;
-      const monthlyAggregates: Record<string, { income: number; expense: number; monthLabel: string; yearMonth: string }> = {};
-      const userExpenses: Record<string, number> = {};
+    const now = new Date();
+    const last12MonthsInterval = { start: startOfMonth(subMonths(now, 11)), end: endOfMonth(now) };
+    const monthsForChart = eachMonthOfInterval(last12MonthsInterval);
+    monthsForChart.forEach(d => {
+      const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const monthLabel = d.toLocaleString(clientLocale, { month: 'short' });
+      if (!monthlyAggregates[yearMonth]) {
+        monthlyAggregates[yearMonth] = { income: 0, expense: 0, monthLabel, yearMonth };
+      }
+    });
+    
+    allJournalEntries.forEach(entry => {
+      const entryDate = new Date(entry.date);
+      const entryYearMonth = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
+      const monthAggregate = monthlyAggregates[entryYearMonth];
+      const isWithinRange = entryDate >= dateRange.from! && entryDate <= dateRange.to!;
 
-      // --- Calculations for AnalyticsOverview ---
-      let analyticsTotalTransactionAmount = 0;
-      let analyticsIncomeTransactions = 0;
-      let analyticsExpenseTransactions = 0;
-      const expensesByAccountForAnalytics: Record<string, number> = {};
-      let analyticsTotalRevenueForMargin = 0; // For profit margin based on all entries
-      let analyticsTotalExpensesForMargin = 0; // For profit margin based on all entries
+      let isIncomeEntry = false;
+      let isExpenseEntry = false;
+
+      if (incomeKeywords.some(keyword => (entry.creditAccount?.toLowerCase().includes(keyword) || entry.description.toLowerCase().includes(keyword))) ||
+          (entry.debitAccount?.toLowerCase().includes('cash') || entry.debitAccount?.toLowerCase().includes('bank'))) {
+          isIncomeEntry = true;
+      }
+      if (expenseKeywords.some(keyword => (entry.debitAccount?.toLowerCase().includes(keyword) || entry.description.toLowerCase().includes(keyword)))) {
+          isExpenseEntry = true;
+      } else if ((entry.creditAccount?.toLowerCase().includes('cash') || entry.creditAccount?.toLowerCase().includes('bank')) && !isIncomeEntry) {
+          isExpenseEntry = true; 
+      }
       
-      // --- Calculations for ProfitLossReport ---
-      const revenuesForReport: Record<string, number> = {};
-      const expensesForReport: Record<string, number> = {};
-      let reportTotalRevenue = 0;
-      let reportTotalExpenses = 0;
-
-      // Initialize monthly aggregates for the chart (last 12 months)
-      const now = new Date();
-      const last12MonthsInterval = { start: startOfMonth(subMonths(now, 11)), end: endOfMonth(now) };
-      const monthsForChart = eachMonthOfInterval(last12MonthsInterval);
-      monthsForChart.forEach(d => {
-        const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-        const monthLabel = d.toLocaleString(clientLocale, { month: 'short' });
-        if (!monthlyAggregates[yearMonth]) {
-          monthlyAggregates[yearMonth] = { income: 0, expense: 0, monthLabel, yearMonth };
-        }
-      });
-      
-      allJournalEntries.forEach(entry => {
-        const entryDate = new Date(entry.date);
-        const entryYearMonth = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
-        const monthAggregate = monthlyAggregates[entryYearMonth];
-        const isWithinRange = entryDate >= dateRange.from! && entryDate <= dateRange.to!;
-
-        let isIncomeEntry = false;
-        let isExpenseEntry = false;
-
-        // General classification for multiple purposes (summary, analytics, P&L if applicable)
-        // Income Check
-        if (incomeKeywords.some(keyword => (entry.creditAccount?.toLowerCase().includes(keyword) || entry.description.toLowerCase().includes(keyword))) ||
-            (entry.debitAccount?.toLowerCase().includes('cash') || entry.debitAccount?.toLowerCase().includes('bank'))) {
-            isIncomeEntry = true;
-        }
-        // Expense Check (more refined)
-        if (expenseKeywords.some(keyword => (entry.debitAccount?.toLowerCase().includes(keyword) || entry.description.toLowerCase().includes(keyword)))) {
-            isExpenseEntry = true;
-        } else if ((entry.creditAccount?.toLowerCase().includes('cash') || entry.creditAccount?.toLowerCase().includes('bank')) && !isIncomeEntry) {
-            isExpenseEntry = true; // Cash outflow not already marked as income
-        }
-        
-        // --- Summary Card Calculations (Date Range Specific) ---
-        if (isWithinRange) {
-          transactionCountInRange++;
-          if (isIncomeEntry) calculatedTotalRevenue += entry.amount;
-          if (isExpenseEntry) {
-            calculatedTotalExpenses += entry.amount;
-            // User Spending (Date Range Specific)
-            const userId = entry.creatorUserId; 
-            userExpenses[userId] = (userExpenses[userId] || 0) + entry.amount;
-          }
-        }
-
-        // --- Chart Data (Last 12 Months) ---
-        if (monthAggregate) {
-          if (isIncomeEntry) monthAggregate.income += entry.amount;
-          if (isExpenseEntry) monthAggregate.expense += entry.amount;
-        }
-        
-        // --- Analytics KPIs (All Time) ---
-        analyticsTotalTransactionAmount += entry.amount;
-        if (isIncomeEntry) {
-          analyticsIncomeTransactions++;
-          analyticsTotalRevenueForMargin += entry.amount;
-        }
+      if (isWithinRange) {
+        transactionCountInRange++;
+        if (isIncomeEntry) calculatedTotalRevenue += entry.amount;
         if (isExpenseEntry) {
-          analyticsExpenseTransactions++;
-          analyticsTotalExpensesForMargin += entry.amount;
-          const analyticsAccount = entry.debitAccount || "Uncategorized Expense";
-          expensesByAccountForAnalytics[analyticsAccount] = (expensesByAccountForAnalytics[analyticsAccount] || 0) + entry.amount;
+          calculatedTotalExpenses += entry.amount;
+          const userId = entry.creatorUserId; 
+          userExpenses[userId] = (userExpenses[userId] || 0) + entry.amount;
+        }
+      }
+
+      if (monthAggregate) {
+        if (isIncomeEntry) monthAggregate.income += entry.amount;
+        if (isExpenseEntry) monthAggregate.expense += entry.amount;
+      }
+      
+      analyticsTotalTransactionAmount += entry.amount;
+      if (isIncomeEntry) {
+        analyticsIncomeTransactions++;
+        analyticsTotalRevenueForMargin += entry.amount;
+      }
+      if (isExpenseEntry) {
+        analyticsExpenseTransactions++;
+        analyticsTotalExpensesForMargin += entry.amount;
+        const analyticsAccount = entry.debitAccount || "Uncategorized Expense";
+        expensesByAccountForAnalytics[analyticsAccount] = (expensesByAccountForAnalytics[analyticsAccount] || 0) + entry.amount;
+      }
+      
+      if (isWithinRange) {
+        if (isIncomeEntry) {
+          const account = entry.creditAccount || "Uncategorized Revenue";
+          revenuesForReport[account] = (revenuesForReport[account] || 0) + entry.amount;
+          reportTotalRevenue += entry.amount;
+        } else if (isExpenseEntry) { 
+          const account = entry.debitAccount || "Uncategorized Expense";
+          expensesForReport[account] = (expensesForReport[account] || 0) + entry.amount;
+          reportTotalExpenses += entry.amount;
+        }
+      }
+    });
+
+    setSummaryData({
+        totalRevenue: calculatedTotalRevenue,
+        totalExpenses: calculatedTotalExpenses,
+        netProfit: calculatedTotalRevenue - calculatedTotalExpenses,
+        transactionCount: transactionCountInRange,
+    });
+
+    const newChartData = Object.values(monthlyAggregates)
+      .sort((a, b) => a.yearMonth.localeCompare(b.yearMonth)) 
+      .map(agg => ({ month: agg.monthLabel, income: agg.income, expense: agg.expense })); 
+    setChartDisplayData(newChartData);
+
+    const topSpenders = Object.entries(userExpenses)
+      .map(([userId, totalSpent]) => {
+        let displayName = `User ...${userId.slice(-6)}`;
+        let avatarFallbackText = userId.substring(0, 2).toUpperCase();
+
+        if (currentUser && userId === currentUser.uid) {
+          displayName = currentUser.displayName || `User ...${userId.slice(-6)}`;
+          if (currentUser.displayName) {
+            const names = currentUser.displayName.split(' ');
+            avatarFallbackText = names.map(n => n[0]).slice(0,2).join('').toUpperCase();
+          } else if (currentUser.email) {
+            avatarFallbackText = currentUser.email.substring(0, 2).toUpperCase();
+          }
         }
         
-        // --- Profit & Loss Report Data (Date Range Specific) ---
-        if (isWithinRange) {
-          if (isIncomeEntry) {
-            const account = entry.creditAccount || "Uncategorized Revenue";
-            revenuesForReport[account] = (revenuesForReport[account] || 0) + entry.amount;
-            reportTotalRevenue += entry.amount;
-          } else if (isExpenseEntry) { // Use else if to avoid double counting an entry as both revenue and expense for P&L
-            const account = entry.debitAccount || "Uncategorized Expense";
-            expensesForReport[account] = (expensesForReport[account] || 0) + entry.amount;
-            reportTotalExpenses += entry.amount;
-          }
-        }
-      });
+        return {
+          userId,
+          totalSpent,
+          displayName,
+          avatarFallback: avatarFallbackText,
+        };
+      })
+      .sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 5); 
+    setUserSpendingData(topSpenders);
 
-      // --- Set State for Summary Cards ---
-      setSummaryData({
-          totalRevenue: calculatedTotalRevenue,
-          totalExpenses: calculatedTotalExpenses,
-          netProfit: calculatedTotalRevenue - calculatedTotalExpenses,
-          transactionCount: transactionCountInRange,
-      });
+    const calculatedAnalyticsKpis: AnalyticsKpiData = {
+      avgTransactionValue: allJournalEntries.length > 0 ? analyticsTotalTransactionAmount / allJournalEntries.length : 0,
+      profitMargin: analyticsTotalRevenueForMargin > 0 ? ((analyticsTotalRevenueForMargin - analyticsTotalExpensesForMargin) / analyticsTotalRevenueForMargin) * 100 : 0,
+      incomeTransactions: analyticsIncomeTransactions,
+      expenseTransactions: analyticsExpenseTransactions,
+    };
+    setAnalyticsKpis(calculatedAnalyticsKpis);
+    const topAnalyticsExpenseCategories = Object.entries(expensesByAccountForAnalytics)
+      .map(([name, total]) => ({ name, total }))
+      .sort((a, b) => b.total - a.total).slice(0, 5);
+    setAnalyticsExpenseCategories(topAnalyticsExpenseCategories);
 
-      // --- Set State for Chart ---
-      const newChartData = Object.values(monthlyAggregates)
-        .sort((a, b) => a.yearMonth.localeCompare(b.yearMonth)) 
-        .map(agg => ({ month: agg.monthLabel, income: agg.income, expense: agg.expense })); 
-      setChartDisplayData(newChartData);
+    const plRevenueItemsList: PLReportLineItem[] = Object.entries(revenuesForReport).map(([accountName, amount]) => ({ accountName, amount }));
+    const plExpenseItemsList: PLReportLineItem[] = Object.entries(expensesForReport).map(([accountName, amount]) => ({ accountName, amount }));
+    const formattedRange = dateRange?.from && dateRange?.to ? `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}` : "All Time";
+    setProfitLossReportData({
+      revenueItems: plRevenueItemsList,
+      expenseItems: plExpenseItemsList,
+      totalRevenue: reportTotalRevenue,
+      totalExpenses: reportTotalExpenses,
+      netProfit: reportTotalRevenue - reportTotalExpenses,
+      formattedDateRange: formattedRange,
+    });
 
-      // --- Set State for User Spending List ---
-      const topSpenders = Object.entries(userExpenses)
-        .map(([userId, totalSpent]) => {
-          let displayName = `User ...${userId.slice(-6)}`;
-          let avatarFallbackText = userId.substring(0, 2);
-
-          if (currentUser && userId === currentUser.uid) {
-            displayName = currentUser.displayName || `User ...${userId.slice(-6)}`;
-            if (currentUser.displayName) {
-              avatarFallbackText = currentUser.displayName.substring(0, 2).toUpperCase();
-            } else if (currentUser.email) {
-              avatarFallbackText = currentUser.email.substring(0, 2).toUpperCase();
-            }
-          } else if (currentUser && currentUser.displayName) { // Handle other users if a display name is available (less likely without a user profile DB)
-             // This branch might not be very effective without a way to get other users' display names
-          }
-          
-          return {
-            userId,
-            totalSpent,
-            displayName,
-            avatarFallback: avatarFallbackText.toUpperCase(),
-          };
-        })
-        .sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 5); 
-      setUserSpendingData(topSpenders);
-
-      // --- Set State for Analytics Overview ---
-      const calculatedAnalyticsKpis: AnalyticsKpiData = {
-        avgTransactionValue: allJournalEntries.length > 0 ? analyticsTotalTransactionAmount / allJournalEntries.length : 0,
-        profitMargin: analyticsTotalRevenueForMargin > 0 ? ((analyticsTotalRevenueForMargin - analyticsTotalExpensesForMargin) / analyticsTotalRevenueForMargin) * 100 : 0,
-        incomeTransactions: analyticsIncomeTransactions,
-        expenseTransactions: analyticsExpenseTransactions,
-      };
-      setAnalyticsKpis(calculatedAnalyticsKpis);
-      const topAnalyticsExpenseCategories = Object.entries(expensesByAccountForAnalytics)
-        .map(([name, total]) => ({ name, total }))
-        .sort((a, b) => b.total - a.total).slice(0, 5);
-      setAnalyticsExpenseCategories(topAnalyticsExpenseCategories);
-
-      // --- Set State for Profit & Loss Report ---
-      const plRevenueItemsList: PLReportLineItem[] = Object.entries(revenuesForReport).map(([accountName, amount]) => ({ accountName, amount }));
-      const plExpenseItemsList: PLReportLineItem[] = Object.entries(expensesForReport).map(([accountName, amount]) => ({ accountName, amount }));
-      const formattedRange = dateRange?.from && dateRange?.to ? `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}` : "All Time";
-      setProfitLossReportData({
-        revenueItems: plRevenueItemsList,
-        expenseItems: plExpenseItemsList,
-        totalRevenue: reportTotalRevenue,
-        totalExpenses: reportTotalExpenses,
-        netProfit: reportTotalRevenue - reportTotalExpenses,
-        formattedDateRange: formattedRange,
-      });
-      setIsLoadingData(false); // Data processing finished
-    } else if (allJournalEntries.length === 0 && !isLoadingData && dateRange?.from && dateRange?.to) { // Ensure this condition is robust
-        // If no entries and not loading, ensure all data is reset (already partially handled above, this is a safeguard)
-        setIsLoadingData(false);
-    }
+    setIsLoadingData(false);
+    console.log("Dashboard: Finished processing calculations.");
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allJournalEntries, dateRange, clientLocale, currentUser]); // Added currentUser as a dependency
+  }, [allJournalEntries, dateRange, clientLocale, currentUser]);
 
 
   const handleDownloadReport = () => {
@@ -418,7 +424,7 @@ export default function DashboardPage() {
           <div className="grid gap-6">
             {isLoadingData ? (
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                  {[...Array(4)].map((_, i) => ( <Card key={i} className="shadow-sm h-36 animate-pulse bg-muted/50 border-border"/> ))}
+                  {[...Array(4)].map((_, i) => ( <Skeleton key={i} className="h-36 rounded-lg shadow-sm bg-muted/50 border-border"/> ))}
               </div>
             ) : (
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
