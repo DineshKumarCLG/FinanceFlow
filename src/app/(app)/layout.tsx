@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ReactNode } from "react";
@@ -9,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
+import { BottomNavBar } from "@/components/layout/BottomNavBar"; // Import BottomNavBar
 import {
   SidebarProvider,
   Sidebar,
@@ -29,7 +31,7 @@ function SidebarContentLayout() {
       <SidebarHeader className="p-4">
         <div className="flex items-center justify-between">
           <AppLogo collapsed={!open} />
-          {!open && <SidebarTrigger className="hidden md:flex" />}
+          {/* SidebarTrigger is now part of the Header, controlled by md:hidden there */}
         </div>
       </SidebarHeader>
       <SidebarContent className="p-2 pr-0"> {/* Adjust padding for scrollbar */}
@@ -64,14 +66,17 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <Sidebar collapsible="icon">
+      {/* Sidebar is hidden on mobile (md:block or md:flex will make it visible on medium screens and up) */}
+      <Sidebar collapsible="icon" className="hidden md:flex md:flex-col">
         <SidebarContentLayout />
       </Sidebar>
       <SidebarInset>
         <Header />
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+        {/* Add bottom padding for mobile to account for BottomNavBar height, remove on md and up */}
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 pb-20 md:pb-6 lg:md:pb-8">
           {children}
         </main>
+        <BottomNavBar /> {/* Add BottomNavBar here */}
       </SidebarInset>
     </SidebarProvider>
   );
