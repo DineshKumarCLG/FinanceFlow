@@ -66,11 +66,17 @@ export async function addNotification(
 
 export async function getNotifications(): Promise<Notification[]> {
   console.log("DataService: Fetching notifications...");
+  const startTime = Date.now();
   const currentUser = auth.currentUser;
   if (!currentUser && KENESIS_COMPANY_ID !== 'KENESIS_GLOBAL_CORP') { 
     console.warn("User not authenticated or not authorized for notifications of this company.");
     return []; 
   }
+   if (!currentUser) {
+     console.warn("No authenticated user found. Cannot fetch notifications for KENESIS.");
+     return [];
+  }
+
 
   try {
     const q = query(
@@ -92,10 +98,12 @@ export async function getNotifications(): Promise<Notification[]> {
         companyId: data.companyId,
       });
     });
-    console.log(`DataService: Fetched ${notifications.length} notifications.`);
+    const endTime = Date.now();
+    console.log(`DataService: Fetched ${notifications.length} notifications in ${endTime - startTime}ms.`);
     return notifications;
   } catch (error) {
-    console.error("Error fetching KENESIS notifications from Firestore:", error);
+    const endTime = Date.now();
+    console.error(`Error fetching KENESIS notifications from Firestore (took ${endTime - startTime}ms):`, error);
     throw error;
   }
 }
@@ -108,10 +116,6 @@ export async function getJournalEntries(): Promise<JournalEntry[]> {
   const startTime = Date.now();
 
   const currentUser = auth.currentUser;
-  if (!currentUser && KENESIS_COMPANY_ID !== 'KENESIS_GLOBAL_CORP') {
-    console.warn("No authenticated user found. Cannot fetch journal entries for this company unless it's global.");
-    return []; 
-  }
   if (!currentUser) {
      console.warn("No authenticated user found. Cannot fetch journal entries for KENESIS.");
      return [];
@@ -121,6 +125,10 @@ export async function getJournalEntries(): Promise<JournalEntry[]> {
     const q = query(
       collection(db, JOURNAL_COLLECTION), 
       where("companyId", "==", KENESIS_COMPANY_ID),
+      // Apply user-specific filter if not for the global company
+      // For KENESIS, we assume all authenticated users can see all entries.
+      // If this needs to be per-user, uncomment and adjust:
+      // where("creatorUserId", "==", currentUser.uid), 
       orderBy("date", "desc"), 
       orderBy("createdAt", "desc") 
     );
@@ -178,9 +186,10 @@ export async function addJournalEntry(newEntryData: Omit<JournalEntry, 'id' | 'c
       tags: entryToSave.tags,
       creatorUserId: entryToSave.creatorUserId,
       companyId: entryToSave.companyId,
-      createdAt: Timestamp.now() 
+      createdAt: Timestamp.now() // Approximate client-side timestamp for immediate use
     };
 
+    // Fire-and-forget notification
     const shortDesc = savedEntry.description.length > 30 ? savedEntry.description.substring(0, 27) + "..." : savedEntry.description;
     const amountFormatted = savedEntry.amount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' });
     addNotification(
@@ -209,18 +218,19 @@ export async function addJournalEntries(newEntriesData: Omit<JournalEntry, 'id' 
   const preparedEntries: JournalEntry[] = [];
 
   newEntriesData.forEach(newData => {
-    const docRef = doc(collection(db, JOURNAL_COLLECTION)); 
+    const docRef = doc(collection(db, JOURNAL_COLLECTION)); // Creates a new doc reference with an auto-generated ID
     const entryToSave = {
       ...newData,
       creatorUserId: currentUser.uid,
       companyId: KENESIS_COMPANY_ID,
-      createdAt: serverTimestamp() as Timestamp,
+      createdAt: serverTimestamp() as Timestamp, // Use server timestamp for consistency
       tags: newData.tags || [],
     };
     batch.set(docRef, entryToSave);
 
+    // For immediate return, use client-approximated data
     preparedEntries.push({
-      id: docRef.id,
+      id: docRef.id, // The auto-generated ID
       date: newData.date,
       description: newData.description,
       debitAccount: newData.debitAccount,
@@ -229,15 +239,15 @@ export async function addJournalEntries(newEntriesData: Omit<JournalEntry, 'id' 
       tags: newData.tags || [],
       creatorUserId: currentUser.uid,
       companyId: KENESIS_COMPANY_ID,
-      createdAt: Timestamp.now() 
+      createdAt: Timestamp.now() // Approximate client-side timestamp
     });
   });
 
   try {
-    await batch.commit(); 
+    await batch.commit(); // Commit all journal entries first
     
-    // Process notifications in the background (fire-and-forget)
-    // Do not await this promise chain here to make the UI responsive faster
+    // After entries are saved, create notifications in the background (fire-and-forget)
+    // This makes the UI responsive faster as it doesn't wait for notifications.
     const processNotificationsInBackground = async () => {
       try {
         const notificationPromises = preparedEntries.map(savedEntry => {
@@ -251,20 +261,25 @@ export async function addJournalEntries(newEntriesData: Omit<JournalEntry, 'id' 
           );
         });
         
-        const results = await Promise.allSettled(notificationPromises);
-        results.forEach(result => {
-          if (result.status === 'rejected') {
-            console.error("Background: Failed to add a notification for a batch entry:", result.reason);
-          }
-        });
+        // We don't await Promise.allSettled here to make the original function return faster
+        // Log errors from background processing if any
+        Promise.allSettled(notificationPromises).then(results => {
+          results.forEach(result => {
+            if (result.status === 'rejected') {
+              console.error("Background: Failed to add a notification for a batch entry:", result.reason);
+            }
+          });
+        }).catch(err => console.error("Error in background notification processing wrapper itself:", err));
+
       } catch (err) {
-        console.error("Error in background notification processing wrapper:", err);
+        // Catch any synchronous error in the async wrapper itself
+        console.error("Error setting up background notification processing:", err);
       }
     };
     
-    processNotificationsInBackground(); // Fire and forget
+    processNotificationsInBackground(); // Fire and forget for notifications
     
-    return preparedEntries; 
+    return preparedEntries; // Return immediately after journal entries are committed
   } catch (error) {
     console.error("Error adding KENESIS journal entries to Firestore in batch:", error);
     throw error;

@@ -7,34 +7,48 @@ import { Button } from "@/components/ui/button";
 import { Download, Filter } from "lucide-react";
 import { useState, useEffect } from "react";
 import { getJournalEntries, type JournalEntry } from "@/lib/data-service"; // Import service
+import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/contexts/AuthContext";
 
-// Removed mock fetchJournalEntries, will use data-service
 
 export default function JournalPage() {
+  const { user: currentUser } = useAuth();
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function loadEntries() {
+      if (!currentUser) { // Don't load if no user
+        setIsLoading(false);
+        setEntries([]);
+        return;
+      }
       setIsLoading(true);
       try {
-        const data = await getJournalEntries(); // Use data service
-        // Sort entries by date descending, then by ID if dates are same (for stable sort)
+        const data = await getJournalEntries(); 
+        // Firestore already sorts by date desc, createdAt desc.
+        // Client-side sort for stability if `createdAt` are identical (less likely with serverTimestamps)
         const sortedData = data.sort((a, b) => {
           const dateComparison = b.date.localeCompare(a.date);
           if (dateComparison !== 0) return dateComparison;
-          return b.id.localeCompare(a.id); // Fallback to ID for same-date entries
+          // If createdAt is a Firestore Timestamp, convert to Date for comparison
+          const timeA = a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : new Date(a.createdAt as any).getTime();
+          const timeB = b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : new Date(b.createdAt as any).getTime();
+          const timeComparison = timeB - timeA;
+          if (timeComparison !== 0) return timeComparison;
+          return b.id.localeCompare(a.id); 
         });
         setEntries(sortedData);
       } catch (error) {
         console.error("Failed to load journal entries:", error);
         // Optionally set an error state here to display to the user
+        setEntries([]); // Clear entries on error
       } finally {
         setIsLoading(false);
       }
     }
     loadEntries();
-  }, []); // Empty dependency array: runs once on mount
+  }, [currentUser]); // Reload if user changes
 
   return (
     <div className="space-y-6">
@@ -53,8 +67,9 @@ export default function JournalPage() {
       </PageTitle>
       
       {isLoading ? (
-         <div className="flex justify-center items-center h-64">
-           <p className="text-muted-foreground">Loading journal entries...</p>
+         <div className="space-y-2">
+           <Skeleton className="h-12 w-full" />
+           <Skeleton className="h-64 w-full" />
          </div>
       ) : (
         <JournalTable entries={entries} />

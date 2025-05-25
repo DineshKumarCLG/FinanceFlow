@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { getJournalEntries, type JournalEntry as StoredJournalEntry } from "@/lib/data-service";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/contexts/AuthContext";
+import type { Timestamp } from "firebase/firestore";
 
 // Accounts options can remain static for now, or be dynamically generated later
 const accountsOptions = [
@@ -26,7 +29,6 @@ async function fetchLedgerTransactions(
   dateRange?: DateRange, 
   searchTerm?: string
 ): Promise<{ accountName: string; transactions: LedgerTransaction[] }> {
-  // Removed: await new Promise(resolve => setTimeout(resolve, 0)); 
   
   const selectedAccountKey = account || "Cash"; // Default to Cash
   const accountName = accountsOptions.find(acc => acc.value === selectedAccountKey)?.label || selectedAccountKey;
@@ -60,20 +62,19 @@ async function fetchLedgerTransactions(
   }
 
   // Sort entries by date (important for balance calculation)
-  relevantEntries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime() || a.id.localeCompare(b.id));
+  relevantEntries.sort((a, b) => {
+    const dateComparison = new Date(a.date).getTime() - new Date(b.date).getTime();
+    if (dateComparison !== 0) return dateComparison;
+    // If createdAt is a Firestore Timestamp, convert to Date for comparison
+    const timeA = a.createdAt instanceof Timestamp ? (a.createdAt as Timestamp).toMillis() : new Date(a.createdAt as any).getTime();
+    const timeB = b.createdAt instanceof Timestamp ? (b.createdAt as Timestamp).toMillis() : new Date(b.createdAt as any).getTime();
+    const timeComparison = timeA - timeB;
+    if (timeComparison !== 0) return timeComparison;
+    return a.id.localeCompare(b.id);
+  });
 
-  // Transform relevant journal entries into ledger transactions and calculate running balance
+
   let runningBalance = 0;
-  // Note: This simple balance calculation assumes all accounts behave like asset accounts (debits increase, credits decrease).
-  // Real accounting requires knowledge of account types (Asset, Liability, Equity, Revenue, Expense) for correct balance calculation.
-  // For 'Service Revenue', a credit balance is normal (so balance would typically be negative or tracked differently).
-  // This is a simplification for the prototype.
-  
-  // For accounts like "Service Revenue", where credits increase the balance (credit balance accounts)
-  // we might need to adjust logic if we want to show balance as positive.
-  // For now, we'll use a consistent calculation: debit adds, credit subtracts.
-  // This means revenue accounts will show negative balances, which is correct from a trial balance perspective.
-
   const ledgerTransactions: LedgerTransaction[] = relevantEntries.map(entry => {
     let debitAmount: number | null = null;
     let creditAmount: number | null = null;
@@ -88,7 +89,7 @@ async function fetchLedgerTransactions(
     }
     
     return {
-      id: entry.id, // Use journal entry ID
+      id: entry.id, 
       date: entry.date,
       description: entry.description,
       debit: debitAmount,
@@ -103,27 +104,37 @@ async function fetchLedgerTransactions(
 
 
 export default function LedgerPage() {
+  const { user: currentUser } = useAuth();
   const [ledgerData, setLedgerData] = useState<{ accountName: string; transactions: LedgerTransaction[] }>({ accountName: "Cash", transactions: [] });
   const [isLoading, setIsLoading] = useState(true);
   const [currentFilters, setCurrentFilters] = useState<{ account?: string; dateRange?: DateRange, searchTerm?: string  }>({ account: "Cash" });
 
   const loadLedgerData = useCallback(async (filters: { account?: string; dateRange?: DateRange, searchTerm?: string }) => {
+    if (!currentUser) { // Don't load if no user
+      setIsLoading(false);
+      setLedgerData({ accountName: filters.account || "Cash", transactions: []});
+      return;
+    }
     setIsLoading(true);
-    const data = await fetchLedgerTransactions(filters.account, filters.dateRange, filters.searchTerm);
-    setLedgerData(data);
-    setIsLoading(false);
-  }, []);
+    try {
+        const data = await fetchLedgerTransactions(filters.account, filters.dateRange, filters.searchTerm);
+        setLedgerData(data);
+    } catch (error) {
+        console.error("Failed to load ledger data:", error);
+        setLedgerData({ accountName: filters.account || "Cash", transactions: []}); // Reset on error
+    } finally {
+        setIsLoading(false);
+    }
+  }, [currentUser]); // Add currentUser as dependency
 
   useEffect(() => {
     loadLedgerData(currentFilters);
   }, [loadLedgerData, currentFilters]);
 
   const handleFilterChange = (newFilters: { account?: string; dateRange?: DateRange, searchTerm?: string }) => {
-    setCurrentFilters(prev => ({...prev, ...newFilters})); // Merge new filters with existing ones
+    setCurrentFilters(prev => ({...prev, ...newFilters}));
   };
   
-  // Make sure LedgerFilters component receives the updated accountsOptions
-  // and uses the correct default account if needed.
 
   return (
     <div className="space-y-6">
@@ -136,12 +147,13 @@ export default function LedgerPage() {
         </Button>
       </PageTitle>
 
-      <LedgerFilters onFilterChange={handleFilterChange} /> {/* Ensure LedgerFilters is passed accountsOptions if it needs them */}
+      <LedgerFilters onFilterChange={handleFilterChange} />
 
       {isLoading ? (
-        <div className="flex justify-center items-center h-64">
-          <p className="text-muted-foreground">Loading ledger data...</p>
-        </div>
+         <div className="space-y-2">
+           <Skeleton className="h-12 w-full" />
+           <Skeleton className="h-64 w-full" />
+         </div>
       ) : (
         <LedgerTable accountName={ledgerData.accountName} transactions={ledgerData.transactions} />
       )}
