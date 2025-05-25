@@ -19,6 +19,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { format, startOfMonth, endOfMonth, subMonths, eachMonthOfInterval } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext"; // Import useAuth
+import { useToast } from "@/hooks/use-toast";
 
 interface ChartPoint {
   month: string;
@@ -42,6 +43,7 @@ export default function DashboardPage() {
       to: endOfMonth(today),
     };
   });
+  const { toast } = useToast();
 
   // State for Summary Cards
   const [summaryData, setSummaryData] = useState({
@@ -253,10 +255,12 @@ export default function DashboardPage() {
           if (currentUser && userId === currentUser.uid) {
             displayName = currentUser.displayName || `User ...${userId.slice(-6)}`;
             if (currentUser.displayName) {
-              avatarFallbackText = currentUser.displayName.substring(0, 2);
+              avatarFallbackText = currentUser.displayName.substring(0, 2).toUpperCase();
             } else if (currentUser.email) {
-              avatarFallbackText = currentUser.email.substring(0, 2);
+              avatarFallbackText = currentUser.email.substring(0, 2).toUpperCase();
             }
+          } else if (currentUser && currentUser.displayName) { // Handle other users if a display name is available (less likely without a user profile DB)
+             // This branch might not be very effective without a way to get other users' display names
           }
           
           return {
@@ -303,6 +307,63 @@ export default function DashboardPage() {
   }, [allJournalEntries, dateRange, clientLocale, currentUser]); // Added currentUser as a dependency
 
 
+  const handleDownloadReport = () => {
+    if (!profitLossReportData) {
+      toast({
+        variant: "destructive",
+        title: "No Report Data",
+        description: "Please ensure there is data loaded for the selected period.",
+      });
+      return;
+    }
+
+    const { revenueItems, expenseItems, totalRevenue, totalExpenses, netProfit, formattedDateRange } = profitLossReportData;
+
+    let csvContent = "KENESIS Accounting - Profit & Loss Statement\n";
+    csvContent += `Period: ${formattedDateRange}\n\n`;
+    csvContent += "Account,Amount (INR)\n";
+
+    csvContent += "Revenue\n";
+    revenueItems.forEach(item => {
+      csvContent += `"${item.accountName}",${item.amount}\n`;
+    });
+    csvContent += "Total Revenue," + totalRevenue + "\n\n";
+
+    csvContent += "Expenses\n";
+    expenseItems.forEach(item => {
+      csvContent += `"${item.accountName}",${item.amount}\n`;
+    });
+    csvContent += "Total Expenses," + totalExpenses + "\n\n";
+
+    csvContent += "Net Profit / (Loss)," + netProfit + "\n";
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      const fromDateStr = dateRange?.from ? format(dateRange.from, "yyyyMMdd") : "alltime";
+      const toDateStr = dateRange?.to ? format(dateRange.to, "yyyyMMdd") : "";
+      link.setAttribute("href", url);
+      link.setAttribute("download", `Profit_Loss_Report_KENESIS_${fromDateStr}${toDateStr ? '-' + toDateStr : ''}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+       toast({
+        title: "Report Downloaded",
+        description: "Profit & Loss Statement CSV has been downloaded.",
+      });
+    } else {
+       toast({
+        variant: "destructive",
+        title: "Download Failed",
+        description: "Your browser does not support this download method.",
+      });
+    }
+  };
+
+
   return (
     <div className="space-y-6 md:space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
@@ -340,7 +401,7 @@ export default function DashboardPage() {
                 />
               </PopoverContent>
             </Popover>
-          <Button variant="default"> 
+          <Button variant="default" onClick={handleDownloadReport}> 
             <Download className="mr-2 h-4 w-4" /> Download
           </Button>
         </div>
