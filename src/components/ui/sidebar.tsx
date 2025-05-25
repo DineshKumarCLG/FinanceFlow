@@ -141,7 +141,7 @@ const SidebarProvider = React.forwardRef<
               } as React.CSSProperties
             }
             className={cn(
-              "group/sidebar-wrapper flex min-h-svh w-full has-[[data-variant=inset]]:bg-sidebar",
+              "group/sidebar-wrapper flex min-h-svh w-full has-[[data-variant=inset]]:bg-sidebar", // min-h-svh here might be relevant for AppLayout taking full height
               className
             )}
             ref={ref}
@@ -175,23 +175,40 @@ const Sidebar = React.forwardRef<
     },
     ref
   ) => {
-    const { state } = useSidebar() // isMobile and openMobile not needed here if BottomNavBar handles mobile
+    const { state, isMobile } = useSidebar() 
 
-    // Sidebar is now primarily for desktop, controlled by AppLayout's responsive classes
-    // No need for Sheet logic here if BottomNavBar is used for mobile.
-
+    if (isMobile && collapsible === "offcanvas") {
+      // Mobile off-canvas sidebar (if needed for other purposes than main nav)
+      return (
+        <Sheet open={state === "expanded"} onOpenChange={(open) => {
+          // This assumes `setOpen` from `useSidebar` controls this sheet's visibility
+          // If `setOpen` is for the desktop sidebar, you might need a separate mobileOpen state
+          const { setOpen } = useSidebar();
+          setOpen(open);
+        }}>
+          <SheetContent
+            side={side}
+            className={cn("w-[--sidebar-width-mobile] p-0", className)}
+            data-sidebar="sidebar"
+          >
+             <SheetTitle className="sr-only">Main Navigation</SheetTitle>
+            {children}
+          </SheetContent>
+        </Sheet>
+      )
+    }
+    
+    // Desktop collapsible sidebar
     return (
       <div
         ref={ref}
-        // className is passed from AppLayout which should include responsive visibility (e.g., "hidden md:flex")
-        className={cn("group peer text-sidebar-foreground", className)}
+        className={cn("group peer text-sidebar-foreground", className)} // className is passed from AppLayout
         data-state={state}
         data-collapsible={state === "collapsed" ? collapsible : ""}
         data-variant={variant}
         data-side={side}
-        {...props} // Pass through other props like style
+        {...props} 
       >
-        {/* This is what handles the sidebar gap on desktop */}
         <div
           className={cn(
             "duration-200 relative h-svh w-[--sidebar-width] bg-transparent transition-[width] ease-linear",
@@ -204,14 +221,13 @@ const Sidebar = React.forwardRef<
         />
         <div
           className={cn(
-            "duration-200 fixed inset-y-0 z-10 h-svh w-[--sidebar-width] transition-[left,right,width] ease-linear md:flex", // ensure it's flex for children
+            "duration-200 fixed inset-y-0 z-10 h-svh w-[--sidebar-width] transition-[left,right,width] ease-linear md:flex", 
             side === "left"
               ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
               : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
             variant === "floating" || variant === "inset"
               ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)]"
               : "group-data-[collapsible=icon]:w-[--sidebar-width-icon] group-data-[side=left]:border-r group-data-[side=right]:border-l",
-             // The className from props will control md:hidden/md:flex etc.
           )}
         >
           <div
@@ -239,7 +255,7 @@ const SidebarTrigger = React.forwardRef<
       data-sidebar="trigger"
       variant="ghost"
       size="icon"
-      className={cn("h-7 w-7", className)} // className from Header will control md:flex
+      className={cn("h-7 w-7", className)} 
       onClick={(event) => {
         onClick?.(event)
         toggleSidebar()
@@ -290,7 +306,7 @@ const SidebarInset = React.forwardRef<
     <main
       ref={ref}
       className={cn(
-        "relative flex min-h-svh flex-1 flex-col bg-background",
+        "relative flex flex-1 flex-col bg-background", // Removed min-h-svh
         "peer-data-[variant=inset]:min-h-[calc(100svh-theme(spacing.4))] md:peer-data-[variant=inset]:m-2 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow",
         className
       )}

@@ -1,3 +1,4 @@
+
 import type { Metadata } from 'next';
 // import { GeistSans } from 'geist/font/sans'; // Removed GeistSans
 // import { GeistMono } from 'geist/font/mono'; // Keep commented out or remove if not used elsewhere
@@ -11,14 +12,6 @@ export const metadata: Metadata = {
   description: 'AI-Powered Accounting Assistant for Small Businesses',
 };
 
-// const geistSans = GeistSans({ // Removed GeistSans
-//   variable: '--font-geist-sans',
-// });
-
-// const geistMono = GeistMono({ // Keep commented out
-//   variable: '--font-geist-mono',
-// });
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -26,8 +19,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      {/* Use .variable directly from the imported GeistSans and GeistMono objects */}
-      {/* Removed geistSans.variable and geistMono.variable */}
       <body className={`antialiased flex flex-col min-h-screen`}>
         <AuthProvider>
           <TooltipProvider>
@@ -35,7 +26,7 @@ export default function RootLayout({
               {children}
             </div>
             <Toaster />
-            <footer className="py-4 text-center text-sm text-muted-foreground">
+            <footer className="py-4 text-center text-sm text-muted-foreground border-t">
               <p>
                 Made with ❤️ by <span className="font-semibold">Kenesis</span>
               </p>
