@@ -1,8 +1,9 @@
+
 "use client"
 
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ChartTooltipContent } from "@/components/ui/chart" // Assuming ChartTooltipContent is part of ShadCN chart components
+import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 
 // Placeholder data
 const chartData = [
@@ -14,6 +15,17 @@ const chartData = [
   { month: "Jun", income: 2140, expense: 1100 },
 ];
 
+const chartConfig = {
+  income: {
+    label: "Income",
+    color: "hsl(var(--primary))",
+  },
+  expense: {
+    label: "Expenses",
+    color: "hsl(var(--accent))",
+  },
+} satisfies ChartConfig;
+
 export function IncomeExpenseChart() {
   return (
     <Card className="shadow-md">
@@ -23,31 +35,33 @@ export function IncomeExpenseChart() {
       </CardHeader>
       <CardContent>
         <div className="h-[300px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 5, right: 0, left: -25, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis 
-                dataKey="month" 
-                stroke="hsl(var(--muted-foreground))"
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis 
-                stroke="hsl(var(--muted-foreground))"
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(value) => `$${value/1000}k`}
-              />
-              <Tooltip
-                cursor={{ fill: 'hsl(var(--muted))', radius: 4 }}
-                content={<ChartTooltipContent />}
-              />
-              <Bar dataKey="income" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Income" />
-              <Bar dataKey="expense" fill="hsl(var(--accent))" radius={[4, 4, 0, 0]} name="Expenses" />
-            </BarChart>
-          </ResponsiveContainer>
+          <ChartContainer config={chartConfig} className="w-full h-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 5, right: 0, left: -25, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis
+                  dataKey="month"
+                  stroke="hsl(var(--muted-foreground))"
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  stroke="hsl(var(--muted-foreground))"
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(value) => `$${value/1000}k`}
+                />
+                <Tooltip
+                  cursor={{ fill: 'hsl(var(--muted))', radius: 4 }}
+                  content={<ChartTooltipContent />}
+                />
+                <Bar dataKey="income" fill="var(--color-income)" radius={[4, 4, 0, 0]} name="Income" />
+                <Bar dataKey="expense" fill="var(--color-expense)" radius={[4, 4, 0, 0]} name="Expenses" />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartContainer>
         </div>
       </CardContent>
     </Card>
