@@ -4,12 +4,9 @@
 import { PageTitle } from "@/components/shared/PageTitle";
 import { SummaryCard } from "@/components/dashboard/SummaryCard";
 import { IncomeExpenseChart } from "@/components/dashboard/IncomeExpenseChart";
-// import { AnalyticsOverview, type AnalyticsKpiData, type ExpenseCategoryData as AnalyticsExpenseCategoryData } from "@/components/dashboard/AnalyticsOverview"; // Will be dynamically imported
-// import { ProfitLossReport, type ProfitLossReportData, type ReportLineItem as PLReportLineItem } from "@/components/dashboard/ProfitLossReport"; // Will be dynamically imported
-import { DollarSign, TrendingUp, TrendingDown, Activity, CalendarDays, Download } from "lucide-react"; 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { UserSpendingList, type UserSpending } from "@/components/dashboard/UserSpendingList"; 
-// import { NotificationList, type Notification } from "@/components/dashboard/NotificationList"; // Will be dynamically imported
+import { DollarSign, TrendingUp, TrendingDown, Activity, CalendarDays, Download } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"; // Removed CardDescription from here as it's handled in dynamic import
+import { UserSpendingList, type UserSpending } from "@/components/dashboard/UserSpendingList";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
@@ -24,29 +21,56 @@ import { Skeleton } from "@/components/ui/skeleton";
 import dynamic from 'next/dynamic';
 
 // Dynamically import components for tab content
-const AnalyticsOverview = dynamic(() => import('@/components/dashboard/AnalyticsOverview').then(mod => mod.AnalyticsOverview), { 
-  ssr: false, 
-  loading: () => <div className="grid gap-6"><div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32 rounded-lg" />)}</div><Skeleton className="h-80 rounded-lg" /></div> 
+const AnalyticsOverview = dynamic(() => import('@/components/dashboard/AnalyticsOverview').then(mod => mod.AnalyticsOverview), {
+  ssr: false,
+  loading: () => <div className="grid gap-6"><div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32 rounded-lg" />)}</div><Skeleton className="h-80 rounded-lg" /></div>
 });
 import type { AnalyticsKpiData, ExpenseCategoryData as AnalyticsExpenseCategoryData } from "@/components/dashboard/AnalyticsOverview";
 
-const ProfitLossReport = dynamic(() => import('@/components/dashboard/ProfitLossReport').then(mod => mod.ProfitLossReport), { 
-  ssr: false, 
-  loading: () => <Card><CardHeader><Skeleton className="h-6 w-1/2 mb-2" /><Skeleton className="h-4 w-1/3" /></CardHeader><CardContent><Skeleton className="h-40 w-full" /></CardContent></Card> 
+const ProfitLossReport = dynamic(() => import('@/components/dashboard/ProfitLossReport').then(mod => mod.ProfitLossReport), {
+  ssr: false,
+  loading: () => {
+    const { Card: DynCard, CardHeader: DynCardHeader, CardContent: DynCardContent } = require('@/components/ui/card');
+    const { Skeleton: DynSkeleton } = require('@/components/ui/skeleton');
+    return <DynCard><DynCardHeader><DynSkeleton className="h-6 w-1/2 mb-2" /><DynSkeleton className="h-4 w-1/3" /></DynCardHeader><DynCardContent><DynSkeleton className="h-40 w-full" /></DynCardContent></DynCard>;
+  }
 });
 import type { ProfitLossReportData, ReportLineItem as PLReportLineItem } from "@/components/dashboard/ProfitLossReport";
 
-const NotificationList = dynamic(() => import('@/components/dashboard/NotificationList').then(mod => mod.NotificationList), { 
-  ssr: false, 
-  loading: () => <Card><CardHeader><CardTitle>Notifications</CardTitle><CardDescription>Loading latest updates...</CardDescription></CardHeader><CardContent className="space-y-4">{[...Array(3)].map((_, i) => (<div key={i} className="flex items-center gap-4 p-3 animate-pulse"><div className="h-10 w-10 rounded-full bg-muted"></div><div className="flex-1 space-y-2"><div className="h-4 bg-muted rounded w-3/4"></div><div className="h-3 bg-muted rounded w-1/2"></div></div></div>))}</CardContent></Card>
+const NotificationList = dynamic(() => import('@/components/dashboard/NotificationList').then(mod => mod.NotificationList), {
+  ssr: false,
+  loading: () => {
+    // Explicitly require Card components used in the loading skeleton
+    const { Card: DynCard, CardHeader: DynCardHeader, CardTitle: DynCardTitle, CardDescription: DynCardDescription, CardContent: DynCardContent } = require('@/components/ui/card');
+    const { Skeleton: DynSkeleton } = require('@/components/ui/skeleton'); // Assuming Skeleton might be needed for a better loader
+    return (
+      <DynCard>
+        <DynCardHeader>
+          <DynCardTitle>Notifications</DynCardTitle>
+          <DynCardDescription>Loading latest updates...</DynCardDescription>
+        </DynCardHeader>
+        <DynCardContent className="space-y-4">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="flex items-center gap-4 p-3 animate-pulse">
+              <div className="h-10 w-10 rounded-full bg-muted"></div>
+              <div className="flex-1 space-y-2">
+                <DynSkeleton className="h-4 bg-muted rounded w-3/4" />
+                <DynSkeleton className="h-3 bg-muted rounded w-1/2" />
+              </div>
+            </div>
+          ))}
+        </DynCardContent>
+      </DynCard>
+    );
+  }
 });
-import type { Notification } from "@/lib/data-service"; // Use StoredNotification as Notification
+import type { Notification } from "@/lib/data-service";
 
 
 interface ChartPoint {
   month: string;
-  income: number; 
-  expense: number; 
+  income: number;
+  expense: number;
 }
 
 export const incomeKeywords = ['revenue', 'sales', 'income', 'service fee', 'interest received'];
@@ -61,16 +85,16 @@ export default function DashboardPage() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const today = new Date();
     return {
-      from: startOfMonth(subMonths(today, 5)), 
+      from: startOfMonth(subMonths(today, 5)),
       to: endOfMonth(today),
     };
   });
   const { toast } = useToast();
 
   const [summaryData, setSummaryData] = useState({
-    totalRevenue: 0, 
+    totalRevenue: 0,
     totalExpenses: 0,
-    netProfit: 0,    
+    netProfit: 0,
     transactionCount: 0,
   });
   const [chartDisplayData, setChartDisplayData] = useState<ChartPoint[]>([]);
@@ -100,14 +124,14 @@ export default function DashboardPage() {
         return;
       }
       console.log("Dashboard: Starting to load initial data...");
-      setIsLoadingData(true); 
+      setIsLoadingData(true);
       setIsLoadingNotifications(true);
       try {
         const [fetchedEntries, fetchedNotifications] = await Promise.all([
           getJournalEntries(),
           getNotifications()
         ]);
-        
+
         setAllJournalEntries(fetchedEntries);
         setNotifications(fetchedNotifications);
 
@@ -121,7 +145,7 @@ export default function DashboardPage() {
          setSummaryData({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
          setUserSpendingData([]);
          setNotifications([]);
-         setAllJournalEntries([]); 
+         setAllJournalEntries([]);
          const now = new Date();
          setChartDisplayData(
              Array.from({ length: 12 }).map((_, i) => {
@@ -138,14 +162,14 @@ export default function DashboardPage() {
         if (!currentUser) setIsLoadingData(false);
       }
     }
-    if (currentUser) { // Only load if currentUser is available
+    if (currentUser) {
       loadInitialData();
-    } else { // If no currentUser yet, set loading to false to avoid indefinite loading screen
+    } else {
       setIsLoadingData(false);
       setIsLoadingNotifications(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser, toast]); 
+  }, [currentUser, toast]);
 
 
   // Centralized data processing useEffect
@@ -155,21 +179,21 @@ export default function DashboardPage() {
 
     if (!dateRange?.from || !dateRange?.to) {
       console.log("Dashboard: Date range not fully set, skipping processing.");
-      if (allJournalEntries.length === 0 && !isLoadingData) { // Handle initial empty state before entries load
-        setIsLoadingData(false); // Ensure loader is off if nothing to process yet
+      if (allJournalEntries.length === 0 && !isLoadingData) {
+        setIsLoadingData(false);
       }
       return;
     }
-    
-    setIsLoadingData(true); 
 
-    if (!currentUser && allJournalEntries.length === 0) { 
+    setIsLoadingData(true);
+
+    if (!currentUser && allJournalEntries.length === 0) {
         console.log("Dashboard: No current user and no journal entries. Setting defaults for empty state.");
         setSummaryData({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
         const now = new Date();
         setChartDisplayData(
              eachMonthOfInterval({ start: startOfMonth(subMonths(now, 11)), end: endOfMonth(now) }).map(d => ({
-                month: d.toLocaleString(clientLocale, { month: 'short' }), income: 0, expense: 0 
+                month: d.toLocaleString(clientLocale, { month: 'short' }), income: 0, expense: 0
             }))
         );
         setUserSpendingData([]);
@@ -183,11 +207,11 @@ export default function DashboardPage() {
         console.log(`Dashboard: Finished processing (no user/entries) in ${Date.now() - overallProcessingStartTime}ms.`);
         return;
     }
-    
+
     console.log("Dashboard: Starting calculations for", allJournalEntries.length, "entries.");
     let sectionStartTime = Date.now();
 
-    let calculatedTotalRevenue = 0; 
+    let calculatedTotalRevenue = 0;
     let calculatedTotalExpenses = 0;
     let transactionCountInRange = 0;
     const monthlyAggregates: Record<string, { income: number; expense: number; monthLabel: string; yearMonth: string }> = {};
@@ -197,9 +221,9 @@ export default function DashboardPage() {
     let analyticsIncomeTransactions = 0;
     let analyticsExpenseTransactions = 0;
     const expensesByAccountForAnalytics: Record<string, number> = {};
-    let analyticsTotalRevenueForMargin = 0; 
-    let analyticsTotalExpensesForMargin = 0; 
-    
+    let analyticsTotalRevenueForMargin = 0;
+    let analyticsTotalExpensesForMargin = 0;
+
     const revenuesForReport: Record<string, number> = {};
     const expensesForReport: Record<string, number> = {};
     let reportTotalRevenue = 0;
@@ -218,11 +242,11 @@ export default function DashboardPage() {
     });
     console.log(`Dashboard: Initial month setup for chart took ${Date.now() - sectionStartTime}ms.`);
     sectionStartTime = Date.now();
-    
+
     allJournalEntries.forEach(entry => {
-      const entryDate = new Date(entry.date); 
+      const entryDate = new Date(entry.date);
       const entryYearMonth = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
-      
+
       const isWithinRange = entryDate >= dateRange.from! && entryDate <= dateRange.to!;
       let isIncomeEntry = false;
       let isExpenseEntry = false;
@@ -234,15 +258,15 @@ export default function DashboardPage() {
       if (expenseKeywords.some(keyword => (entry.debitAccount?.toLowerCase().includes(keyword) || entry.description.toLowerCase().includes(keyword)))) {
           isExpenseEntry = true;
       } else if ((entry.creditAccount?.toLowerCase().includes('cash') || entry.creditAccount?.toLowerCase().includes('bank')) && !isIncomeEntry) {
-          isExpenseEntry = true; 
+          isExpenseEntry = true;
       }
-      
+
       if (isWithinRange) {
         transactionCountInRange++;
         if (isIncomeEntry) calculatedTotalRevenue += entry.amount;
         if (isExpenseEntry) {
           calculatedTotalExpenses += entry.amount;
-          const userId = entry.creatorUserId; 
+          const userId = entry.creatorUserId;
           userExpenses[userId] = (userExpenses[userId] || 0) + entry.amount;
         }
       }
@@ -251,7 +275,7 @@ export default function DashboardPage() {
         if (isIncomeEntry) monthlyAggregates[entryYearMonth].income += entry.amount;
         if (isExpenseEntry) monthlyAggregates[entryYearMonth].expense += entry.amount;
       }
-      
+
       analyticsTotalTransactionAmount += entry.amount;
       if (isIncomeEntry) {
         analyticsIncomeTransactions++;
@@ -263,13 +287,13 @@ export default function DashboardPage() {
         const analyticsAccount = entry.debitAccount || "Uncategorized Expense";
         expensesByAccountForAnalytics[analyticsAccount] = (expensesByAccountForAnalytics[analyticsAccount] || 0) + entry.amount;
       }
-      
+
       if (isWithinRange) {
         if (isIncomeEntry) {
           const account = entry.creditAccount || "Uncategorized Revenue";
           revenuesForReport[account] = (revenuesForReport[account] || 0) + entry.amount;
           reportTotalRevenue += entry.amount;
-        } else if (isExpenseEntry) { 
+        } else if (isExpenseEntry) {
           const account = entry.debitAccount || "Uncategorized Expense";
           expensesForReport[account] = (expensesForReport[account] || 0) + entry.amount;
           reportTotalExpenses += entry.amount;
@@ -289,8 +313,8 @@ export default function DashboardPage() {
     sectionStartTime = Date.now();
 
     const newChartData = Object.values(monthlyAggregates)
-      .sort((a, b) => a.yearMonth.localeCompare(b.yearMonth)) 
-      .map(agg => ({ month: agg.monthLabel, income: agg.income, expense: agg.expense })); 
+      .sort((a, b) => a.yearMonth.localeCompare(b.yearMonth))
+      .map(agg => ({ month: agg.monthLabel, income: agg.income, expense: agg.expense }));
     setChartDisplayData(newChartData);
     console.log(`Dashboard: Chart data state update took ${Date.now() - sectionStartTime}ms.`);
     sectionStartTime = Date.now();
@@ -298,7 +322,7 @@ export default function DashboardPage() {
     const topSpenders = Object.entries(userExpenses)
       .map(([userId, totalSpent]) => {
         let displayName = `User ...${userId.slice(-6)}`;
-        let avatarFallbackInitials = userId.substring(0, 2).toUpperCase(); 
+        let avatarFallbackInitials = userId.substring(0, 2).toUpperCase();
 
         if (currentUser && userId === currentUser.uid) {
           displayName = currentUser.displayName || `User ...${userId.slice(-6)}`;
@@ -309,10 +333,10 @@ export default function DashboardPage() {
             avatarFallbackInitials = currentUser.email.substring(0, 2).toUpperCase();
           }
         }
-        
+
         return { userId, totalSpent, displayName, avatarFallback: avatarFallbackInitials };
       })
-      .sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 5); 
+      .sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 5);
     setUserSpendingData(topSpenders);
     console.log(`Dashboard: Top spenders state update took ${Date.now() - sectionStartTime}ms.`);
     sectionStartTime = Date.now();
@@ -346,11 +370,11 @@ export default function DashboardPage() {
       formattedDateRange: formattedRange,
     });
     console.log(`Dashboard: P&L report data state update took ${Date.now() - sectionStartTime}ms.`);
-    
+
     setIsLoadingData(false);
     console.log(`Dashboard: Finished overall processing calculations in ${Date.now() - overallProcessingStartTime}ms.`);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allJournalEntries, dateRange, clientLocale, currentUser]); 
+  }, [allJournalEntries, dateRange, clientLocale, currentUser]);
 
 
   const handleDownloadReport = () => {
@@ -438,7 +462,6 @@ export default function DashboardPage() {
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="end">
                 <Calendar
-                  // initialFocus // Removed initialFocus
                   mode="range"
                   selected={dateRange}
                   onSelect={setDateRange}
@@ -446,7 +469,7 @@ export default function DashboardPage() {
                 />
               </PopoverContent>
             </Popover>
-          <Button variant="default" onClick={handleDownloadReport}> 
+          <Button variant="default" onClick={handleDownloadReport}>
             <Download className="mr-2 h-4 w-4" /> Download
           </Button>
         </div>
@@ -480,7 +503,7 @@ export default function DashboardPage() {
                 <CardHeader>
                   <CardTitle className="text-lg font-semibold">Revenue & Expense Trend (Last 12 Months)</CardTitle>
                 </CardHeader>
-                <CardContent className="pl-2 pr-4 pb-4"> 
+                <CardContent className="pl-2 pr-4 pb-4">
                    <IncomeExpenseChart chartData={chartDisplayData} isLoading={isLoadingData} />
                 </CardContent>
               </Card>

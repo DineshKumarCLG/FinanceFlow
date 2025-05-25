@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { FilePlus, UserPlus, FileText, Info } from "lucide-react";
 import { formatDistanceToNow } from 'date-fns';
+import { Skeleton } from "@/components/ui/skeleton"; // Added Skeleton import
 
 interface NotificationListProps {
   notifications: Notification[];
@@ -36,10 +37,10 @@ export function NotificationList({ notifications = [], isLoading = false }: Noti
         <CardContent className="space-y-4">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="flex items-center gap-4 p-3 animate-pulse">
-              <div className="h-10 w-10 rounded-full bg-muted"></div>
+              <Skeleton className="h-10 w-10 rounded-full" />
               <div className="flex-1 space-y-2">
-                <div className="h-4 bg-muted rounded w-3/4"></div>
-                <div className="h-3 bg-muted rounded w-1/2"></div>
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
               </div>
             </div>
           ))}
@@ -68,20 +69,39 @@ export function NotificationList({ notifications = [], isLoading = false }: Noti
         <CardDescription>Recent activity in KENESIS accounting.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-1">
-        {notifications.map((notification) => (
-          <div key={notification.id} className="flex items-start gap-3 p-3 hover:bg-muted/50 rounded-md transition-colors">
-            <Avatar className="h-10 w-10 border mt-1">
-              <AvatarImage src={`https://placehold.co/40x40.png?text=${notification.type === 'user_joined' ? 'UJ' : 'AC'}`} alt="Notification icon" data-ai-hint="activity user" />
-              <AvatarFallback>{getIconForNotificationType(notification.type)}</AvatarFallback>
-            </Avatar>
-            <div className="flex-1">
-              <p className="text-sm text-foreground">{notification.message}</p>
-              <p className="text-xs text-muted-foreground">
-                {notification.timestamp ? formatDistanceToNow(notification.timestamp.toDate(), { addSuffix: true }) : 'Just now'}
-              </p>
+        {notifications.map((notification) => {
+          let timeAgo = 'Just now';
+          if (notification.timestamp && typeof notification.timestamp.toDate === 'function') {
+            try {
+              const date = notification.timestamp.toDate();
+              // Check if the date is valid before formatting
+              if (date && !isNaN(date.getTime())) {
+                timeAgo = formatDistanceToNow(date, { addSuffix: true });
+              } else {
+                console.warn("Invalid date from notification timestamp:", notification.timestamp);
+                timeAgo = 'Invalid date'; // Or some other placeholder
+              }
+            } catch (e) {
+              console.error("Error formatting date for notification:", e, notification.timestamp);
+              timeAgo = 'Error in date'; // Or some other placeholder
+            }
+          }
+
+          return (
+            <div key={notification.id} className="flex items-start gap-3 p-3 hover:bg-muted/50 rounded-md transition-colors">
+              <Avatar className="h-10 w-10 border mt-1">
+                <AvatarImage src={`https://placehold.co/40x40.png?text=${notification.type === 'user_joined' ? 'UJ' : 'AC'}`} alt="Notification icon" data-ai-hint="activity user"/>
+                <AvatarFallback>{getIconForNotificationType(notification.type)}</AvatarFallback>
+              </Avatar>
+              <div className="flex-1">
+                <p className="text-sm text-foreground">{notification.message}</p>
+                <p className="text-xs text-muted-foreground">
+                  {timeAgo}
+                </p>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </CardContent>
     </Card>
   );
