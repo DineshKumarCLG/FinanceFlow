@@ -4,16 +4,16 @@
 import { PageTitle } from "@/components/shared/PageTitle";
 import { SummaryCard } from "@/components/dashboard/SummaryCard";
 import { IncomeExpenseChart } from "@/components/dashboard/IncomeExpenseChart";
-import { AnalyticsOverview, type AnalyticsKpiData, type ExpenseCategoryData as AnalyticsExpenseCategoryData } from "@/components/dashboard/AnalyticsOverview";
-import { ProfitLossReport, type ProfitLossReportData, type ReportLineItem as PLReportLineItem } from "@/components/dashboard/ProfitLossReport";
+// import { AnalyticsOverview, type AnalyticsKpiData, type ExpenseCategoryData as AnalyticsExpenseCategoryData } from "@/components/dashboard/AnalyticsOverview"; // Will be dynamically imported
+// import { ProfitLossReport, type ProfitLossReportData, type ReportLineItem as PLReportLineItem } from "@/components/dashboard/ProfitLossReport"; // Will be dynamically imported
 import { DollarSign, TrendingUp, TrendingDown, Activity, CalendarDays, Download } from "lucide-react"; 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { UserSpendingList, type UserSpending } from "@/components/dashboard/UserSpendingList"; 
-import { NotificationList, type Notification } from "@/components/dashboard/NotificationList";
+// import { NotificationList, type Notification } from "@/components/dashboard/NotificationList"; // Will be dynamically imported
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
-import { getJournalEntries, type JournalEntry as StoredJournalEntry, getNotifications } from "@/lib/data-service";
+import { getJournalEntries, type JournalEntry as StoredJournalEntry, getNotifications, type Notification as StoredNotification } from "@/lib/data-service";
 import type { DateRange } from "react-day-picker";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
@@ -21,6 +21,26 @@ import { format, startOfMonth, endOfMonth, subMonths, eachMonthOfInterval } from
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import dynamic from 'next/dynamic';
+
+// Dynamically import components for tab content
+const AnalyticsOverview = dynamic(() => import('@/components/dashboard/AnalyticsOverview').then(mod => mod.AnalyticsOverview), { 
+  ssr: false, 
+  loading: () => <div className="grid gap-6"><div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32 rounded-lg" />)}</div><Skeleton className="h-80 rounded-lg" /></div> 
+});
+import type { AnalyticsKpiData, ExpenseCategoryData as AnalyticsExpenseCategoryData } from "@/components/dashboard/AnalyticsOverview";
+
+const ProfitLossReport = dynamic(() => import('@/components/dashboard/ProfitLossReport').then(mod => mod.ProfitLossReport), { 
+  ssr: false, 
+  loading: () => <Card><CardHeader><Skeleton className="h-6 w-1/2 mb-2" /><Skeleton className="h-4 w-1/3" /></CardHeader><CardContent><Skeleton className="h-40 w-full" /></CardContent></Card> 
+});
+import type { ProfitLossReportData, ReportLineItem as PLReportLineItem } from "@/components/dashboard/ProfitLossReport";
+
+const NotificationList = dynamic(() => import('@/components/dashboard/NotificationList').then(mod => mod.NotificationList), { 
+  ssr: false, 
+  loading: () => <Card><CardHeader><CardTitle>Notifications</CardTitle><CardDescription>Loading latest updates...</CardDescription></CardHeader><CardContent className="space-y-4">{[...Array(3)].map((_, i) => (<div key={i} className="flex items-center gap-4 p-3 animate-pulse"><div className="h-10 w-10 rounded-full bg-muted"></div><div className="flex-1 space-y-2"><div className="h-4 bg-muted rounded w-3/4"></div><div className="h-3 bg-muted rounded w-1/2"></div></div></div>))}</CardContent></Card>
+});
+import type { Notification } from "@/lib/data-service"; // Use StoredNotification as Notification
 
 
 interface ChartPoint {
@@ -55,7 +75,7 @@ export default function DashboardPage() {
   });
   const [chartDisplayData, setChartDisplayData] = useState<ChartPoint[]>([]);
   const [userSpendingData, setUserSpendingData] = useState<UserSpending[]>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<StoredNotification[]>([]);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(true);
   const [analyticsKpis, setAnalyticsKpis] = useState<AnalyticsKpiData>({
     avgTransactionValue: 0, profitMargin: 0, incomeTransactions: 0, expenseTransactions: 0,
@@ -115,12 +135,15 @@ export default function DashboardPage() {
       } finally {
         setIsLoadingNotifications(false);
         console.log("Dashboard: Finished loading initial notifications.");
-        // setIsLoadingData will be set to false by the processing useEffect,
-        // or if currentUser is null initially and causes an early return in this effect.
         if (!currentUser) setIsLoadingData(false);
       }
     }
-    loadInitialData();
+    if (currentUser) { // Only load if currentUser is available
+      loadInitialData();
+    } else { // If no currentUser yet, set loading to false to avoid indefinite loading screen
+      setIsLoadingData(false);
+      setIsLoadingNotifications(false);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, toast]); 
 
@@ -132,8 +155,6 @@ export default function DashboardPage() {
 
     if (!dateRange?.from || !dateRange?.to) {
       console.log("Dashboard: Date range not fully set, skipping processing.");
-      // Don't set isLoadingData to false here if we're skipping, 
-      // as initial data might still be loading or this effect might run before initial load completes.
       return;
     }
     
@@ -274,19 +295,19 @@ export default function DashboardPage() {
     const topSpenders = Object.entries(userExpenses)
       .map(([userId, totalSpent]) => {
         let displayName = `User ...${userId.slice(-6)}`;
-        let avatarFallback = userId.substring(0, 2).toUpperCase(); 
+        let avatarFallbackInitials = userId.substring(0, 2).toUpperCase(); 
 
         if (currentUser && userId === currentUser.uid) {
           displayName = currentUser.displayName || `User ...${userId.slice(-6)}`;
           if (currentUser.displayName && currentUser.displayName.trim() !== "") {
             const names = currentUser.displayName.split(' ');
-            avatarFallback = names.map(n => n[0]).slice(0,2).join('').toUpperCase();
+            avatarFallbackInitials = names.map(n => n[0]).slice(0,2).join('').toUpperCase();
           } else if (currentUser.email) {
-            avatarFallback = currentUser.email.substring(0, 2).toUpperCase();
+            avatarFallbackInitials = currentUser.email.substring(0, 2).toUpperCase();
           }
         }
         
-        return { userId, totalSpent, displayName, avatarFallback };
+        return { userId, totalSpent, displayName, avatarFallback: avatarFallbackInitials };
       })
       .sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 5); 
     setUserSpendingData(topSpenders);
@@ -414,7 +435,7 @@ export default function DashboardPage() {
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="end">
                 <Calendar
-                  initialFocus
+                  // initialFocus // Removed initialFocus
                   mode="range"
                   selected={dateRange}
                   onSelect={setDateRange}
@@ -479,4 +500,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
