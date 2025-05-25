@@ -120,8 +120,8 @@ export function AddEntryForm() {
       };
       await addJournalEntry(entryToSave);
       toast({ title: "Entry Saved!", description: "The accounting entry has been successfully recorded." });
-      setParsedResult(null);
-      form.reset();
+      setParsedResult(null); // Clear the parsed result
+      form.reset(); // Reset the form fields
     } catch (e: any) {
       toast({ variant: "destructive", title: "Saving Error", description: "Could not save the entry." });
       console.error("Saving error:", e);

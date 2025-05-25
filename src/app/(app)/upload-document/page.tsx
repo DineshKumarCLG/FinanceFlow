@@ -45,9 +45,7 @@ export default function UploadDocumentPage() {
       console.error("[UploadDocumentPage] Error during AI processing:", e);
       let aiErrorMessage = "The AI failed to process the document. Please try a different document or check its quality/format.";
       if (e instanceof Error && e.message) {
-        // Be careful not to expose overly technical or sensitive error details directly to the user.
-        // For a production app, you might log `e.message` but show a more generic message to the user.
-        aiErrorMessage = `AI Error: ${e.message.substring(0, 100)}${e.message.length > 100 ? '...' : ''}`; // Keep it concise
+        aiErrorMessage = `AI Error: ${e.message.substring(0, 100)}${e.message.length > 100 ? '...' : ''}`; 
       } else if (typeof e === 'string' && e) {
         aiErrorMessage = `AI Error: ${e.substring(0, 100)}${e.length > 100 ? '...' : ''}`;
       }
@@ -71,8 +69,9 @@ export default function UploadDocumentPage() {
       }));
       await addJournalEntries(entriesToSave);
       toast({ title: "Entries Saved!", description: "The extracted accounting entries have been recorded." });
-      setExtractedData(null);
-      setCurrentFile(null); 
+      setExtractedData(null); // Clear the extracted data
+      setCurrentFile(null);  // Clear the current file
+      // Optionally, reset the FileUploader component itself if it has an internal reset mechanism
     } catch (e: any)      {
       console.error("[UploadDocumentPage] Error saving entries:", e);
       let savingErrorMessage = "Could not save the entries. Please try again.";

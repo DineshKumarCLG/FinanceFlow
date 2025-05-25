@@ -5,7 +5,7 @@ import { PageTitle } from "@/components/shared/PageTitle";
 import { SummaryCard } from "@/components/dashboard/SummaryCard";
 import { IncomeExpenseChart } from "@/components/dashboard/IncomeExpenseChart";
 import { DollarSign, TrendingUp, TrendingDown, Activity, CalendarDays, Download } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"; // Removed CardDescription from here as it's handled in dynamic import
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { UserSpendingList, type UserSpending } from "@/components/dashboard/UserSpendingList";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import dynamic from 'next/dynamic';
+import { usePathname } from 'next/navigation'; // Import usePathname
 
 // Dynamically import components for tab content
 const AnalyticsOverview = dynamic(() => import('@/components/dashboard/AnalyticsOverview').then(mod => mod.AnalyticsOverview), {
@@ -40,9 +41,8 @@ import type { ProfitLossReportData, ReportLineItem as PLReportLineItem } from "@
 const NotificationList = dynamic(() => import('@/components/dashboard/NotificationList').then(mod => mod.NotificationList), {
   ssr: false,
   loading: () => {
-    // Explicitly require Card components used in the loading skeleton
     const { Card: DynCard, CardHeader: DynCardHeader, CardTitle: DynCardTitle, CardDescription: DynCardDescription, CardContent: DynCardContent } = require('@/components/ui/card');
-    const { Skeleton: DynSkeleton } = require('@/components/ui/skeleton'); // Assuming Skeleton might be needed for a better loader
+    const { Skeleton: DynSkeleton } = require('@/components/ui/skeleton');
     return (
       <DynCard>
         <DynCardHeader>
@@ -90,6 +90,7 @@ export default function DashboardPage() {
     };
   });
   const { toast } = useToast();
+  const pathname = usePathname(); // Get current pathname
 
   const [summaryData, setSummaryData] = useState({
     totalRevenue: 0,
@@ -159,17 +160,39 @@ export default function DashboardPage() {
       } finally {
         setIsLoadingNotifications(false);
         console.log("Dashboard: Finished loading initial notifications.");
-        if (!currentUser) setIsLoadingData(false);
+        // setIsLoadingData(false) will be handled by the processing useEffect
       }
     }
-    if (currentUser) {
+    if (currentUser && pathname === '/dashboard') { // Re-fetch if current user and on dashboard page
       loadInitialData();
-    } else {
+    } else if (!currentUser) {
+      // Handle case where there's no user (e.g., after logout)
       setIsLoadingData(false);
       setIsLoadingNotifications(false);
+      setAllJournalEntries([]);
+      setNotifications([]);
+      // Reset other data states as well
+      setSummaryData({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
+      const now = new Date();
+      setChartDisplayData(
+           eachMonthOfInterval({ start: startOfMonth(subMonths(now, 11)), end: endOfMonth(now) }).map(d => ({
+              month: d.toLocaleString(clientLocale, { month: 'short' }), income: 0, expense: 0
+          }))
+      );
+      setUserSpendingData([]);
+      setAnalyticsKpis({ avgTransactionValue: 0, profitMargin: 0, incomeTransactions: 0, expenseTransactions: 0 });
+      setAnalyticsExpenseCategories([]);
+      if (dateRange?.from && dateRange?.to) {
+        const formattedRange = `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}`;
+        setProfitLossReportData({
+            revenueItems: [], expenseItems: [], totalRevenue: 0, totalExpenses: 0, netProfit: 0, formattedDateRange: formattedRange
+        });
+      } else {
+        setProfitLossReportData(undefined);
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser, toast]);
+  }, [currentUser, toast, pathname]); // Added pathname to dependency array
 
 
   // Centralized data processing useEffect
@@ -179,13 +202,14 @@ export default function DashboardPage() {
 
     if (!dateRange?.from || !dateRange?.to) {
       console.log("Dashboard: Date range not fully set, skipping processing.");
-      if (allJournalEntries.length === 0 && !isLoadingData) {
-        setIsLoadingData(false);
-      }
+      // If allJournalEntries is also empty, it might imply we are still in an initial loading phase or no data
+      if (allJournalEntries.length === 0) setIsLoadingData(false); // Ensure loading stops if no date range and no entries
       return;
     }
+    
+    // Only set loading to true if there are entries to process or if it wasn't set by loadInitialData
+    if (allJournalEntries.length > 0) setIsLoadingData(true);
 
-    setIsLoadingData(true);
 
     if (!currentUser && allJournalEntries.length === 0) {
         console.log("Dashboard: No current user and no journal entries. Setting defaults for empty state.");
@@ -333,10 +357,10 @@ export default function DashboardPage() {
             avatarFallbackInitials = currentUser.email.substring(0, 2).toUpperCase();
           }
         }
-
+        
         return { userId, totalSpent, displayName, avatarFallback: avatarFallbackInitials };
       })
-      .sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 5);
+      .sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 5); 
     setUserSpendingData(topSpenders);
     console.log(`Dashboard: Top spenders state update took ${Date.now() - sectionStartTime}ms.`);
     sectionStartTime = Date.now();
