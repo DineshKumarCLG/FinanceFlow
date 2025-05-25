@@ -36,7 +36,7 @@ export function ChatInterface() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [filePreviews, setFilePreviews] = useState<string[]>([]);
-  const [isMicSupported, setIsMicSupported] = useState(false); // New state for mic support
+  const [isMicSupported, setIsMicSupported] = useState(false);
 
   useEffect(() => {
     // Scroll to bottom when messages change
@@ -59,18 +59,20 @@ export function ChatInterface() {
           setIsListening(false);
         };
         recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
-          console.error("Speech recognition error", event.error);
           if (event.error === "no-speech") {
+            // console.info("Speech recognition: No speech detected."); // Optional: use console.info or remove logging for this case
             toast({ variant: "default", title: "Voice Input", description: "No speech detected. Please try speaking again." });
           } else if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+            console.warn("Speech recognition permission error:", event.error);
             toast({ variant: "destructive", title: "Voice Error", description: "Microphone access denied. Please enable it in your browser settings." });
           } else {
+            console.error("Speech recognition error:", event.error);
             toast({ variant: "destructive", title: "Voice Error", description: "Could not recognize speech." });
           }
           setIsListening(false);
         };
         recognitionRef.current.onend = () => setIsListening(false);
-        setIsMicSupported(true); // Set mic support to true
+        setIsMicSupported(true);
       } else {
         setIsMicSupported(false);
       }
