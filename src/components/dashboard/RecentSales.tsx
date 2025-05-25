@@ -5,46 +5,19 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useState, useEffect } from "react";
 
-// Updated data with numeric amounts
-const recentSalesData = [
-  {
-    name: "Olivia Martin",
-    email: "olivia.martin@email.com",
-    amount: 1999.00,
-    avatar: "https://placehold.co/40x40/A1E8AF/000000.png?text=OM",
-    avatarHint: "woman face",
-  },
-  {
-    name: "Jackson Lee",
-    email: "jackson.lee@email.com",
-    amount: 39.00,
-    avatar: "https://placehold.co/40x40/A8D8EA/000000.png?text=JL",
-    avatarHint: "man face",
-  },
-  {
-    name: "Isabella Nguyen",
-    email: "isabella.nguyen@email.com",
-    amount: 299.00,
-    avatar: "https://placehold.co/40x40/F2C8ED/000000.png?text=IN",
-    avatarHint: "woman face",
-  },
-  {
-    name: "William Kim",
-    email: "will@email.com",
-    amount: 99.00,
-    avatar: "https://placehold.co/40x40/F4D03F/000000.png?text=WK",
-    avatarHint: "man face",
-  },
-  {
-    name: "Sofia Davis",
-    email: "sofia.davis@email.com",
-    amount: 39.00,
-    avatar: "https://placehold.co/40x40/AED6F1/000000.png?text=SD",
-    avatarHint: "woman face",
-  },
-];
+export interface UserSpending {
+  userId: string; // creatorUserId from Firebase Auth
+  displayName: string; // Could be userId or a portion for now
+  totalSpent: number;
+  avatarFallback: string;
+}
 
-export function RecentSales() {
+interface UserSpendingListProps {
+  spendingData: UserSpending[];
+  isLoading?: boolean;
+}
+
+export function UserSpendingList({ spendingData = [], isLoading = false }: UserSpendingListProps) {
   const [clientLocale, setClientLocale] = useState('en-US');
 
   useEffect(() => {
@@ -53,30 +26,67 @@ export function RecentSales() {
     }
   }, []);
 
+  if (isLoading) {
+    return (
+      <Card className="shadow-sm border-border">
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold">User Spending</CardTitle>
+          <CardDescription>Loading spending data...</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="flex items-center gap-4 animate-pulse">
+              <div className="h-10 w-10 rounded-full bg-muted"></div>
+              <div className="flex-1 space-y-2">
+                <div className="h-4 bg-muted rounded w-3/4"></div>
+                <div className="h-3 bg-muted rounded w-1/2"></div>
+              </div>
+              <div className="h-4 bg-muted rounded w-1/4"></div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (spendingData.length === 0 && !isLoading) {
+    return (
+      <Card className="shadow-sm border-border">
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold">User Spending</CardTitle>
+          <CardDescription>No spending data available to display.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">No transactions marked as spending by users yet.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+
   return (
     <Card className="shadow-sm border-border">
       <CardHeader>
-        <CardTitle className="text-lg font-semibold">Recent Sales</CardTitle>
-        <CardDescription>You made 265 sales this month.</CardDescription>
+        <CardTitle className="text-lg font-semibold">Top User Spending</CardTitle>
+        <CardDescription>Spending activity by users based on recorded transactions.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {recentSalesData.map((sale, index) => (
-          <div key={index} className="flex items-center gap-4">
+        {spendingData.map((user) => (
+          <div key={user.userId} className="flex items-center gap-4">
             <Avatar className="h-10 w-10 border">
-              <AvatarImage src={sale.avatar} alt={sale.name} data-ai-hint={sale.avatarHint}/>
-              <AvatarFallback>
-                {sale.name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")}
-              </AvatarFallback>
+              {/* For now, no real avatar image, rely on fallback */}
+              <AvatarImage src={`https://placehold.co/40x40.png?text=${user.avatarFallback}`} alt={user.displayName} data-ai-hint="person avatar"/>
+              <AvatarFallback>{user.avatarFallback}</AvatarFallback>
             </Avatar>
-            <div className="flex-1 min-w-0"> {/* Added min-w-0 for better flex handling of long names/emails */}
-              <p className="text-sm font-medium leading-none text-foreground truncate">{sale.name}</p>
-              <p className="text-xs text-muted-foreground truncate">{sale.email}</p>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium leading-none text-foreground truncate" title={user.userId}>
+                {/* Displaying a portion of UID if name isn't available */}
+                User ...{user.userId.slice(-6)} 
+              </p>
+              {/* <p className="text-xs text-muted-foreground truncate">{user.email || 'N/A'}</p> */}
             </div>
             <div className="text-sm font-semibold text-foreground">
-              +{sale.amount.toLocaleString(clientLocale, { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {user.totalSpent.toLocaleString(clientLocale, { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
           </div>
         ))}

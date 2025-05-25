@@ -3,11 +3,11 @@
 
 import { PageTitle } from "@/components/shared/PageTitle";
 import { SummaryCard } from "@/components/dashboard/SummaryCard";
-import { QuickActions } from "@/components/dashboard/QuickActions"; // This might be replaced or restyled
+// import { QuickActions } from "@/components/dashboard/QuickActions"; // This might be replaced or restyled
 import { IncomeExpenseChart } from "@/components/dashboard/IncomeExpenseChart";
 import { DollarSign, TrendingUp, TrendingDown, Users, CreditCard, Activity, CalendarDays, Download } from "lucide-react"; // Added Users, CreditCard, Activity
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { RecentSales } from "@/components/dashboard/RecentSales"; // New component
+import { UserSpendingList, type UserSpending } from "@/components/dashboard/RecentSales"; // Updated import name
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
@@ -41,14 +41,14 @@ export default function DashboardPage() {
     to: new Date(), 
   });
 
-
   const [summaryData, setSummaryData] = useState({
     totalRevenue: 0, 
-    subscriptions: 2350, // Placeholder - will not be formatted as currency
-    sales: 12234,       // Placeholder - will not be formatted as currency
-    activeNow: 573,     // Placeholder - will not be formatted as currency
+    totalExpenses: 0, // Added for clarity
+    netProfit: 0,     // Added for clarity
+    transactionCount: 0, // Added for clarity
   });
   const [chartDisplayData, setChartDisplayData] = useState<ChartPoint[]>([]);
+  const [userSpendingData, setUserSpendingData] = useState<UserSpending[]>([]);
 
   useEffect(() => {
     if (typeof navigator !== 'undefined') {
@@ -61,56 +61,96 @@ export default function DashboardPage() {
         const fetchedEntries = await getJournalEntries();
         
         let calculatedTotalRevenue = 0; 
-        const incomeKeywords = ['revenue', 'income', 'sales', 'service fee'];
+        let calculatedTotalExpenses = 0;
+
+        const incomeKeywords = ['revenue', 'sales', 'income', 'service fee'];
+        const expenseKeywords = ['expense', 'cost', 'supply', 'rent', 'salary', 'utility', 'utilities', 'purchase'];
         
         const monthlyAggregates: Record<string, { income: number; expense: number; monthLabel: string; yearMonth: string }> = {};
+        const userExpenses: Record<string, number> = {};
+
         const now = new Date();
 
+        // Initialize monthly aggregates for the last 12 months
         for (let i = 11; i >= 0; i--) {
           const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
           const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-          const monthLabel = d.toLocaleString('default', { month: 'short' });
+          const monthLabel = d.toLocaleString(clientLocale, { month: 'short' });
           if (!monthlyAggregates[yearMonth]) {
             monthlyAggregates[yearMonth] = { income: 0, expense: 0, monthLabel, yearMonth };
           }
         }
         
         fetchedEntries.forEach(entry => {
-          if (incomeKeywords.some(keyword => entry.creditAccount.toLowerCase().includes(keyword))) {
-            calculatedTotalRevenue += entry.amount;
-          }
-
           const entryDate = new Date(entry.date);
           const entryYearMonth = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
+          const monthAggregate = monthlyAggregates[entryYearMonth];
 
-          if (monthlyAggregates[entryYearMonth]) { 
-             if (incomeKeywords.some(keyword => entry.creditAccount.toLowerCase().includes(keyword))) {
-                monthlyAggregates[entryYearMonth].income += entry.amount;
-            } else if (entry.debitAccount.toLowerCase().includes('cash') || entry.debitAccount.toLowerCase().includes('bank')) {
-                monthlyAggregates[entryYearMonth].income += entry.amount;
-            }
+          let isIncome = false;
+          let isExpense = false;
+
+          // Check for income
+          if (incomeKeywords.some(keyword => entry.creditAccount.toLowerCase().includes(keyword) || entry.description.toLowerCase().includes(keyword))) {
+            isIncome = true;
+            calculatedTotalRevenue += entry.amount;
+            if (monthAggregate) monthAggregate.income += entry.amount;
           }
+          
+          // Check for expenses based on debit account
+          if (expenseKeywords.some(keyword => entry.debitAccount.toLowerCase().includes(keyword) || entry.description.toLowerCase().includes(keyword))) {
+             isExpense = true;
+          }
+          // Check for expenses based on credit account (cash/bank outflow)
+          if (entry.creditAccount.toLowerCase().includes('cash') || entry.creditAccount.toLowerCase().includes('bank')) {
+            // If it wasn't already classified as income, it's likely an expense or transfer
+            // For simplicity, if not income, treat as expense for chart if cash/bank is credited.
+            if(!isIncome) isExpense = true;
+          }
+
+
+          if(isExpense){
+            calculatedTotalExpenses += entry.amount;
+            if (monthAggregate) monthAggregate.expense += entry.amount;
+            // Aggregate user spending
+            const userId = entry.creatorUserId;
+            userExpenses[userId] = (userExpenses[userId] || 0) + entry.amount;
+          }
+
         });
 
-        setSummaryData(prev => ({
-            ...prev, 
+        setSummaryData({
             totalRevenue: calculatedTotalRevenue,
-        }));
+            totalExpenses: calculatedTotalExpenses,
+            netProfit: calculatedTotalRevenue - calculatedTotalExpenses,
+            transactionCount: fetchedEntries.length,
+        });
 
         const newChartData = Object.values(monthlyAggregates)
           .sort((a, b) => a.yearMonth.localeCompare(b.yearMonth)) 
-          .map(agg => ({ month: agg.monthLabel, income: agg.income, expense: 0 })); 
+          .map(agg => ({ month: agg.monthLabel, income: agg.income, expense: agg.expense })); 
         setChartDisplayData(newChartData);
+
+        const topSpenders = Object.entries(userExpenses)
+          .map(([userId, totalSpent]) => ({
+            userId,
+            totalSpent,
+            displayName: `User ...${userId.slice(-6)}`, // Basic display name
+            avatarFallback: userId.substring(0, 2).toUpperCase(),
+          }))
+          .sort((a, b) => b.totalSpent - a.totalSpent)
+          .slice(0, 5); // Top 5 spenders
+        setUserSpendingData(topSpenders);
 
       } catch (error) {
         console.error("Failed to load dashboard data:", error);
-         setSummaryData({ totalRevenue: 0, subscriptions: 0, sales: 0, activeNow: 0 });
+         setSummaryData({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
          setChartDisplayData( 
             Array.from({ length: 12 }).map((_, i) => {
                 const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
-                return { month: d.toLocaleString('default', { month: 'short' }), income: 0, expense: 0 };
+                return { month: d.toLocaleString(clientLocale, { month: 'short' }), income: 0, expense: 0 };
             })
          );
+         setUserSpendingData([]);
       } finally {
         setIsLoadingData(false);
       }
@@ -179,11 +219,10 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                <SummaryCard title="Total Revenue" value={summaryData.totalRevenue} icon={DollarSign} change="+20.1% from last month" changeType="positive" />
-                {/* Subscriptions, Sales, Active Now use simple number display, not currency */}
-                <SummaryCard title="Subscriptions" value={summaryData.subscriptions} icon={Users} change="+180.1% from last month" changeType="positive" />
-                <SummaryCard title="Sales" value={summaryData.sales} icon={CreditCard} change="+19% from last month" changeType="positive" />
-                <SummaryCard title="Active Now" value={summaryData.activeNow} icon={Activity} change="+201 since last hour" changeType="positive" />
+                <SummaryCard title="Total Revenue" value={summaryData.totalRevenue} icon={DollarSign} change="+20.1%" changeType="positive" />
+                <SummaryCard title="Total Expenses" value={summaryData.totalExpenses} icon={TrendingDown} change="-5.2%" changeType="negative" />
+                <SummaryCard title="Net Profit" value={summaryData.netProfit} icon={TrendingUp} change="+15%" changeType="positive" />
+                <SummaryCard title="Transactions" value={summaryData.transactionCount} icon={Activity} />
               </div>
             )}
 
@@ -197,7 +236,7 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
               <div className="lg:col-span-1">
-                 <RecentSales />
+                 <UserSpendingList spendingData={userSpendingData} isLoading={isLoadingData} />
               </div>
             </div>
           </div>
