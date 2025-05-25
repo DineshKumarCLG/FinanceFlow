@@ -5,8 +5,8 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { UserNav } from "@/components/layout/UserNav";
 import { AppLogo } from "./AppLogo";
 import { useSidebar } from "@/components/ui/sidebar";
-import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
+// import { Input } from "@/components/ui/input"; // Removed
+// import { Search } from "lucide-react"; // Removed
 
 export function Header() {
   const { isMobile, open: sidebarOpen } = useSidebar();
@@ -27,14 +27,7 @@ export function Header() {
       </nav> */}
 
       <div className="flex flex-1 items-center justify-end space-x-2 md:space-x-4">
-        <div className="relative w-full max-w-xs ml-auto">
-          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search..."
-            className="w-full rounded-lg bg-background pl-8 h-9"
-          />
-        </div>
+        {/* Search input removed from here */}
         <UserNav />
       </div>
     </header>
