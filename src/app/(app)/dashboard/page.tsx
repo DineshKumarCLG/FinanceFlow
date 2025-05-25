@@ -47,7 +47,7 @@ const NotificationList = dynamic(() => import('@/components/dashboard/Notificati
       <DynCard>
         <DynCardHeader>
           <DynCardTitle>Notifications</DynCardTitle>
-          <CardDescription>Loading latest updates...</CardDescription>
+          <DynCardDescription>Loading latest updates...</DynCardDescription>
         </DynCardHeader>
         <DynCardContent className="space-y-4">
           {[...Array(3)].map((_, i) => (
@@ -73,8 +73,8 @@ interface ChartPoint {
   expense: number;
 }
 
-export const incomeKeywords = ['revenue', 'sales', 'income', 'service fee', 'interest received', 'consulting income', 'project revenue', 'deposit'];
-export const expenseKeywords = ['expense', 'cost', 'supply', 'rent', 'salary', 'utility', 'utilities', 'purchase', 'advertising', 'maintenance', 'insurance', 'interest paid', 'fee', 'software', 'development', 'services', 'consulting', 'contractor', 'design', 'travel', 'subscription'];
+export const incomeKeywords = ['revenue', 'sales', 'income', 'service fee', 'interest received', 'consulting income', 'project revenue', 'deposit', 'commission', 'dividend'];
+export const expenseKeywords = ['expense', 'cost', 'supply', 'rent', 'salary', 'utility', 'utilities', 'purchase', 'advertising', 'maintenance', 'insurance', 'interest paid', 'fee', 'software', 'development', 'services', 'consulting', 'contractor', 'design', 'travel', 'subscription', 'depreciation', 'amortization', 'office supplies', 'postage', 'printing', 'repairs'];
 
 
 export default function DashboardPage() {
@@ -493,7 +493,7 @@ export default function DashboardPage() {
                 <Button
                   id="date"
                   variant={"outline"}
-                  className="w-[260px] justify-start text-left font-normal bg-card hover:bg-muted"
+                  className="w-[260px] justify-start text-left font-normal bg-card"
                 >
                   <CalendarDays className="mr-2 h-4 w-4" />
                   {dateRange?.from ? (
