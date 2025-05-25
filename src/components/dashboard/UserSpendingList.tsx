@@ -7,7 +7,7 @@ import { useState, useEffect } from "react";
 
 export interface UserSpending {
   userId: string; // creatorUserId from Firebase Auth
-  displayName: string; // Could be userId or a portion for now
+  displayName: string; // This should be the actual name or the "User ...XXX" placeholder
   totalSpent: number;
   avatarFallback: string;
 }
@@ -79,7 +79,8 @@ export function UserSpendingList({ spendingData = [], isLoading = false }: UserS
             </Avatar>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium leading-none text-foreground truncate" title={user.displayName || user.userId}>
-                {user.displayName}
+                {/* Ensure that if displayName is empty, we still show a placeholder based on userId */}
+                {user.displayName && user.displayName.trim() !== "" && !user.displayName.startsWith("User ...") ? user.displayName : `User ...${user.userId.slice(-6)}`}
               </p>
             </div>
             <div className="text-sm font-semibold text-foreground">
