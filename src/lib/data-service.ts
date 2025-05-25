@@ -1,15 +1,15 @@
 
 // src/lib/data-service.ts
 import { auth, db } from './firebase'; // Import Firebase instances
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  query, 
-  where, 
+import {
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  where,
   orderBy,
-  Timestamp, 
-  serverTimestamp, 
+  Timestamp,
+  serverTimestamp,
   writeBatch,
   doc
 } from 'firebase/firestore';
@@ -39,13 +39,13 @@ export interface Notification {
 
 const JOURNAL_COLLECTION = 'journalEntries';
 const NOTIFICATION_COLLECTION = 'notifications';
-const KENESIS_COMPANY_ID = 'KENESIS_GLOBAL_CORP'; 
+const KENESIS_COMPANY_ID = 'KENESIS_GLOBAL_CORP';
 
 // --- Notification Service Functions ---
 
 export async function addNotification(
-  message: string, 
-  type: Notification['type'], 
+  message: string,
+  type: Notification['type'],
   userId?: string,
   relatedId?: string
 ): Promise<void> {
@@ -68,9 +68,9 @@ export async function getNotifications(): Promise<Notification[]> {
   console.log("DataService: Fetching notifications...");
   const startTime = Date.now();
   const currentUser = auth.currentUser;
-  if (!currentUser && KENESIS_COMPANY_ID !== 'KENESIS_GLOBAL_CORP') { 
+  if (!currentUser && KENESIS_COMPANY_ID !== 'KENESIS_GLOBAL_CORP') {
     console.warn("User not authenticated or not authorized for notifications of this company.");
-    return []; 
+    return [];
   }
    if (!currentUser) {
      console.warn("No authenticated user found. Cannot fetch notifications for KENESIS.");
@@ -86,7 +86,7 @@ export async function getNotifications(): Promise<Notification[]> {
     );
     const querySnapshot = await getDocs(q);
     const notifications: Notification[] = [];
-    querySnapshot.forEach((docSnap) => { 
+    querySnapshot.forEach((docSnap) => {
       const data = docSnap.data();
       notifications.push({
         id: docSnap.id,
@@ -123,18 +123,18 @@ export async function getJournalEntries(): Promise<JournalEntry[]> {
 
   try {
     const q = query(
-      collection(db, JOURNAL_COLLECTION), 
+      collection(db, JOURNAL_COLLECTION),
       where("companyId", "==", KENESIS_COMPANY_ID),
       // Apply user-specific filter if not for the global company
       // For KENESIS, we assume all authenticated users can see all entries.
       // If this needs to be per-user, uncomment and adjust:
-      // where("creatorUserId", "==", currentUser.uid), 
-      orderBy("date", "desc"), 
-      orderBy("createdAt", "desc") 
+      // where("creatorUserId", "==", currentUser.uid),
+      orderBy("date", "desc"),
+      orderBy("createdAt", "desc")
     );
     const querySnapshot = await getDocs(q);
     const entries: JournalEntry[] = [];
-    querySnapshot.forEach((docSnap) => { 
+    querySnapshot.forEach((docSnap) => {
       const data = docSnap.data();
       entries.push({
         id: docSnap.id,
@@ -170,12 +170,12 @@ export async function addJournalEntry(newEntryData: Omit<JournalEntry, 'id' | 'c
     const entryToSave = {
       ...newEntryData,
       creatorUserId: currentUser.uid,
-      companyId: KENESIS_COMPANY_ID, 
+      companyId: KENESIS_COMPANY_ID,
       createdAt: serverTimestamp() as Timestamp,
       tags: newEntryData.tags || [],
     };
     const docRef = await addDoc(collection(db, JOURNAL_COLLECTION), entryToSave);
-    
+
     const savedEntry: JournalEntry = {
       id: docRef.id,
       date: entryToSave.date,
@@ -192,9 +192,10 @@ export async function addJournalEntry(newEntryData: Omit<JournalEntry, 'id' | 'c
     // Fire-and-forget notification
     const shortDesc = savedEntry.description.length > 30 ? savedEntry.description.substring(0, 27) + "..." : savedEntry.description;
     const amountFormatted = savedEntry.amount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' });
+    const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
     addNotification(
-      `User ...${currentUser.uid.slice(-6)} added entry: '${shortDesc}' (${amountFormatted})`, 
-      'new_entry', 
+      `${userName} added entry: '${shortDesc}' (${amountFormatted})`,
+      'new_entry',
       currentUser.uid,
       savedEntry.id
     ).catch(err => console.error("Failed to add notification for single entry:", err));
@@ -245,7 +246,7 @@ export async function addJournalEntries(newEntriesData: Omit<JournalEntry, 'id' 
 
   try {
     await batch.commit(); // Commit all journal entries first
-    
+
     // After entries are saved, create notifications in the background (fire-and-forget)
     // This makes the UI responsive faster as it doesn't wait for notifications.
     const processNotificationsInBackground = async () => {
@@ -253,14 +254,15 @@ export async function addJournalEntries(newEntriesData: Omit<JournalEntry, 'id' 
         const notificationPromises = preparedEntries.map(savedEntry => {
           const shortDesc = savedEntry.description.length > 30 ? savedEntry.description.substring(0, 27) + "..." : savedEntry.description;
           const amountFormatted = savedEntry.amount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' });
+          const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
           return addNotification(
-            `User ...${currentUser.uid.slice(-6)} added entry from document: '${shortDesc}' (${amountFormatted})`,
-            'document_upload', 
+            `${userName} added entry from document: '${shortDesc}' (${amountFormatted})`,
+            'document_upload',
             currentUser.uid,
             savedEntry.id
           );
         });
-        
+
         // We don't await Promise.allSettled here to make the original function return faster
         // Log errors from background processing if any
         Promise.allSettled(notificationPromises).then(results => {
@@ -276,9 +278,9 @@ export async function addJournalEntries(newEntriesData: Omit<JournalEntry, 'id' 
         console.error("Error setting up background notification processing:", err);
       }
     };
-    
+
     processNotificationsInBackground(); // Fire and forget for notifications
-    
+
     return preparedEntries; // Return immediately after journal entries are committed
   } catch (error) {
     console.error("Error adding KENESIS journal entries to Firestore in batch:", error);
@@ -290,5 +292,5 @@ export interface UserProfile {
   uid: string;
   email: string | null;
   displayName: string | null;
-  companyIds: string[]; 
+  companyIds: string[];
 }
