@@ -28,12 +28,19 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       {/* Use .variable directly from the imported GeistSans and GeistMono objects */}
       {/* Removed geistSans.variable and geistMono.variable */}
-      <body className={`antialiased`}>
+      <body className={`antialiased flex flex-col min-h-screen`}>
         <AuthProvider>
           <TooltipProvider>
-            {children}
+            <div className="flex-grow">
+              {children}
+            </div>
+            <Toaster />
+            <footer className="py-4 text-center text-sm text-muted-foreground">
+              <p>
+                Made with ❤️ by <span className="font-semibold">Kenesis</span>
+              </p>
+            </footer>
           </TooltipProvider>
-          <Toaster />
         </AuthProvider>
       </body>
     </html>
