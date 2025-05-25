@@ -1,4 +1,5 @@
-// use server'
+
+'use server';
 
 /**
  * @fileOverview Provides AI-suggested tags for ledger entries.

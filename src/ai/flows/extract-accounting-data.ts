@@ -1,6 +1,4 @@
-// src/ai/flows/extract-accounting-data.ts
 'use server';
-
 /**
  * @fileOverview This file defines a Genkit flow for extracting accounting data from documents.
  *

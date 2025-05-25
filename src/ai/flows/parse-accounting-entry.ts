@@ -1,6 +1,4 @@
-// 'use server'
 'use server';
-
 /**
  * @fileOverview Parses accounting entries from text or voice input and generates double-entry journal entries.
  *
