@@ -2,11 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  /* font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif; */ /* Removed Geist Sans variable */
-  font-family: Arial, Helvetica, sans-serif; /* Fallback to system fonts */
-}
-
 @layer base {
   :root {
     /* Inspired by the provided image: Light theme with green accent */
@@ -49,21 +44,25 @@ body {
     --border: hsl(var(--border-hsl));
     --input: hsl(var(--input-hsl));
     --ring: hsl(var(--ring-hsl));
-
-    --chart-1: 100 60% 50%; /* Lime Green */
-    --chart-2: 100 70% 60%; /* Lighter Lime Green */
-    --chart-3: 220 50% 65%; /* A contrasting blue/gray if needed */
-    --chart-4: 30 80% 65%;
-    --chart-5: 270 70% 60%;
     --radius: 0.5rem;
 
-    /* Sidebar specific theme - keep it clean and simple */
-    --sidebar-background-hsl: 0 0% 100%; /* White */
+    /* Chart variables - Commented out for diagnosis */
+    /*
+    --chart-1: 100 60% 50%; 
+    --chart-2: 100 70% 60%; 
+    --chart-3: 220 50% 65%; 
+    --chart-4: 30 80% 65%;
+    --chart-5: 270 70% 60%;
+    */
+
+    /* Sidebar specific theme - Commented out for diagnosis */
+    /*
+    --sidebar-background-hsl: 0 0% 100%; 
     --sidebar-foreground-hsl: 220 9% 23%;
-    --sidebar-primary-hsl: 100 60% 50%; /* Green accent for active items */
+    --sidebar-primary-hsl: 100 60% 50%; 
     --sidebar-primary-foreground-hsl: 0 0% 100%;
     --sidebar-accent-hsl: 100 60% 50%;
-    --sidebar-accent-foreground-hsl: 0 0% 100%; /* White text on green */
+    --sidebar-accent-foreground-hsl: 0 0% 100%; 
     --sidebar-border-hsl: 240 5.9% 90%;
     --sidebar-ring-hsl: 100 60% 50%;
 
@@ -75,27 +74,29 @@ body {
     --sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground-hsl));
     --sidebar-border: hsl(var(--sidebar-border-hsl));
     --sidebar-ring: hsl(var(--sidebar-ring-hsl));
+    */
   }
 
+  /* Dark theme - Commented out for diagnosis */
+  /*
   .dark {
-    /* Dark theme inspired by the provided image's potential dark mode equivalent */
-    --background-hsl: 220 14% 10%; /* Very dark gray */
-    --foreground-hsl: 0 0% 95%; /* Light gray for text */
-    --card-hsl: 220 13% 14%; /* Slightly lighter dark gray for cards */
+    --background-hsl: 220 14% 10%; 
+    --foreground-hsl: 0 0% 95%; 
+    --card-hsl: 220 13% 14%; 
     --card-foreground-hsl: 0 0% 95%;
     --popover-hsl: 220 14% 10%;
     --popover-foreground-hsl: 0 0% 95%;
-    --primary-hsl: 0 0% 95%; /* Light gray/white for primary buttons */
-    --primary-foreground-hsl: 220 14% 10%; /* Dark text for primary buttons */
+    --primary-hsl: 0 0% 95%; 
+    --primary-foreground-hsl: 220 14% 10%; 
     --secondary-hsl: 240 3.7% 15.9%;
     --secondary-foreground-hsl: 0 0% 95%;
     --muted-hsl: 240 3.7% 15.9%;
     --muted-foreground-hsl: 240 5% 64.9%;
-    --accent-hsl: 100 60% 55%; /* Vibrant Lime Green */
-    --accent-foreground-hsl: 220 14% 10%; /* Dark text on green accent */
+    --accent-hsl: 100 60% 55%; 
+    --accent-foreground-hsl: 220 14% 10%; 
     --destructive-hsl: 0 62.8% 30.6%;
     --destructive-foreground-hsl: 0 0% 98%;
-    --border-hsl: 240 3.7% 20%; /* Darker border */
+    --border-hsl: 240 3.7% 20%; 
     --input-hsl: 240 3.7% 20%;
     --ring-hsl: 100 60% 55%;
 
@@ -105,7 +106,7 @@ body {
     --chart-4: 30 70% 60%;
     --chart-5: 270 60% 65%;
 
-    --sidebar-background-hsl: 220 14% 12%; /* Darker sidebar */
+    --sidebar-background-hsl: 220 14% 12%; 
     --sidebar-foreground-hsl: 0 0% 95%;
     --sidebar-primary-hsl: 100 60% 55%;
     --sidebar-primary-foreground-hsl: 220 14% 10%;
@@ -114,6 +115,7 @@ body {
     --sidebar-border-hsl: 240 3.7% 18%;
     --sidebar-ring-hsl: 100 60% 55%;
   }
+  */
 }
 
 @layer base {
@@ -124,5 +126,3 @@ body {
     @apply bg-background text-foreground;
   }
 }
-
-/* Removed glassmorphic as it doesn't fit the new design */
