@@ -493,7 +493,7 @@ export default function DashboardPage() {
                 <Button
                   id="date"
                   variant={"outline"}
-                  className="w-[260px] justify-start text-left font-normal bg-card"
+                  className="w-[260px] justify-start text-left font-normal bg-card hover:bg-accent hover:text-accent-foreground"
                 >
                   <CalendarDays className="mr-2 h-4 w-4" />
                   {dateRange?.from ? (
@@ -575,3 +575,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
