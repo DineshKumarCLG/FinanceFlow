@@ -20,6 +20,7 @@ import { Loader2, Mic, Send, CornerDownLeft, FileText, AlertCircle } from "lucid
 import { parseAccountingEntry, type ParseAccountingEntryOutput } from "@/ai/flows/parse-accounting-entry";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { addJournalEntry } from "@/lib/data-service";
 
 const formSchema = z.object({
   entryText: z.string().min(5, { message: "Please describe the transaction in a few words." }),
@@ -34,16 +35,21 @@ export function AddEntryForm() {
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const [clientLocale, setClientLocale] = useState('en-US'); // Default locale
 
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      entryText: "",
+    },
+  });
+  
   useEffect(() => {
-    // This effect runs only on the client, after hydration
     if (typeof navigator !== 'undefined') {
       setClientLocale(navigator.language || 'en-US');
     }
-  }, []); // Empty dependency array ensures this runs once on mount
+  }, []);
 
 
   useEffect(() => {
-    // Check for SpeechRecognition API
     if (typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRecognition) {
@@ -100,12 +106,29 @@ export function AddEntryForm() {
     }
   }
   
-  const handleConfirmEntry = () => {
-    // Placeholder for saving the entry to database
-    console.log("Confirmed Entry:", parsedResult);
-    toast({ title: "Entry Saved!", description: "The accounting entry has been successfully recorded." });
-    setParsedResult(null);
-    form.reset();
+  const handleConfirmEntry = async () => {
+    if (!parsedResult) return;
+    
+    setIsLoading(true);
+    try {
+      const entryToSave = {
+        date: parsedResult.date,
+        description: `${parsedResult.purpose} - ${parsedResult.description}`,
+        debitAccount: parsedResult.debitAccount,
+        creditAccount: parsedResult.creditAccount,
+        amount: parsedResult.amount,
+        // tags could be derived or added later
+      };
+      await addJournalEntry(entryToSave);
+      toast({ title: "Entry Saved!", description: "The accounting entry has been successfully recorded." });
+      setParsedResult(null);
+      form.reset();
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Saving Error", description: "Could not save the entry." });
+      console.error("Saving error:", e);
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -136,7 +159,7 @@ export function AddEntryForm() {
             />
             <div className="flex items-center gap-2">
               <Button type="submit" disabled={isLoading} className="flex-grow">
-                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                {isLoading && !parsedResult ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                 Parse Entry with AI
               </Button>
               {recognitionRef.current && (
@@ -173,8 +196,9 @@ export function AddEntryForm() {
                   <div><strong>Description:</strong> {parsedResult.description}</div>
                 </CardContent>
                 <CardFooter>
-                  <Button onClick={handleConfirmEntry} className="w-full">
-                    <CornerDownLeft className="mr-2 h-4 w-4" /> Confirm and Save Entry
+                  <Button onClick={handleConfirmEntry} className="w-full" disabled={isLoading}>
+                     {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CornerDownLeft className="mr-2 h-4 w-4" />}
+                    Confirm and Save Entry
                   </Button>
                 </CardFooter>
               </Card>

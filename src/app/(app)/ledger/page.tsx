@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -7,91 +8,106 @@ import { LedgerTable, type LedgerTransaction } from "@/components/ledger/LedgerT
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
 import type { DateRange } from "react-day-picker";
+import { getJournalEntries, type JournalEntry as StoredJournalEntry } from "@/lib/data-service";
 
-// Placeholder data generation (replace with actual API call)
-const allAccountsData: Record<string, LedgerTransaction[]> = {
-  "cash": [
-    { id: "c1", date: "2024-07-01", description: "Opening Balance", debit: 1000.00, credit: null, balance: 1000.00, tags: ["initial"] },
-    { id: "c2", date: "2024-07-05", description: "Received from Client A", debit: 500.00, credit: null, balance: 1500.00, tags: ["income", "client A"] },
-    { id: "c3", date: "2024-07-08", description: "Paid for Office Supplies", debit: null, credit: 75.50, balance: 1424.50, tags: ["expense", "office"] },
-  ],
-  "accounts_receivable": [
-    { id: "ar1", date: "2024-07-02", description: "Invoice #101 to Client A", debit: 500.00, credit: null, balance: 500.00, tags: ["invoice", "client A"] },
-    { id: "ar2", date: "2024-07-05", description: "Payment for Invoice #101", debit: null, credit: 500.00, balance: 0.00, tags: ["payment", "client A"] },
-  ],
-  "office_expenses": [
-    { id: "oe1", date: "2024-07-08", description: "Stationery Purchase", debit: 75.50, credit: null, balance: 75.50, tags: ["supplies"] },
-    { id: "oe2", date: "2024-07-15", description: "Printer Ink", debit: 45.00, credit: null, balance: 120.50, tags: ["supplies"] },
-  ],
-  "service_revenue": [
-     { id: "sr1", date: "2024-07-05", description: "Consulting for Client A", debit: null, credit: 500.00, balance: -500.00, tags: ["consulting", "client A"] },
-     { id: "sr2", date: "2024-07-18", description: "Project Fee Client B", debit: null, credit: 1200.00, balance: -1700.00, tags: ["project", "client B"] },
-  ],
-   "bank_account": [
-    { id: "bk1", date: "2024-07-01", description: "Initial Deposit", debit: 5000.00, credit: null, balance: 5000.00 },
-    { id: "bk2", date: "2024-07-12", description: "Rent Payment", debit: null, credit: 850.00, balance: 4150.00, tags: ["rent"] },
-  ]
-};
+// Removed allAccountsData (static data)
+
+// Accounts options can remain static for now, or be dynamically generated later
+const accountsOptions = [
+  { value: "Cash", label: "Cash" }, // Ensure value matches account names used in entries
+  { value: "Accounts Receivable", label: "Accounts Receivable" },
+  { value: "Office Expenses", label: "Office Expenses" },
+  { value: "Service Revenue", label: "Service Revenue" },
+  { value: "Bank Account", label: "Bank Account" },
+  // Add more common accounts if needed
+];
+
 
 async function fetchLedgerTransactions(
   account?: string, 
   dateRange?: DateRange, 
   searchTerm?: string
 ): Promise<{ accountName: string; transactions: LedgerTransaction[] }> {
-  await new Promise(resolve => setTimeout(resolve, 50)); // Reduced API delay
+  await new Promise(resolve => setTimeout(resolve, 0)); // Minimal delay
   
-  const selectedAccountKey = account || "cash"; // Default to cash if no account selected
-  const accountName = accountsOptions.find(acc => acc.value === selectedAccountKey)?.label || "Cash";
+  const selectedAccountKey = account || "Cash"; // Default to Cash
+  const accountName = accountsOptions.find(acc => acc.value === selectedAccountKey)?.label || selectedAccountKey;
   
-  let transactions = allAccountsData[selectedAccountKey] || [];
+  let journalEntries = await getJournalEntries();
 
+  // Filter journal entries relevant to the selected account
+  let relevantEntries = journalEntries.filter(entry => 
+    entry.debitAccount === selectedAccountKey || entry.creditAccount === selectedAccountKey
+  );
+
+  // Further filter by dateRange
   if (dateRange?.from) {
-    transactions = transactions.filter(tx => {
-      const txDate = new Date(tx.date);
+    relevantEntries = relevantEntries.filter(entry => {
+      const entryDate = new Date(entry.date);
+      // Adjust date to avoid timezone issues with comparison
+      const fromDate = new Date(dateRange.from!.getFullYear(), dateRange.from!.getMonth(), dateRange.from!.getDate());
       if (dateRange.to) {
-        return txDate >= dateRange.from! && txDate <= dateRange.to!;
+        const toDate = new Date(dateRange.to!.getFullYear(), dateRange.to!.getMonth(), dateRange.to!.getDate(), 23, 59, 59);
+        return entryDate >= fromDate && entryDate <= toDate;
       }
-      return txDate >= dateRange.from!;
+      return entryDate >= fromDate;
     });
   }
 
+  // Further filter by searchTerm in description
   if (searchTerm) {
-    transactions = transactions.filter(tx => 
-      tx.description.toLowerCase().includes(searchTerm.toLowerCase())
+    relevantEntries = relevantEntries.filter(entry => 
+      entry.description.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }
-  
-  // Recalculate balance for filtered transactions
+
+  // Sort entries by date (important for balance calculation)
+  relevantEntries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime() || a.id.localeCompare(b.id));
+
+  // Transform relevant journal entries into ledger transactions and calculate running balance
   let runningBalance = 0;
-  const processedTransactions = transactions.map(tx => {
-    if(tx.debit) runningBalance += tx.debit;
-    if(tx.credit) runningBalance -= tx.credit;
-    // For revenue/expense accounts, balance might be tracked differently.
-    // This example assumes asset/liability style balance tracking.
-    // For a real ledger, this logic needs to be robust based on account type.
-    // If the base data already has correct running balances for the full set,
-    // and we are just filtering, we might not need to recalculate IF the first item is an opening balance.
-    // For simplicity, let's assume the sample data's balance is sequential for this example.
-    // A more robust solution might involve fetching opening balance for the period.
-    return { ...tx, balance: runningBalance }; 
+  // Note: This simple balance calculation assumes all accounts behave like asset accounts (debits increase, credits decrease).
+  // Real accounting requires knowledge of account types (Asset, Liability, Equity, Revenue, Expense) for correct balance calculation.
+  // For 'Service Revenue', a credit balance is normal (so balance would typically be negative or tracked differently).
+  // This is a simplification for the prototype.
+  
+  // For accounts like "Service Revenue", where credits increase the balance (credit balance accounts)
+  // we might need to adjust logic if we want to show balance as positive.
+  // For now, we'll use a consistent calculation: debit adds, credit subtracts.
+  // This means revenue accounts will show negative balances, which is correct from a trial balance perspective.
+
+  const ledgerTransactions: LedgerTransaction[] = relevantEntries.map(entry => {
+    let debitAmount: number | null = null;
+    let creditAmount: number | null = null;
+
+    if (entry.debitAccount === selectedAccountKey) {
+      debitAmount = entry.amount;
+      runningBalance += entry.amount;
+    }
+    if (entry.creditAccount === selectedAccountKey) {
+      creditAmount = entry.amount;
+      runningBalance -= entry.amount;
+    }
+    
+    return {
+      id: entry.id, // Use journal entry ID
+      date: entry.date,
+      description: entry.description,
+      debit: debitAmount,
+      credit: creditAmount,
+      balance: runningBalance,
+      tags: entry.tags,
+    };
   });
 
-
-  return { accountName, transactions: processedTransactions };
+  return { accountName, transactions: ledgerTransactions };
 }
 
-const accountsOptions = [
-  { value: "cash", label: "Cash" },
-  { value: "accounts_receivable", label: "Accounts Receivable" },
-  { value: "office_expenses", label: "Office Expenses" },
-  { value: "service_revenue", label: "Service Revenue" },
-  { value: "bank_account", label: "Bank Account" },
-];
 
 export default function LedgerPage() {
   const [ledgerData, setLedgerData] = useState<{ accountName: string; transactions: LedgerTransaction[] }>({ accountName: "Cash", transactions: [] });
   const [isLoading, setIsLoading] = useState(true);
-  const [currentFilters, setCurrentFilters] = useState<{ account?: string; dateRange?: DateRange, searchTerm?: string  }>({ account: "cash" });
+  const [currentFilters, setCurrentFilters] = useState<{ account?: string; dateRange?: DateRange, searchTerm?: string  }>({ account: "Cash" });
 
   const loadLedgerData = useCallback(async (filters: { account?: string; dateRange?: DateRange, searchTerm?: string }) => {
     setIsLoading(true);
@@ -105,8 +121,11 @@ export default function LedgerPage() {
   }, [loadLedgerData, currentFilters]);
 
   const handleFilterChange = (newFilters: { account?: string; dateRange?: DateRange, searchTerm?: string }) => {
-    setCurrentFilters(newFilters);
+    setCurrentFilters(prev => ({...prev, ...newFilters})); // Merge new filters with existing ones
   };
+  
+  // Make sure LedgerFilters component receives the updated accountsOptions
+  // and uses the correct default account if needed.
 
   return (
     <div className="space-y-6">
@@ -119,7 +138,7 @@ export default function LedgerPage() {
         </Button>
       </PageTitle>
 
-      <LedgerFilters onFilterChange={handleFilterChange} />
+      <LedgerFilters onFilterChange={handleFilterChange} /> {/* Ensure LedgerFilters is passed accountsOptions if it needs them */}
 
       {isLoading ? (
         <div className="flex justify-center items-center h-64">

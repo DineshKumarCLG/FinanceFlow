@@ -1,27 +1,14 @@
+
 "use client";
 
 import { PageTitle } from "@/components/shared/PageTitle";
-import { JournalTable, type JournalEntry } from "@/components/journal/JournalTable";
+import { JournalTable } from "@/components/journal/JournalTable"; // JournalEntry type is also exported from here
 import { Button } from "@/components/ui/button";
 import { Download, Filter } from "lucide-react";
 import { useState, useEffect } from "react";
+import { getJournalEntries, type JournalEntry } from "@/lib/data-service"; // Import service
 
-// Placeholder data fetch function (replace with actual API call)
-async function fetchJournalEntries(): Promise<JournalEntry[]> {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 50)); // Reduced delay
-  // In a real app, this would fetch from Supabase or your backend
-  return [
-    { id: "1", date: "2024-07-15", description: "Office Supplies Purchase", debitAccount: "Office Expenses", creditAccount: "Cash", amount: 150.75, tags: ["office", "expense"] },
-    { id: "2", date: "2024-07-14", description: "Client Payment Received", debitAccount: "Cash", creditAccount: "Service Revenue", amount: 1200.00, tags: ["income", "client A"] },
-    { id: "3", date: "2024-07-13", description: "Software Subscription Renewal", debitAccount: "Software Expenses", creditAccount: "Credit Card", amount: 49.99, tags: ["software", "recurring"] },
-    { id: "4", date: "2024-07-12", description: "Rent Payment", debitAccount: "Rent Expense", creditAccount: "Bank Account", amount: 850.00, tags: ["rent", "fixed cost"] },
-    { id: "5", date: "2024-07-11", description: "Consulting Fee for Project X", debitAccount: "Consulting Expenses", creditAccount: "Cash", amount: 500.00, tags: ["consulting", "project X"] },
-    { id: "6", date: "2024-07-10", description: "Utility Bill - Electricity", debitAccount: "Utilities Expense", creditAccount: "Bank Account", amount: 75.20, tags: ["utilities", "electricity"] },
-    { id: "7", date: "2024-07-09", description: "Marketing Campaign Ads", debitAccount: "Marketing Expenses", creditAccount: "Credit Card", amount: 220.00, tags: ["marketing", "ads"] },
-  ];
-}
-
+// Removed mock fetchJournalEntries, will use data-service
 
 export default function JournalPage() {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
@@ -30,12 +17,24 @@ export default function JournalPage() {
   useEffect(() => {
     async function loadEntries() {
       setIsLoading(true);
-      const data = await fetchJournalEntries();
-      setEntries(data);
-      setIsLoading(false);
+      try {
+        const data = await getJournalEntries(); // Use data service
+        // Sort entries by date descending, then by ID if dates are same (for stable sort)
+        const sortedData = data.sort((a, b) => {
+          const dateComparison = b.date.localeCompare(a.date);
+          if (dateComparison !== 0) return dateComparison;
+          return b.id.localeCompare(a.id); // Fallback to ID for same-date entries
+        });
+        setEntries(sortedData);
+      } catch (error) {
+        console.error("Failed to load journal entries:", error);
+        // Optionally set an error state here to display to the user
+      } finally {
+        setIsLoading(false);
+      }
     }
     loadEntries();
-  }, []);
+  }, []); // Empty dependency array: runs once on mount
 
   return (
     <div className="space-y-6">

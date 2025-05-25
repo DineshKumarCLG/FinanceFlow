@@ -8,27 +8,28 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, FileText, CheckCircle, AlertCircle, CornerDownLeft } from 'lucide-react';
-import { extractAccountingData, type ExtractAccountingDataOutput } from '@/ai/flows/extract-accounting-data';
+import { extractAccountingData, type ExtractAccountingDataOutput, type ExtractAccountingDataInput } from '@/ai/flows/extract-accounting-data';
 import { useToast } from '@/hooks/use-toast';
+import { addJournalEntries } from '@/lib/data-service';
 
 export default function UploadDocumentPage() {
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isProcessingAi, setIsProcessingAi] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [extractedData, setExtractedData] = useState<ExtractAccountingDataOutput | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentFile, setCurrentFile] = useState<File | null>(null);
   const { toast } = useToast();
-  const [clientLocale, setClientLocale] = useState('en-US'); // Default locale
+  const [clientLocale, setClientLocale] = useState('en-US');
 
   useEffect(() => {
-    // This effect runs only on the client, after hydration
     if (typeof navigator !== 'undefined') {
       setClientLocale(navigator.language || 'en-US');
     }
-  }, []); // Empty dependency array ensures this runs once on mount
+  }, []);
 
   const handleFileUpload = async (file: File, dataUri: string) => {
     setCurrentFile(file);
-    setIsProcessing(true);
+    setIsProcessingAi(true);
     setExtractedData(null);
     setError(null);
 
@@ -45,18 +46,36 @@ export default function UploadDocumentPage() {
       toast({ variant: "destructive", title: "Processing Error", description: e.message || "Unknown error during document processing."});
       console.error(e);
     } finally {
-      setIsProcessing(false);
+      setIsProcessingAi(false);
     }
   };
   
-  const handleConfirmEntries = () => {
-    // Placeholder for saving entries to database
-    console.log("Confirmed Entries:", extractedData?.entries);
-    toast({ title: "Entries Saved!", description: "The extracted accounting entries have been recorded." });
-    setExtractedData(null);
-    setCurrentFile(null); 
-    // Ideally, clear FileUploader state too, or re-render it with a key change
+  const handleConfirmEntries = async () => {
+    if (!extractedData || extractedData.entries.length === 0) return;
+    setIsSaving(true);
+    try {
+      const entriesToSave = extractedData.entries.map(entry => ({
+        date: entry.date,
+        description: entry.description,
+        debitAccount: entry.debitAccount,
+        creditAccount: entry.creditAccount,
+        amount: entry.amount,
+        // Tags can be added later or via AI suggestion flow
+      }));
+      await addJournalEntries(entriesToSave);
+      toast({ title: "Entries Saved!", description: "The extracted accounting entries have been recorded." });
+      setExtractedData(null);
+      setCurrentFile(null); 
+      // TODO: Ideally, clear FileUploader state too, or re-render it with a key change
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Saving Error", description: "Could not save the entries." });
+      console.error("Saving error:", e);
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  const isLoading = isProcessingAi || isSaving;
 
   return (
     <div>
@@ -65,16 +84,16 @@ export default function UploadDocumentPage() {
         description="Upload your receipts, bills, or invoices. Our AI will extract the accounting data."
       />
       <div className="max-w-2xl mx-auto space-y-6">
-        <FileUploader onFileUpload={handleFileUpload} isProcessing={isProcessing} />
+        <FileUploader onFileUpload={handleFileUpload} isProcessing={isProcessingAi} />
 
-        {isProcessing && (
+        {isProcessingAi && (
           <div className="flex items-center justify-center text-muted-foreground">
             <Loader2 className="mr-2 h-5 w-5 animate-spin" />
             <span>AI is analyzing your document... Please wait.</span>
           </div>
         )}
 
-        {error && !isProcessing && (
+        {error && !isLoading && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Processing Error</AlertTitle>
@@ -82,7 +101,7 @@ export default function UploadDocumentPage() {
           </Alert>
         )}
 
-        {extractedData && !error && !isProcessing && (
+        {extractedData && !error && !isProcessingAi && (
           <Card className="shadow-lg">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl">
@@ -117,8 +136,9 @@ export default function UploadDocumentPage() {
             </CardContent>
             {extractedData.entries.length > 0 && (
               <CardFooter>
-                <Button onClick={handleConfirmEntries} className="w-full">
-                  <CornerDownLeft className="mr-2 h-4 w-4" /> Confirm and Save All Entries
+                <Button onClick={handleConfirmEntries} className="w-full" disabled={isSaving}>
+                  {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CornerDownLeft className="mr-2 h-4 w-4" />}
+                   Confirm and Save All Entries
                 </Button>
               </CardFooter>
             )}

@@ -5,34 +5,78 @@ import { PageTitle } from "@/components/shared/PageTitle";
 import { SummaryCard } from "@/components/dashboard/SummaryCard";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { IncomeExpenseChart } from "@/components/dashboard/IncomeExpenseChart";
-import { DollarSign, TrendingUp, TrendingDown, FileText, Users } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, FileText } from "lucide-react"; // Removed Users icon
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect } from "react";
+import { getJournalEntries, type JournalEntry as StoredJournalEntry } from "@/lib/data-service";
 
-// Placeholder data for recent transactions
-const recentTransactionsData = [
-  { id: "1", date: "2024-07-15", description: "Software Subscription", amount: -49.99, category: "Software" },
-  { id: "2", date: "2024-07-14", description: "Client Payment - Project Alpha", amount: 1200.00, category: "Income" },
-  { id: "3", date: "2024-07-13", description: "Office Supplies", amount: -75.50, category: "Office Expense" },
-  { id: "4", date: "2024-07-12", description: "Freelancer Payment", amount: -350.00, category: "Contractors" },
-  { id: "5", date: "2024-07-11", description: "Web Hosting Renewal", amount: -15.00, category: "Utilities" },
-];
-
+// Define a type for dashboard transactions if it differs from StoredJournalEntry
+interface DashboardTransaction {
+  id: string;
+  date: string;
+  description: string;
+  amount: number; // This will be signed (+ for income, - for expense)
+  debitAccount: string;
+  creditAccount: string;
+  // category?: string; // Keeping it simple, not transforming to category for now
+}
 
 export default function DashboardPage() {
-  const [clientLocale, setClientLocale] = useState('en-US'); // Default locale
-  const [recentTransactions, setRecentTransactions] = useState(recentTransactionsData);
+  const [clientLocale, setClientLocale] = useState('en-US');
+  const [recentTransactions, setRecentTransactions] = useState<DashboardTransaction[]>([]);
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(true);
+
+  // Placeholder summary data - will be calculated later if needed
+  const [summaryData, setSummaryData] = useState({
+    totalIncome: 12450, // Example static values
+    totalExpenses: 3890,
+    netProfit: 8560,
+    transactionCount: 0, // Will be updated from fetched data
+  });
 
   useEffect(() => {
-    // This effect runs only on the client, after hydration
     if (typeof navigator !== 'undefined') {
       setClientLocale(navigator.language || 'en-US');
     }
-    // In a real app, you might fetch recentTransactions here
-    // For now, we just use the static data
-    setRecentTransactions(recentTransactionsData);
+
+    async function loadRecentTransactions() {
+      setIsLoadingTransactions(true);
+      try {
+        const allEntries = await getJournalEntries();
+        const sortedEntries = allEntries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const latestEntries = sortedEntries.slice(0, 5);
+
+        const transformedTransactions: DashboardTransaction[] = latestEntries.map(entry => {
+          // Basic logic for amount sign (can be refined)
+          // For simplicity, we'll just use the entry.amount and let table display it.
+          // Or, if we want signed amounts:
+          // let signedAmount = entry.amount;
+          // if (entry.creditAccount.toLowerCase().includes('cash') || entry.creditAccount.toLowerCase().includes('bank')) {
+          //   signedAmount = -entry.amount; // Outflow
+          // } else if (entry.debitAccount.toLowerCase().includes('cash') || entry.debitAccount.toLowerCase().includes('bank')) {
+          //   signedAmount = entry.amount; // Inflow
+          // }
+          // For now, let's keep amount unsigned and rely on debit/credit for context
+          return {
+            id: entry.id,
+            date: entry.date,
+            description: entry.description,
+            amount: entry.amount,
+            debitAccount: entry.debitAccount,
+            creditAccount: entry.creditAccount,
+          };
+        });
+        setRecentTransactions(transformedTransactions);
+        setSummaryData(prev => ({ ...prev, transactionCount: allEntries.length }));
+      } catch (error) {
+        console.error("Failed to load recent transactions for dashboard:", error);
+      } finally {
+        setIsLoadingTransactions(false);
+      }
+    }
+    loadRecentTransactions();
   }, []);
 
 
@@ -41,10 +85,10 @@ export default function DashboardPage() {
       <PageTitle title="Dashboard" description="Welcome back! Here's a summary of your finances." />
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <SummaryCard title="Total Income" value="$12,450" icon={TrendingUp} change="+15.2% from last month" changeType="positive" />
-        <SummaryCard title="Total Expenses" value="$3,890" icon={TrendingDown} change="+5.1% from last month" changeType="negative"/>
-        <SummaryCard title="Net Profit" value="$8,560" icon={DollarSign} />
-        <SummaryCard title="Transactions" value="128" icon={FileText} />
+        <SummaryCard title="Total Income" value={summaryData.totalIncome.toLocaleString(clientLocale, { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 })} icon={TrendingUp} change="+15.2% from last month" changeType="positive" />
+        <SummaryCard title="Total Expenses" value={summaryData.totalExpenses.toLocaleString(clientLocale, { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 })} icon={TrendingDown} change="+5.1% from last month" changeType="negative"/>
+        <SummaryCard title="Net Profit" value={summaryData.netProfit.toLocaleString(clientLocale, { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 })} icon={DollarSign} />
+        <SummaryCard title="Transactions" value={String(summaryData.transactionCount)} icon={FileText} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -62,33 +106,40 @@ export default function DashboardPage() {
           <CardDescription>Your latest financial activities.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {recentTransactions.map((transaction) => (
-                <TableRow key={transaction.id}>
-                  <TableCell>{transaction.date}</TableCell>
-                  <TableCell className="font-medium">{transaction.description}</TableCell>
-                  <TableCell>
-                    <Badge variant={transaction.amount > 0 ? "default" : "secondary"} 
-                           className={transaction.amount > 0 ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"}>
-                      {transaction.category}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className={`text-right font-semibold ${transaction.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {transaction.amount > 0 ? `+` : ``}{transaction.amount.toLocaleString(clientLocale, { style: 'currency', currency: 'USD' })}
-                  </TableCell>
+          {isLoadingTransactions ? (
+            <div className="flex justify-center items-center h-40">
+              <p className="text-muted-foreground">Loading transactions...</p>
+            </div>
+          ) : recentTransactions.length === 0 ? (
+             <div className="flex justify-center items-center h-40">
+              <p className="text-muted-foreground">No recent transactions found.</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Debit</TableHead>
+                  <TableHead>Credit</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {recentTransactions.map((transaction) => (
+                  <TableRow key={transaction.id}>
+                    <TableCell>{transaction.date}</TableCell>
+                    <TableCell className="font-medium">{transaction.description}</TableCell>
+                    <TableCell>{transaction.debitAccount}</TableCell>
+                    <TableCell>{transaction.creditAccount}</TableCell>
+                    <TableCell className="text-right font-semibold">
+                      {transaction.amount.toLocaleString(clientLocale, { style: 'currency', currency: 'USD' })}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

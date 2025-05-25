@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Button } from "@/components/ui/button";
@@ -14,15 +15,15 @@ import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon, FilterX, Search } from "lucide-react";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
-import { useState } from "react";
+import { useState, useEffect } from "react"; // Added useEffect
 
-// Placeholder accounts
+// Updated accounts to match LedgerPage
 const accounts = [
-  { value: "cash", label: "Cash" },
-  { value: "accounts_receivable", label: "Accounts Receivable" },
-  { value: "office_expenses", label: "Office Expenses" },
-  { value: "service_revenue", label: "Service Revenue" },
-  { value: "bank_account", label: "Bank Account" },
+  { value: "Cash", label: "Cash" },
+  { value: "Accounts Receivable", label: "Accounts Receivable" },
+  { value: "Office Expenses", label: "Office Expenses" },
+  { value: "Service Revenue", label: "Service Revenue" },
+  { value: "Bank Account", label: "Bank Account" },
 ];
 
 interface LedgerFiltersProps {
@@ -30,19 +31,26 @@ interface LedgerFiltersProps {
 }
 
 export function LedgerFilters({ onFilterChange }: LedgerFiltersProps) {
-  const [selectedAccount, setSelectedAccount] = useState<string | undefined>();
+  const [selectedAccount, setSelectedAccount] = useState<string>("Cash"); // Default to Cash
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [searchTerm, setSearchTerm] = useState<string>("");
+
+  // Initialize with default filter for Cash account on mount
+  useEffect(() => {
+    onFilterChange({ account: "Cash" });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run only once on mount
+
 
   const handleApplyFilters = () => {
     onFilterChange({ account: selectedAccount, dateRange, searchTerm });
   };
 
   const handleClearFilters = () => {
-    setSelectedAccount(undefined);
+    setSelectedAccount("Cash"); // Reset to default account
     setDateRange(undefined);
     setSearchTerm("");
-    onFilterChange({});
+    onFilterChange({ account: "Cash" }); // Apply default filter on clear
   };
 
   return (

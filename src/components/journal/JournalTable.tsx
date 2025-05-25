@@ -13,38 +13,22 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
 import { useState, useEffect } from "react";
+import type { JournalEntry } from "@/lib/data-service"; // Import type from data-service
 
-// Placeholder type for journal entries
-export interface JournalEntry {
-  id: string;
-  date: string;
-  description: string;
-  debitAccount: string;
-  creditAccount: string;
-  amount: number;
-  tags?: string[];
-}
-
-// Placeholder data (remains for default, but will be overridden by props if provided)
-const sampleJournalEntries: JournalEntry[] = [
-  { id: "1", date: "2024-07-15", description: "Office Supplies Purchase", debitAccount: "Office Expenses", creditAccount: "Cash", amount: 150.75, tags: ["office", "expense"] },
-  { id: "2", date: "2024-07-14", description: "Client Payment Received", debitAccount: "Cash", creditAccount: "Service Revenue", amount: 1200.00, tags: ["income", "client A"] },
-  // ... other sample entries
-];
+// Removed sampleJournalEntries as data will come from props
 
 interface JournalTableProps {
-  entries?: JournalEntry[];
+  entries: JournalEntry[]; // Use the type from data-service
 }
 
-export function JournalTable({ entries = sampleJournalEntries }: JournalTableProps) {
-  const [clientLocale, setClientLocale] = useState('en-US'); // Default locale
+export function JournalTable({ entries = [] }: JournalTableProps) { // Default to empty array
+  const [clientLocale, setClientLocale] = useState('en-US'); 
 
   useEffect(() => {
-    // This effect runs only on the client, after hydration
     if (typeof navigator !== 'undefined') {
       setClientLocale(navigator.language || 'en-US');
     }
-  }, []); // Empty dependency array ensures this runs once on mount
+  }, []);
 
   return (
     <Card className="shadow-lg">
