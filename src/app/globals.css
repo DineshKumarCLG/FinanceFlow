@@ -2,67 +2,48 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    /* Inspired by the provided image: Light theme with green accent */
-    --background-hsl: 0 0% 98%; /* Very light gray, almost white */
-    --foreground-hsl: 220 9% 23%; /* Dark gray for text */
-    --card-hsl: 0 0% 100%; /* White */
-    --card-foreground-hsl: 220 9% 23%; /* Dark gray for text on cards */
-    --popover-hsl: 0 0% 100%; /* White */
-    --popover-foreground-hsl: 220 9% 23%;
-    --primary-hsl: 220 9% 23%; /* Dark gray/black for primary buttons like "Download" */
-    --primary-foreground-hsl: 0 0% 98%; /* Light text for primary buttons */
-    --secondary-hsl: 240 4.8% 95.9%; /* Light gray for secondary elements */
-    --secondary-foreground-hsl: 220 9% 23%;
-    --muted-hsl: 240 4.8% 95.9%;
-    --muted-foreground-hsl: 240 3.8% 46.1%; /* Lighter gray for muted text */
-    --accent-hsl: 100 60% 50%; /* Vibrant Lime Green for charts and active states */
-    --accent-foreground-hsl: 220 9% 23%; /* Dark text on green accent */
-    --destructive-hsl: 0 84.2% 60.2%;
-    --destructive-foreground-hsl: 0 0% 98%;
-    --border-hsl: 240 5.9% 90%; /* Light gray border */
-    --input-hsl: 240 5.9% 90%;
-    --ring-hsl: 100 60% 50%; /* Green for focus rings */
+/* @layer base {
+  :root { */
+    /* Default values to prevent catastrophic failure, app will look unstyled */
+    /* --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 0 0% 9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 0% 3.9%;
+    --radius: 0.5rem; */
 
-    --background: hsl(var(--background-hsl));
-    --foreground: hsl(var(--foreground-hsl));
-    --card: hsl(var(--card-hsl));
-    --card-foreground: hsl(var(--card-foreground-hsl));
-    --popover: hsl(var(--popover-hsl));
-    --popover-foreground: hsl(var(--popover-foreground-hsl));
-    --primary: hsl(var(--primary-hsl));
-    --primary-foreground: hsl(var(--primary-foreground-hsl));
-    --secondary: hsl(var(--secondary-hsl));
-    --secondary-foreground: hsl(var(--secondary-foreground-hsl));
-    --muted: hsl(var(--muted-hsl));
-    --muted-foreground: hsl(var(--muted-foreground-hsl));
-    --accent: hsl(var(--accent-hsl));
-    --accent-foreground: hsl(var(--accent-foreground-hsl));
-    --destructive: hsl(var(--destructive-hsl));
-    --destructive-foreground: hsl(var(--destructive-foreground-hsl));
-    --border: hsl(var(--border-hsl));
-    --input: hsl(var(--input-hsl));
-    --ring: hsl(var(--ring-hsl));
-    --radius: 0.5rem;
 
     /* Chart variables - Commented out for diagnosis */
     /*
-    --chart-1: 100 60% 50%; 
-    --chart-2: 100 70% 60%; 
-    --chart-3: 220 50% 65%; 
+    --chart-1: 100 60% 50%;
+    --chart-2: 100 70% 60%;
+    --chart-3: 220 50% 65%;
     --chart-4: 30 80% 65%;
     --chart-5: 270 70% 60%;
     */
 
     /* Sidebar specific theme - Commented out for diagnosis */
     /*
-    --sidebar-background-hsl: 0 0% 100%; 
+    --sidebar-background-hsl: 0 0% 100%;
     --sidebar-foreground-hsl: 220 9% 23%;
-    --sidebar-primary-hsl: 100 60% 50%; 
+    --sidebar-primary-hsl: 100 60% 50%;
     --sidebar-primary-foreground-hsl: 0 0% 100%;
     --sidebar-accent-hsl: 100 60% 50%;
-    --sidebar-accent-foreground-hsl: 0 0% 100%; 
+    --sidebar-accent-foreground-hsl: 0 0% 100%;
     --sidebar-border-hsl: 240 5.9% 90%;
     --sidebar-ring-hsl: 100 60% 50%;
 
@@ -75,28 +56,28 @@
     --sidebar-border: hsl(var(--sidebar-border-hsl));
     --sidebar-ring: hsl(var(--sidebar-ring-hsl));
     */
-  }
+  /* } */
 
   /* Dark theme - Commented out for diagnosis */
   /*
   .dark {
-    --background-hsl: 220 14% 10%; 
-    --foreground-hsl: 0 0% 95%; 
-    --card-hsl: 220 13% 14%; 
+    --background-hsl: 220 14% 10%;
+    --foreground-hsl: 0 0% 95%;
+    --card-hsl: 220 13% 14%;
     --card-foreground-hsl: 0 0% 95%;
     --popover-hsl: 220 14% 10%;
     --popover-foreground-hsl: 0 0% 95%;
-    --primary-hsl: 0 0% 95%; 
-    --primary-foreground-hsl: 220 14% 10%; 
+    --primary-hsl: 0 0% 95%;
+    --primary-foreground-hsl: 220 14% 10%;
     --secondary-hsl: 240 3.7% 15.9%;
     --secondary-foreground-hsl: 0 0% 95%;
     --muted-hsl: 240 3.7% 15.9%;
     --muted-foreground-hsl: 240 5% 64.9%;
-    --accent-hsl: 100 60% 55%; 
-    --accent-foreground-hsl: 220 14% 10%; 
+    --accent-hsl: 100 60% 55%;
+    --accent-foreground-hsl: 220 14% 10%;
     --destructive-hsl: 0 62.8% 30.6%;
     --destructive-foreground-hsl: 0 0% 98%;
-    --border-hsl: 240 3.7% 20%; 
+    --border-hsl: 240 3.7% 20%;
     --input-hsl: 240 3.7% 20%;
     --ring-hsl: 100 60% 55%;
 
@@ -106,7 +87,7 @@
     --chart-4: 30 70% 60%;
     --chart-5: 270 60% 65%;
 
-    --sidebar-background-hsl: 220 14% 12%; 
+    --sidebar-background-hsl: 220 14% 12%;
     --sidebar-foreground-hsl: 0 0% 95%;
     --sidebar-primary-hsl: 100 60% 55%;
     --sidebar-primary-foreground-hsl: 220 14% 10%;
@@ -116,13 +97,13 @@
     --sidebar-ring-hsl: 100 60% 55%;
   }
   */
-}
+/* } */
 
-@layer base {
+/* @layer base {
   * {
     @apply border-border;
   }
   body {
     @apply bg-background text-foreground;
   }
-}
+} */
