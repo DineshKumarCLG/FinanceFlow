@@ -38,4 +38,3 @@ export const SummaryCard = React.memo(function SummaryCard({ title, value, icon:
   );
 });
 SummaryCard.displayName = 'SummaryCard';
-```
