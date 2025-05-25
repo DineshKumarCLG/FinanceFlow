@@ -87,7 +87,11 @@ export function ChatInterface() {
       return;
     }
     if (isListening) {
-      recognitionRef.current.stop();
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {
+        console.warn("Error stopping speech recognition (might already be stopped):", e);
+      }
       setIsListening(false); 
     } else {
       try {
