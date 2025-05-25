@@ -47,7 +47,7 @@ const NotificationList = dynamic(() => import('@/components/dashboard/Notificati
       <DynCard>
         <DynCardHeader>
           <DynCardTitle>Notifications</DynCardTitle>
-          <DynCardDescription>Loading latest updates...</DynCardDescription>
+          <CardDescription>Loading latest updates...</CardDescription>
         </DynCardHeader>
         <DynCardContent className="space-y-4">
           {[...Array(3)].map((_, i) => (
@@ -73,8 +73,8 @@ interface ChartPoint {
   expense: number;
 }
 
-export const incomeKeywords = ['revenue', 'sales', 'income', 'service fee', 'interest received'];
-export const expenseKeywords = ['expense', 'cost', 'supply', 'rent', 'salary', 'utility', 'utilities', 'purchase', 'advertising', 'maintenance', 'insurance', 'interest paid', 'fee'];
+export const incomeKeywords = ['revenue', 'sales', 'income', 'service fee', 'interest received', 'consulting income', 'project revenue', 'deposit'];
+export const expenseKeywords = ['expense', 'cost', 'supply', 'rent', 'salary', 'utility', 'utilities', 'purchase', 'advertising', 'maintenance', 'insurance', 'interest paid', 'fee', 'software', 'development', 'services', 'consulting', 'contractor', 'design', 'travel', 'subscription'];
 
 
 export default function DashboardPage() {
@@ -90,7 +90,7 @@ export default function DashboardPage() {
     };
   });
   const { toast } = useToast();
-  const pathname = usePathname(); // Get current pathname
+  const pathname = usePathname(); 
 
   const [summaryData, setSummaryData] = useState({
     totalRevenue: 0,
@@ -160,18 +160,15 @@ export default function DashboardPage() {
       } finally {
         setIsLoadingNotifications(false);
         console.log("Dashboard: Finished loading initial notifications.");
-        // setIsLoadingData(false) will be handled by the processing useEffect
       }
     }
-    if (currentUser && pathname === '/dashboard') { // Re-fetch if current user and on dashboard page
+    if (currentUser && pathname === '/dashboard') { 
       loadInitialData();
     } else if (!currentUser) {
-      // Handle case where there's no user (e.g., after logout)
       setIsLoadingData(false);
       setIsLoadingNotifications(false);
       setAllJournalEntries([]);
       setNotifications([]);
-      // Reset other data states as well
       setSummaryData({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
       const now = new Date();
       setChartDisplayData(
@@ -192,23 +189,24 @@ export default function DashboardPage() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser, toast, pathname]); // Added pathname to dependency array
+  }, [currentUser, toast, pathname]); 
 
 
-  // Centralized data processing useEffect
   useEffect(() => {
     console.log("Dashboard: Processing effect triggered. allJournalEntries count:", allJournalEntries.length, "dateRange from:", dateRange?.from, "to:", dateRange?.to);
     const overallProcessingStartTime = Date.now();
 
     if (!dateRange?.from || !dateRange?.to) {
       console.log("Dashboard: Date range not fully set, skipping processing.");
-      // If allJournalEntries is also empty, it might imply we are still in an initial loading phase or no data
-      if (allJournalEntries.length === 0) setIsLoadingData(false); // Ensure loading stops if no date range and no entries
+      if (allJournalEntries.length === 0) setIsLoadingData(false); 
       return;
     }
     
-    // Only set loading to true if there are entries to process or if it wasn't set by loadInitialData
-    if (allJournalEntries.length > 0) setIsLoadingData(true);
+    if (allJournalEntries.length > 0 || isLoadingNotifications) { // Keep loading if notifications are still loading, or if there are entries
+        setIsLoadingData(true);
+    } else if (allJournalEntries.length === 0 && !isLoadingNotifications) { // Only stop loading if no entries AND notifications finished
+        setIsLoadingData(false);
+    }
 
 
     if (!currentUser && allJournalEntries.length === 0) {
@@ -227,7 +225,7 @@ export default function DashboardPage() {
         setProfitLossReportData({
             revenueItems: [], expenseItems: [], totalRevenue: 0, totalExpenses: 0, netProfit: 0, formattedDateRange: formattedRange
         });
-        setIsLoadingData(false);
+        setIsLoadingData(false); // Ensure loading stops here
         console.log(`Dashboard: Finished processing (no user/entries) in ${Date.now() - overallProcessingStartTime}ms.`);
         return;
     }
@@ -275,15 +273,36 @@ export default function DashboardPage() {
       let isIncomeEntry = false;
       let isExpenseEntry = false;
 
-      if (incomeKeywords.some(keyword => (entry.creditAccount?.toLowerCase().includes(keyword) || entry.description.toLowerCase().includes(keyword))) ||
-          (entry.debitAccount?.toLowerCase().includes('cash') || entry.debitAccount?.toLowerCase().includes('bank'))) {
+      const debitAccountLower = entry.debitAccount?.toLowerCase() || "";
+      const creditAccountLower = entry.creditAccount?.toLowerCase() || "";
+      const descriptionLower = entry.description.toLowerCase();
+
+      if (incomeKeywords.some(keyword => creditAccountLower.includes(keyword) || descriptionLower.includes(keyword)) ||
+          debitAccountLower.includes('cash') || debitAccountLower.includes('bank')) {
           isIncomeEntry = true;
       }
-      if (expenseKeywords.some(keyword => (entry.debitAccount?.toLowerCase().includes(keyword) || entry.description.toLowerCase().includes(keyword)))) {
+      
+      if (expenseKeywords.some(keyword => debitAccountLower.includes(keyword) || descriptionLower.includes(keyword))) {
           isExpenseEntry = true;
-      } else if ((entry.creditAccount?.toLowerCase().includes('cash') || entry.creditAccount?.toLowerCase().includes('bank')) && !isIncomeEntry) {
+      } else if ((creditAccountLower.includes('cash') || creditAccountLower.includes('bank')) && !isIncomeEntry) {
           isExpenseEntry = true;
       }
+      
+      // Refine: An entry considered income should generally not also be a primary expense for these analytics.
+      // This helps avoid double-counting or miscategorization in high-level summaries.
+      // Specific P&L would handle contra-accounts or CoGS separately.
+      if (isIncomeEntry && isExpenseEntry) {
+         // If keywords strongly suggest both, prioritize income for revenue summary, expense for expense summary.
+         // For this general classification, let's check if it's more "revenue-like" or "cost-like"
+         // A payment received (debit cash/bank) and credited to a revenue account is clearly income.
+         // A payment made (credit cash/bank) and debited to an expense account is clearly an expense.
+         // The ambiguity arises if, e.g. "Sales Expense" is debited - this is an expense.
+         // If "Revenue from Services" is credited, it's income.
+         // The current logic: incomeKeywords on creditAccount or description, OR debit to cash/bank.
+         // expenseKeywords on debitAccount or description, OR credit to cash/bank if not income.
+         // This logic is generally okay for high-level. For true P&L, account types are king.
+      }
+
 
       if (isWithinRange) {
         transactionCountInRange++;
@@ -300,6 +319,7 @@ export default function DashboardPage() {
         if (isExpenseEntry) monthlyAggregates[entryYearMonth].expense += entry.amount;
       }
 
+      // Analytics always use all entries for these global KPIs
       analyticsTotalTransactionAmount += entry.amount;
       if (isIncomeEntry) {
         analyticsIncomeTransactions++;
@@ -312,6 +332,7 @@ export default function DashboardPage() {
         expensesByAccountForAnalytics[analyticsAccount] = (expensesByAccountForAnalytics[analyticsAccount] || 0) + entry.amount;
       }
 
+      // P&L report uses entries within the selected date range
       if (isWithinRange) {
         if (isIncomeEntry) {
           const account = entry.creditAccount || "Uncategorized Revenue";
@@ -325,6 +346,8 @@ export default function DashboardPage() {
       }
     });
     console.log(`Dashboard: Main entry iteration (${allJournalEntries.length} entries) took ${Date.now() - sectionStartTime}ms.`);
+    console.log(`Dashboard: expensesByAccountForAnalytics:`, JSON.stringify(expensesByAccountForAnalytics, null, 2));
+
     sectionStartTime = Date.now();
 
     setSummaryData({
@@ -380,6 +403,8 @@ export default function DashboardPage() {
       .sort((a, b) => b.total - a.total).slice(0, 5);
     setAnalyticsExpenseCategories(topAnalyticsExpenseCategories);
     console.log(`Dashboard: Analytics expense categories state update took ${Date.now() - sectionStartTime}ms.`);
+    console.log(`Dashboard: topAnalyticsExpenseCategories:`, JSON.stringify(topAnalyticsExpenseCategories, null, 2));
+
     sectionStartTime = Date.now();
 
     const plRevenueItemsList: PLReportLineItem[] = Object.entries(revenuesForReport).map(([accountName, amount]) => ({ accountName, amount }));
