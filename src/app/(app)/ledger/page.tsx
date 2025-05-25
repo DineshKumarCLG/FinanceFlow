@@ -11,7 +11,7 @@ import type { DateRange } from "react-day-picker";
 import { getJournalEntries, type JournalEntry as StoredJournalEntry } from "@/lib/data-service";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
-import type { Timestamp } from "firebase/firestore";
+import type { Timestamp } from "firebase/firestore"; // Added import
 
 // Accounts options can remain static for now, or be dynamically generated later
 const accountsOptions = [
@@ -119,7 +119,7 @@ export default function LedgerPage() {
     try {
         const data = await fetchLedgerTransactions(filters.account, filters.dateRange, filters.searchTerm);
         setLedgerData(data);
-    } catch (error) {
+    } catch (error: any) {
         console.error("Failed to load ledger data:", error);
         setLedgerData({ accountName: filters.account || "Cash", transactions: []}); // Reset on error
     } finally {
