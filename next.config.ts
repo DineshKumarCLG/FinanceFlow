@@ -21,10 +21,15 @@ const nextConfig: NextConfig = {
   },
   // Required for Genkit to ensure server-side dependencies are handled correctly
   // and to enable environment variables to be passed to server components.
-  // As of Genkit 1.x and Next.js 14+, this might not be strictly necessary for all cases
-  // if 'use server' is correctly applied, but good for ensuring env vars.
   experimental: {
-    serverComponentsExternalPackages: ['@genkit-ai/googleai'],
+    serverComponentsExternalPackages: [
+      '@genkit-ai/googleai',
+      '@opentelemetry/api',
+      '@opentelemetry/sdk-node',
+      '@opentelemetry/sdk-trace-base',
+      '@opentelemetry/sdk-trace-node',
+      // Add other OpenTelemetry packages if specific errors point to them
+    ],
   },
 };
 
