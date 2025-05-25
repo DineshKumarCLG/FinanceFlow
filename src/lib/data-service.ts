@@ -24,7 +24,7 @@ export interface JournalEntry {
   amount: number;
   tags?: string[];
   creatorUserId: string;
-  companyId: string; // Now mandatory for scoping
+  companyId: string;
   createdAt: Timestamp | { seconds: number, nanoseconds: number };
 }
 
@@ -35,7 +35,7 @@ export interface Notification {
   timestamp: Timestamp | { seconds: number, nanoseconds: number };
   userId?: string;
   relatedId?: string;
-  companyId: string; // Now mandatory for scoping
+  companyId: string;
 }
 
 const JOURNAL_COLLECTION = 'journalEntries';
@@ -50,18 +50,18 @@ export async function addNotification(
 ): Promise<void> {
   const currentUser = auth.currentUser;
   if (!companyId) {
-    console.error("Error adding notification: companyId is required.");
+    console.error("DataService: Error adding notification: companyId is required.");
     return;
   }
   const notificationData = {
     message,
     type,
-    userId: userId || (currentUser ? currentUser.uid : null),
+    userId: userId || (currentUser ? currentUser.uid : 'SYSTEM'), // Fallback for system notifications if needed
     relatedId: relatedId || null,
-    companyId: companyId,
+    companyId: companyId, // This should be the active companyId from context
     timestamp: serverTimestamp(),
   };
-  console.log(`DataService: Attempting to add notification for company '${companyId}':`, notificationData);
+  console.log(`DataService: Attempting to add notification for company '${companyId}' by user '${currentUser?.uid || 'SYSTEM'}'. Data:`, notificationData);
   try {
     await addDoc(collection(db, NOTIFICATION_COLLECTION), notificationData);
     console.log(`DataService: Successfully added notification for company '${companyId}'.`);
@@ -81,7 +81,7 @@ export async function getNotifications(companyId: string): Promise<Notification[
     console.warn("DataService: Cannot fetch notifications: companyId is missing.");
     return [];
   }
-  console.log(`DataService: Fetching notifications for company '${companyId}'...`);
+  console.log(`DataService: User '${currentUser.uid}' attempting to fetch notifications for company '${companyId}'...`);
 
   try {
     const q = query(
@@ -89,6 +89,7 @@ export async function getNotifications(companyId: string): Promise<Notification[
       where("companyId", "==", companyId),
       orderBy("timestamp", "desc")
     );
+    console.log(`DataService: Notifications query for company '${companyId}':`, q);
     const querySnapshot = await getDocs(q);
     const notifications: Notification[] = [];
     querySnapshot.forEach((docSnap) => {
@@ -104,12 +105,12 @@ export async function getNotifications(companyId: string): Promise<Notification[
       });
     });
     const endTime = Date.now();
-    console.log(`DataService: Fetched ${notifications.length} notifications for company '${companyId}' in ${endTime - startTime}ms.`);
+    console.log(`DataService: Fetched ${notifications.length} notifications for company '${companyId}' (User: ${currentUser.uid}) in ${endTime - startTime}ms.`);
     return notifications;
   } catch (error) {
     const endTime = Date.now();
-    console.error(`DataService: Error fetching notifications for company '${companyId}' from Firestore (took ${endTime - startTime}ms):`, error);
-    throw error;
+    console.error(`DataService: Error fetching notifications for company '${companyId}' (User: ${currentUser.uid}) from Firestore (took ${endTime - startTime}ms):`, error);
+    throw error; // Re-throw to be caught by UI
   }
 }
 
@@ -124,7 +125,7 @@ export async function getJournalEntries(companyId: string): Promise<JournalEntry
     console.warn("DataService: Cannot fetch journal entries: companyId is missing.");
     return [];
   }
-  console.log(`DataService: Fetching journal entries for company '${companyId}'...`);
+  console.log(`DataService: User '${currentUser.uid}' attempting to fetch journal entries for company '${companyId}'...`);
 
   try {
     const q = query(
@@ -133,6 +134,7 @@ export async function getJournalEntries(companyId: string): Promise<JournalEntry
       orderBy("date", "desc"),
       orderBy("createdAt", "desc")
     );
+    console.log(`DataService: Journal entries query for company '${companyId}':`, q);
     const querySnapshot = await getDocs(q);
     const entries: JournalEntry[] = [];
     querySnapshot.forEach((docSnap) => {
@@ -151,12 +153,12 @@ export async function getJournalEntries(companyId: string): Promise<JournalEntry
       });
     });
     const endTime = Date.now();
-    console.log(`DataService: Fetched ${entries.length} journal entries for company '${companyId}' in ${endTime - startTime}ms.`);
+    console.log(`DataService: Fetched ${entries.length} journal entries for company '${companyId}' (User: ${currentUser.uid}) in ${endTime - startTime}ms.`);
     return entries;
   } catch (error) {
     const endTime = Date.now();
-    console.error(`DataService: Error fetching journal entries for company '${companyId}' from Firestore (took ${endTime - startTime}ms):`, error);
-    throw error;
+    console.error(`DataService: Error fetching journal entries for company '${companyId}' (User: ${currentUser.uid}) from Firestore (took ${endTime - startTime}ms):`, error);
+    throw error; // Re-throw to be caught by UI
   }
 }
 
@@ -177,11 +179,11 @@ export async function addJournalEntry(
   const entryToSave = {
     ...newEntryData,
     creatorUserId: currentUser.uid,
-    companyId: companyId,
+    companyId: companyId, // Ensure this is the active companyId from context
     createdAt: serverTimestamp() as Timestamp,
     tags: newEntryData.tags || [],
   };
-  console.log(`DataService: Attempting to add journal entry for company '${companyId}':`, entryToSave);
+  console.log(`DataService: User '${currentUser.uid}' attempting to add journal entry for company '${companyId}'. Data:`, entryToSave);
 
   try {
     const docRef = await addDoc(collection(db, JOURNAL_COLLECTION), entryToSave);
@@ -190,16 +192,16 @@ export async function addJournalEntry(
     const savedEntry: JournalEntry = {
       id: docRef.id,
       ...entryToSave,
-      createdAt: Timestamp.now() 
+      createdAt: Timestamp.now()
     };
-    
+
     const shortDesc = savedEntry.description.length > 30 ? savedEntry.description.substring(0, 27) + "..." : savedEntry.description;
     const amountFormatted = savedEntry.amount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' });
     const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
     addNotification(
       `${userName} added entry: '${shortDesc}' (${amountFormatted})`,
       'new_entry',
-      companyId, 
+      companyId,
       currentUser.uid,
       savedEntry.id
     ).catch(err => console.error("DataService: Failed to add notification for single entry:", err));
@@ -207,7 +209,7 @@ export async function addJournalEntry(
     return savedEntry;
 
   } catch (error) {
-    console.error(`DataService: Error adding journal entry to Firestore for company '${companyId}':`, error);
+    console.error(`DataService: Error adding journal entry to Firestore for company '${companyId}' (User: ${currentUser.uid}):`, error);
     throw error;
   }
 }
@@ -225,7 +227,7 @@ export async function addJournalEntries(
     console.error("DataService: Cannot add journal entries: companyId is required.");
     throw new Error("Company ID is required to add entries.");
   }
-  console.log(`DataService: Attempting to add ${newEntriesData.length} journal entries in batch for company '${companyId}'.`);
+  console.log(`DataService: User '${currentUser.uid}' attempting to add ${newEntriesData.length} journal entries in batch for company '${companyId}'.`);
 
   const batch = writeBatch(db);
   const preparedEntries: JournalEntry[] = [];
@@ -235,11 +237,11 @@ export async function addJournalEntries(
     const entryToSave = {
       ...newData,
       creatorUserId: currentUser.uid,
-      companyId: companyId, 
+      companyId: companyId,
       createdAt: serverTimestamp() as Timestamp,
       tags: newData.tags || [],
     };
-    console.log(`DataService: Preparing batch entry for company '${companyId}':`, entryToSave);
+    // console.log(`DataService: Preparing batch entry for company '${companyId}':`, entryToSave); // Can be very verbose
     batch.set(docRef, entryToSave);
     preparedEntries.push({
       id: docRef.id,
@@ -250,8 +252,9 @@ export async function addJournalEntries(
 
   try {
     await batch.commit();
-    console.log(`DataService: Successfully committed batch of ${preparedEntries.length} journal entries for company '${companyId}'.`);
+    console.log(`DataService: Successfully committed batch of ${preparedEntries.length} journal entries for company '${companyId}' (User: ${currentUser.uid}).`);
 
+    // Run notification creation in the background, don't await
     const processNotificationsInBackground = async () => {
       try {
         const notificationPromises = preparedEntries.map(savedEntry => {
@@ -266,21 +269,24 @@ export async function addJournalEntries(
             savedEntry.id
           );
         });
+        // We are not awaiting these promises to prevent blocking the UI.
+        // Errors will be logged by addNotification itself.
         Promise.allSettled(notificationPromises).then(results => {
-          results.forEach(result => {
+           results.forEach(result => {
             if (result.status === 'rejected') {
-              console.error("DataService (Background): Failed to add a notification for a batch entry:", result.reason);
+              console.error("DataService (Background Notification): Failed to add a notification for a batch entry:", result.reason);
             }
           });
-        }).catch(err => console.error("DataService: Error in background notification processing wrapper itself:", err));
+        }).catch(err => console.error("DataService (Background Notification Wrapper): Error processing notifications:", err));
       } catch (err) {
-        console.error("DataService: Error setting up background notification processing:", err);
+        console.error("DataService (Background Notification Setup): Error setting up background notification processing:", err);
       }
     };
-    processNotificationsInBackground(); // Don't await this
+    processNotificationsInBackground();
+
     return preparedEntries;
   } catch (error) {
-    console.error(`DataService: Error adding journal entries to Firestore for company '${companyId}' in batch:`, error);
+    console.error(`DataService: Error adding journal entries to Firestore for company '${companyId}' (User: ${currentUser.uid}) in batch:`, error);
     throw error;
   }
 }
@@ -295,24 +301,24 @@ export async function deleteJournalEntry(companyId: string, entryId: string): Pr
     console.error("DataService: Cannot delete journal entry: companyId is required.");
     throw new Error("Company ID is required to delete an entry.");
   }
-  console.log(`DataService: Attempting to delete journal entry ID '${entryId}' for company '${companyId}'.`);
+  console.log(`DataService: User '${currentUser.uid}' attempting to delete journal entry ID '${entryId}' for company '${companyId}'.`);
 
   try {
     const entryRef = doc(db, JOURNAL_COLLECTION, entryId);
     await deleteDoc(entryRef);
     console.log(`DataService: Successfully deleted journal entry ${entryId} for company ${companyId}`);
-    
+
     const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
     addNotification(
       `${userName} deleted journal entry ID: ${entryId.slice(0,8)}...`,
-      'new_entry', 
-      companyId, 
+      'new_entry', // Or a new 'entry_deleted' type
+      companyId,
       currentUser.uid,
       entryId
     ).catch(err => console.error("DataService: Failed to add notification for entry deletion:", err));
 
   } catch (error) {
-    console.error(`DataService: Error deleting journal entry ${entryId} from Firestore for company ${companyId}:`, error);
+    console.error(`DataService: Error deleting journal entry ${entryId} from Firestore for company ${companyId} (User: ${currentUser.uid}):`, error);
     throw error;
   }
 }
