@@ -11,7 +11,9 @@ import type { DateRange } from "react-day-picker";
 import { getJournalEntries, type JournalEntry as StoredJournalEntry } from "@/lib/data-service";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
-import type { Timestamp } from "firebase/firestore";
+import type { Timestamp } from "firebase/firestore"; // Keep this import
+import { useToast } from "@/hooks/use-toast";
+
 
 // Accounts options can remain static for now, or be dynamically generated later
 const accountsOptions = [
@@ -25,20 +27,35 @@ const accountsOptions = [
 
 
 async function fetchLedgerTransactions(
-  account?: string, 
-  dateRange?: DateRange, 
+  companyId: string, // Added companyId as the first parameter
+  account?: string,
+  dateRange?: DateRange,
   searchTerm?: string
 ): Promise<{ accountName: string; transactions: LedgerTransaction[] }> {
-  
   const selectedAccountKey = account || "Cash"; // Default to Cash
   const accountName = accountsOptions.find(acc => acc.value === selectedAccountKey)?.label || selectedAccountKey;
-  
-  let journalEntries = await getJournalEntries();
+
+  if (!companyId) {
+    console.warn("fetchLedgerTransactions: No companyId provided. Returning empty ledger.");
+    return { accountName, transactions: [] };
+  }
+  console.log(`fetchLedgerTransactions: Fetching for company '${companyId}', account '${selectedAccountKey}'`);
+
+  let journalEntries: StoredJournalEntry[];
+  try {
+    journalEntries = await getJournalEntries(companyId); // Pass companyId here
+  } catch (error) {
+    console.error(`fetchLedgerTransactions: Error fetching journal entries for company ${companyId}:`, error);
+    return { accountName, transactions: [] }; // Return empty on error
+  }
+
 
   // Filter journal entries relevant to the selected account
-  let relevantEntries = journalEntries.filter(entry => 
+  let relevantEntries = journalEntries.filter(entry =>
     entry.debitAccount === selectedAccountKey || entry.creditAccount === selectedAccountKey
   );
+  console.log(`fetchLedgerTransactions: Found ${relevantEntries.length} entries potentially relevant to account '${selectedAccountKey}' out of ${journalEntries.length} total for company '${companyId}'.`);
+
 
   // Further filter by dateRange
   if (dateRange?.from) {
@@ -53,13 +70,15 @@ async function fetchLedgerTransactions(
       return entryDate >= fromDate;
     });
   }
+  console.log(`fetchLedgerTransactions: After date filter, ${relevantEntries.length} entries remain.`);
 
   // Further filter by searchTerm in description
   if (searchTerm) {
-    relevantEntries = relevantEntries.filter(entry => 
+    relevantEntries = relevantEntries.filter(entry =>
       entry.description.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }
+  console.log(`fetchLedgerTransactions: After search term filter, ${relevantEntries.length} entries remain.`);
 
   // Sort entries by date (important for balance calculation)
   relevantEntries.sort((a, b) => {
@@ -87,9 +106,9 @@ async function fetchLedgerTransactions(
       creditAmount = entry.amount;
       runningBalance -= entry.amount;
     }
-    
+
     return {
-      id: entry.id, 
+      id: entry.id,
       date: entry.date,
       description: entry.description,
       debit: debitAmount,
@@ -98,34 +117,47 @@ async function fetchLedgerTransactions(
       tags: entry.tags,
     };
   });
-
+  console.log(`fetchLedgerTransactions: Processed ${ledgerTransactions.length} transactions for ledger display.`);
   return { accountName, transactions: ledgerTransactions };
 }
 
 
 export default function LedgerPage() {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, currentCompanyId, isLoading: authIsLoading } = useAuth();
   const [ledgerData, setLedgerData] = useState<{ accountName: string; transactions: LedgerTransaction[] }>({ accountName: "Cash", transactions: [] });
   const [isLoading, setIsLoading] = useState(true);
   const [currentFilters, setCurrentFilters] = useState<{ account?: string; dateRange?: DateRange, searchTerm?: string  }>({ account: "Cash" });
+  const { toast } = useToast();
 
   const loadLedgerData = useCallback(async (filters: { account?: string; dateRange?: DateRange, searchTerm?: string }) => {
-    if (!currentUser) { // Don't load if no user
+    if (authIsLoading) { // Don't load if auth state is still resolving
+        setIsLoading(true); // Keep showing loader
+        return;
+    }
+    if (!currentUser || !currentCompanyId) {
+      console.log("LedgerPage (loadLedgerData): No user or companyId, clearing ledger data.");
       setIsLoading(false);
       setLedgerData({ accountName: filters.account || "Cash", transactions: []});
       return;
     }
+    console.log(`LedgerPage (loadLedgerData): Loading ledger data for company '${currentCompanyId}' with filters:`, filters);
     setIsLoading(true);
     try {
-        const data = await fetchLedgerTransactions(filters.account, filters.dateRange, filters.searchTerm);
+        // Pass currentCompanyId to fetchLedgerTransactions
+        const data = await fetchLedgerTransactions(currentCompanyId, filters.account, filters.dateRange, filters.searchTerm);
         setLedgerData(data);
-    } catch (error) {
+    } catch (error: any) {
         console.error("Failed to load ledger data:", error);
+        toast({
+          variant: "destructive",
+          title: "Ledger Error",
+          description: error.message || "Could not load ledger data.",
+        });
         setLedgerData({ accountName: filters.account || "Cash", transactions: []}); // Reset on error
     } finally {
         setIsLoading(false);
     }
-  }, [currentUser]); // Add currentUser as dependency
+  }, [currentUser, currentCompanyId, authIsLoading, toast]); // Added currentCompanyId and authIsLoading
 
   useEffect(() => {
     loadLedgerData(currentFilters);
@@ -134,7 +166,7 @@ export default function LedgerPage() {
   const handleFilterChange = (newFilters: { account?: string; dateRange?: DateRange, searchTerm?: string }) => {
     setCurrentFilters(prev => ({...prev, ...newFilters}));
   };
-  
+
 
   return (
     <div className="space-y-6">
@@ -151,8 +183,8 @@ export default function LedgerPage() {
 
       {isLoading ? (
          <div className="space-y-2">
-           <Skeleton className="h-12 w-full" />
-           <Skeleton className="h-64 w-full" />
+           <Skeleton className="h-12 w-full rounded-lg" />
+           <Skeleton className="h-64 w-full rounded-lg" />
          </div>
       ) : (
         <LedgerTable accountName={ledgerData.accountName} transactions={ledgerData.transactions} />
