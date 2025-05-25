@@ -12,21 +12,60 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Trash2, Loader2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useState, useEffect } from "react";
 import type { JournalEntry } from "@/lib/data-service"; 
+import { deleteJournalEntry } from "@/lib/data-service";
+import { useToast } from "@/hooks/use-toast";
 
 interface JournalTableProps {
   entries: JournalEntry[]; 
+  onEntryDeleted: () => void; // Callback to refresh data on parent
 }
 
-export function JournalTable({ entries = [] }: JournalTableProps) { 
+export function JournalTable({ entries = [], onEntryDeleted }: JournalTableProps) { 
   const [clientLocale, setClientLocale] = useState('en-US'); 
+  const [isDeleting, setIsDeleting] = useState<string | null>(null); // Store ID of entry being deleted
+  const { toast } = useToast();
 
   useEffect(() => {
     if (typeof navigator !== 'undefined') {
       setClientLocale(navigator.language || 'en-US');
     }
   }, []);
+
+  const handleDeleteEntry = async (entryId: string) => {
+    setIsDeleting(entryId);
+    try {
+      await deleteJournalEntry(entryId);
+      toast({
+        title: "Entry Deleted",
+        description: "The journal entry has been successfully deleted.",
+      });
+      onEntryDeleted(); // Notify parent to refresh data
+    } catch (error) {
+      console.error("Failed to delete entry:", error);
+      toast({
+        variant: "destructive",
+        title: "Deletion Failed",
+        description: "Could not delete the journal entry. Please try again.",
+      });
+    } finally {
+      setIsDeleting(null);
+    }
+  };
 
   return (
     <Card className="shadow-lg">
@@ -41,12 +80,13 @@ export function JournalTable({ entries = [] }: JournalTableProps) {
                 <TableHead>Credit Account</TableHead>
                 <TableHead className="text-right w-[120px]">Amount</TableHead>
                 <TableHead className="w-[200px]">Tags</TableHead>
+                <TableHead className="w-[100px] text-center">Actions</TableHead> 
               </TableRow>
             </TableHeader>
             <TableBody>
               {entries.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center h-24 text-muted-foreground">
                     No journal entries found.
                   </TableCell>
                 </TableRow>
@@ -64,6 +104,34 @@ export function JournalTable({ entries = [] }: JournalTableProps) {
                       <div className="flex flex-wrap gap-1">
                         {entry.tags?.map(tag => <Badge key={tag} variant="outline">{tag}</Badge>)}
                       </div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive-foreground hover:bg-destructive/90" disabled={isDeleting === entry.id}>
+                            {isDeleting === entry.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This action cannot be undone. This will permanently delete the journal entry:
+                              <br />
+                              <strong>Date:</strong> {entry.date} <br />
+                              <strong>Description:</strong> {entry.description} <br />
+                              <strong>Amount:</strong> {entry.amount.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' })}
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDeleteEntry(entry.id)} disabled={isDeleting === entry.id} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                              {isDeleting === entry.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                              Yes, delete entry
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </TableCell>
                   </TableRow>
                 ))

@@ -11,7 +11,8 @@ import {
   Timestamp,
   serverTimestamp,
   writeBatch,
-  doc
+  doc,
+  deleteDoc, // Import deleteDoc
 } from 'firebase/firestore';
 
 export interface JournalEntry {
@@ -24,14 +25,14 @@ export interface JournalEntry {
   tags?: string[];
   creatorUserId: string; // Firebase user ID of the person who created the entry
   companyId: string; // ID of the company this entry belongs to
-  createdAt: Timestamp; // Firestore Timestamp for ordering
+  createdAt: Timestamp | { seconds: number, nanoseconds: number }; // Firestore Timestamp for ordering
 }
 
 export interface Notification {
   id: string;
   message: string;
   type: 'new_entry' | 'user_joined' | 'document_upload';
-  timestamp: Timestamp;
+  timestamp: Timestamp | { seconds: number, nanoseconds: number };
   userId?: string; // User who performed the action
   relatedId?: string; // e.g., journal entry ID
   companyId: string;
@@ -125,10 +126,6 @@ export async function getJournalEntries(): Promise<JournalEntry[]> {
     const q = query(
       collection(db, JOURNAL_COLLECTION),
       where("companyId", "==", KENESIS_COMPANY_ID),
-      // Apply user-specific filter if not for the global company
-      // For KENESIS, we assume all authenticated users can see all entries.
-      // If this needs to be per-user, uncomment and adjust:
-      // where("creatorUserId", "==", currentUser.uid),
       orderBy("date", "desc"),
       orderBy("createdAt", "desc")
     );
@@ -247,8 +244,6 @@ export async function addJournalEntries(newEntriesData: Omit<JournalEntry, 'id' 
   try {
     await batch.commit(); // Commit all journal entries first
 
-    // After entries are saved, create notifications in the background (fire-and-forget)
-    // This makes the UI responsive faster as it doesn't wait for notifications.
     const processNotificationsInBackground = async () => {
       try {
         const notificationPromises = preparedEntries.map(savedEntry => {
@@ -262,9 +257,6 @@ export async function addJournalEntries(newEntriesData: Omit<JournalEntry, 'id' 
             savedEntry.id
           );
         });
-
-        // We don't await Promise.allSettled here to make the original function return faster
-        // Log errors from background processing if any
         Promise.allSettled(notificationPromises).then(results => {
           results.forEach(result => {
             if (result.status === 'rejected') {
@@ -274,19 +266,46 @@ export async function addJournalEntries(newEntriesData: Omit<JournalEntry, 'id' 
         }).catch(err => console.error("Error in background notification processing wrapper itself:", err));
 
       } catch (err) {
-        // Catch any synchronous error in the async wrapper itself
         console.error("Error setting up background notification processing:", err);
       }
     };
 
-    processNotificationsInBackground(); // Fire and forget for notifications
+    processNotificationsInBackground(); 
 
-    return preparedEntries; // Return immediately after journal entries are committed
+    return preparedEntries; 
   } catch (error) {
     console.error("Error adding KENESIS journal entries to Firestore in batch:", error);
     throw error;
   }
 }
+
+export async function deleteJournalEntry(entryId: string): Promise<void> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    console.error("No authenticated user. Cannot delete journal entry.");
+    throw new Error("User not authenticated. Cannot delete entry.");
+  }
+
+  try {
+    const entryRef = doc(db, JOURNAL_COLLECTION, entryId);
+    await deleteDoc(entryRef);
+    console.log(`DataService: Deleted journal entry ${entryId}`);
+    // Consider deleting related notifications if applicable.
+    // For now, we'll add a generic notification about the deletion.
+    const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
+    addNotification(
+      `${userName} deleted journal entry ID: ${entryId.slice(0,8)}...`, // Log a shortened ID
+      'new_entry', // Reusing 'new_entry' for simplicity, could be 'entry_deleted'
+      currentUser.uid,
+      entryId 
+    ).catch(err => console.error("Failed to add notification for entry deletion:", err));
+
+  } catch (error) {
+    console.error(`Error deleting journal entry ${entryId} from Firestore:`, error);
+    throw error;
+  }
+}
+
 
 export interface UserProfile {
   uid: string;
