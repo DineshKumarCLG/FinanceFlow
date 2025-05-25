@@ -14,8 +14,8 @@ body {
     --card-foreground-hsl: 222 47% 11%;
     --popover-hsl: 208 100% 97%;
     --popover-foreground-hsl: 222 47% 11%;
-    --primary-hsl: 199 75% 70%;
-    --primary-foreground-hsl: 210 40% 5%;
+    --primary-hsl: 199 75% 58%; /* Updated Lightness for Deep Sky Blue */
+    --primary-foreground-hsl: 210 40% 98%; /* Adjusted for potentially better contrast with deeper primary */
     --secondary-hsl: 200 80% 93%;
     --secondary-foreground-hsl: 222 47% 11%;
     --muted-hsl: 200 70% 90%;
@@ -26,7 +26,7 @@ body {
     --destructive-foreground-hsl: 0 0% 98%;
     --border-hsl: 200 50% 88%;
     --input-hsl: 200 50% 88%;
-    --ring-hsl: 199 75% 70%;
+    --ring-hsl: 199 75% 58%; /* Updated Lightness for Deep Sky Blue */
 
     --background: hsl(var(--background-hsl)); /* #F0F8FF Alice Blue */
     --foreground: hsl(var(--foreground-hsl)); /* Dark blue/grey for text */
@@ -38,7 +38,7 @@ body {
     --popover-foreground: hsl(var(--popover-foreground-hsl));
 
     --primary: hsl(var(--primary-hsl)); /* #41B6E6 Deep Sky Blue */
-    --primary-foreground: hsl(var(--primary-foreground-hsl)); /* Dark text for primary buttons */
+    --primary-foreground: hsl(var(--primary-foreground-hsl)); 
 
     --secondary: hsl(var(--secondary-hsl)); /* Lighter shade of sky blue */
     --secondary-foreground: hsl(var(--secondary-foreground-hsl));
@@ -56,7 +56,7 @@ body {
     --input: hsl(var(--input-hsl));
     --ring: hsl(var(--ring-hsl)); /* Primary color for rings */
 
-    --chart-1: 199 75% 60%;
+    --chart-1: 199 75% 58%; /* Aligned with new primary */
     --chart-2: 174 72% 46%;
     --chart-3: 210 70% 50%;
     --chart-4: 30 80% 65%;
@@ -66,12 +66,12 @@ body {
     /* Sidebar specific theme */
     --sidebar-background-hsl: 208 100% 95%;
     --sidebar-foreground-hsl: 222 47% 11%;
-    --sidebar-primary-hsl: 199 75% 70%;
-    --sidebar-primary-foreground-hsl: 210 40% 5%;
+    --sidebar-primary-hsl: 199 75% 58%; /* Updated Lightness for Deep Sky Blue */
+    --sidebar-primary-foreground-hsl: 210 40% 98%; /* Adjusted for potentially better contrast */
     --sidebar-accent-hsl: 174 72% 56%;
     --sidebar-accent-foreground-hsl: 210 40% 5%;
     --sidebar-border-hsl: 200 50% 85%;
-    --sidebar-ring-hsl: 199 75% 70%;
+    --sidebar-ring-hsl: 199 75% 58%; /* Updated Lightness for Deep Sky Blue */
 
     --sidebar-background: hsl(var(--sidebar-background-hsl));
     --sidebar-foreground: hsl(var(--sidebar-foreground-hsl));
@@ -90,8 +90,8 @@ body {
     --card-foreground-hsl: 208 100% 97%;
     --popover-hsl: 222 47% 11%;
     --popover-foreground-hsl: 208 100% 97%;
-    --primary-hsl: 199 75% 70%;
-    --primary-foreground-hsl: 210 40% 5%;
+    --primary-hsl: 199 75% 58%; /* Updated Lightness for Deep Sky Blue */
+    --primary-foreground-hsl: 210 40% 98%; /* Adjusted for potentially better contrast */
     --secondary-hsl: 222 47% 18%;
     --secondary-foreground-hsl: 208 100% 97%;
     --muted-hsl: 222 47% 18%;
@@ -102,7 +102,7 @@ body {
     --destructive-foreground-hsl: 0 0% 98%;
     --border-hsl: 222 47% 25%;
     --input-hsl: 222 47% 25%;
-    --ring-hsl: 199 75% 70%;
+    --ring-hsl: 199 75% 58%; /* Updated Lightness for Deep Sky Blue */
 
     --background: hsl(var(--background-hsl));
     --foreground: hsl(var(--foreground-hsl));
@@ -127,12 +127,12 @@ body {
     /* Sidebar dark theme */
     --sidebar-background-hsl: 222 47% 9%;
     --sidebar-foreground-hsl: 208 100% 97%;
-    --sidebar-primary-hsl: 199 75% 70%;
-    --sidebar-primary-foreground-hsl: 210 40% 5%;
+    --sidebar-primary-hsl: 199 75% 58%; /* Updated Lightness for Deep Sky Blue */
+    --sidebar-primary-foreground-hsl: 210 40% 98%; /* Adjusted for potentially better contrast */
     --sidebar-accent-hsl: 174 72% 56%;
     --sidebar-accent-foreground-hsl: 210 40% 5%;
     --sidebar-border-hsl: 222 47% 20%;
-    --sidebar-ring-hsl: 199 75% 70%;
+    --sidebar-ring-hsl: 199 75% 58%; /* Updated Lightness for Deep Sky Blue */
 
     --sidebar-background: hsl(var(--sidebar-background-hsl));
     --sidebar-foreground: hsl(var(--sidebar-foreground-hsl));
