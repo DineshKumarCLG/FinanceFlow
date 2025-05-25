@@ -78,8 +78,8 @@ export function UserSpendingList({ spendingData = [], isLoading = false }: UserS
               <AvatarFallback>{user.avatarFallback}</AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium leading-none text-foreground truncate" title={user.userId}>
-                User ...{user.userId.slice(-6)}
+              <p className="text-sm font-medium leading-none text-foreground truncate" title={user.displayName || user.userId}>
+                {user.displayName}
               </p>
             </div>
             <div className="text-sm font-semibold text-foreground">

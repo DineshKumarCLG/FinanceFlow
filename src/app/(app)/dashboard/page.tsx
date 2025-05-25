@@ -9,7 +9,7 @@ import { ProfitLossReport, type ProfitLossReportData, type ReportLineItem as PLR
 import { DollarSign, TrendingUp, TrendingDown, Activity, CalendarDays, Download } from "lucide-react"; 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { UserSpendingList, type UserSpending } from "@/components/dashboard/UserSpendingList"; 
-import { NotificationList, type Notification } from "@/components/dashboard/NotificationList"; // Corrected import
+import { NotificationList, type Notification } from "@/components/dashboard/NotificationList";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect, useMemo } from "react";
@@ -18,6 +18,7 @@ import type { DateRange } from "react-day-picker";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { format, startOfMonth, endOfMonth, subMonths, eachMonthOfInterval } from "date-fns";
+import { useAuth } from "@/contexts/AuthContext"; // Import useAuth
 
 interface ChartPoint {
   month: string;
@@ -25,12 +26,12 @@ interface ChartPoint {
   expense: number; 
 }
 
-// Moved keywords here for central access if needed, though now DashboardPage handles most logic
 export const incomeKeywords = ['revenue', 'sales', 'income', 'service fee', 'interest received'];
 export const expenseKeywords = ['expense', 'cost', 'supply', 'rent', 'salary', 'utility', 'utilities', 'purchase', 'advertising', 'maintenance', 'insurance', 'interest paid', 'fee'];
 
 
 export default function DashboardPage() {
+  const { user: currentUser } = useAuth(); // Get the currently authenticated user
   const [clientLocale, setClientLocale] = useState('en-US');
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [allJournalEntries, setAllJournalEntries] = useState<StoredJournalEntry[]>([]);
@@ -245,10 +246,26 @@ export default function DashboardPage() {
 
       // --- Set State for User Spending List ---
       const topSpenders = Object.entries(userExpenses)
-        .map(([userId, totalSpent]) => ({
-          userId, totalSpent, displayName: `User ...${userId.slice(-6)}`, 
-          avatarFallback: userId.substring(0, 2).toUpperCase(),
-        }))
+        .map(([userId, totalSpent]) => {
+          let displayName = `User ...${userId.slice(-6)}`;
+          let avatarFallbackText = userId.substring(0, 2);
+
+          if (currentUser && userId === currentUser.uid) {
+            displayName = currentUser.displayName || `User ...${userId.slice(-6)}`;
+            if (currentUser.displayName) {
+              avatarFallbackText = currentUser.displayName.substring(0, 2);
+            } else if (currentUser.email) {
+              avatarFallbackText = currentUser.email.substring(0, 2);
+            }
+          }
+          
+          return {
+            userId,
+            totalSpent,
+            displayName,
+            avatarFallback: avatarFallbackText.toUpperCase(),
+          };
+        })
         .sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 5); 
       setUserSpendingData(topSpenders);
 
@@ -283,7 +300,7 @@ export default function DashboardPage() {
         setIsLoadingData(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allJournalEntries, dateRange, clientLocale]); // isLoadingData is not a dependency here, it's set by this effect
+  }, [allJournalEntries, dateRange, clientLocale, currentUser]); // Added currentUser as a dependency
 
 
   return (
