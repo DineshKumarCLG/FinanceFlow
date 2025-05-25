@@ -42,9 +42,17 @@ export default function UploadDocumentPage() {
         toast({ title: "Document Processed", description: "Review the extracted entries below." });
       }
     } catch (e: any) {
-      setError("Failed to process document. The AI couldn't extract data or an error occurred.");
-      toast({ variant: "destructive", title: "Processing Error", description: e.message || "Unknown error during document processing."});
-      console.error(e);
+      console.error("[UploadDocumentPage] Error during AI processing:", e);
+      let aiErrorMessage = "The AI failed to process the document. Please try a different document or check its quality/format.";
+      if (e instanceof Error && e.message) {
+        // Be careful not to expose overly technical or sensitive error details directly to the user.
+        // For a production app, you might log `e.message` but show a more generic message to the user.
+        aiErrorMessage = `AI Error: ${e.message.substring(0, 100)}${e.message.length > 100 ? '...' : ''}`; // Keep it concise
+      } else if (typeof e === 'string' && e) {
+        aiErrorMessage = `AI Error: ${e.substring(0, 100)}${e.length > 100 ? '...' : ''}`;
+      }
+      setError(aiErrorMessage);
+      toast({ variant: "destructive", title: "AI Processing Failed", description: aiErrorMessage});
     } finally {
       setIsProcessingAi(false);
     }
@@ -65,9 +73,15 @@ export default function UploadDocumentPage() {
       toast({ title: "Entries Saved!", description: "The extracted accounting entries have been recorded." });
       setExtractedData(null);
       setCurrentFile(null); 
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Saving Error", description: "Could not save the entries." });
-      console.error("Saving error:", e);
+    } catch (e: any)      {
+      console.error("[UploadDocumentPage] Error saving entries:", e);
+      let savingErrorMessage = "Could not save the entries. Please try again.";
+      if (e instanceof Error && e.message) {
+        savingErrorMessage = `Saving Error: ${e.message.substring(0,100)}${e.message.length > 100 ? '...' : ''}`;
+      } else if (typeof e === 'string' && e) {
+        savingErrorMessage = `Saving Error: ${e.substring(0,100)}${e.length > 100 ? '...' : ''}`;
+      }
+      toast({ variant: "destructive", title: "Saving Error", description: savingErrorMessage });
     } finally {
       setIsSaving(false);
     }
@@ -85,7 +99,7 @@ export default function UploadDocumentPage() {
         <FileUploader onFileUpload={handleFileUpload} isProcessing={isProcessingAi} />
 
         {isProcessingAi && (
-          <div className="flex items-center justify-center text-muted-foreground">
+          <div className="flex items-center justify-center text-muted-foreground p-4 border rounded-md bg-card">
             <Loader2 className="mr-2 h-5 w-5 animate-spin" />
             <span>AI is analyzing your document... Please wait.</span>
           </div>

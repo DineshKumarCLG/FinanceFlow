@@ -23,9 +23,9 @@ const nextConfig: NextConfig = {
   // and to enable environment variables to be passed to server components.
   // As of Genkit 1.x and Next.js 14+, this might not be strictly necessary for all cases
   // if 'use server' is correctly applied, but good for ensuring env vars.
-  // experimental: {
-  //   serverComponentsExternalPackages: ['@genkit-ai/googleai'],
-  // },
+  experimental: {
+    serverComponentsExternalPackages: ['@genkit-ai/googleai'],
+  },
 };
 
 export default nextConfig;
