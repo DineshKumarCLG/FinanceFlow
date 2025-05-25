@@ -4,8 +4,8 @@
 import { PageTitle } from "@/components/shared/PageTitle";
 import { SummaryCard } from "@/components/dashboard/SummaryCard";
 import { IncomeExpenseChart } from "@/components/dashboard/IncomeExpenseChart";
-import { DollarSign, TrendingUp, TrendingDown, Activity, CalendarDays, Download } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DollarSign, TrendingUp, TrendingDown, Activity, CalendarDays, Download, AlertCircle } from "lucide-react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"; // Removed CardDescription for now
 import { UserSpendingList, type UserSpending } from "@/components/dashboard/UserSpendingList";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -20,8 +20,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
+import { Alert, AlertDescription } from "@/components/ui/alert"; // Import Alert for messages
 
-// Dynamically import components for tab content
 const AnalyticsOverview = dynamic(() => import('@/components/dashboard/AnalyticsOverview').then(mod => mod.AnalyticsOverview), {
   ssr: false,
   loading: () => <div className="grid gap-6"><div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32 rounded-lg" />)}</div><Skeleton className="h-80 rounded-lg" /></div>
@@ -41,7 +41,7 @@ import type { ProfitLossReportData, ReportLineItem as PLReportLineItem } from "@
 const NotificationList = dynamic(() => import('@/components/dashboard/NotificationList').then(mod => mod.NotificationList), {
   ssr: false,
   loading: () => {
-    const { Card: DynCard, CardHeader: DynCardHeader, CardTitle: DynCardTitle, CardDescription: DynCardDescription, CardContent: DynCardContent } = require('@/components/ui/card');
+    const { Card: DynCard, CardHeader: DynCardHeader, CardTitle: DynCardTitle, CardDescription: DynCardDescription, CardContent: DynCardContent } = require('@/components/ui/card'); // Re-added DynCardDescription
     const { Skeleton: DynSkeleton } = require('@/components/ui/skeleton');
     return (
       <DynCard>
@@ -78,7 +78,7 @@ export const expenseKeywords = ['expense', 'cost', 'supply', 'rent', 'salary', '
 
 
 export default function DashboardPage() {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, currentCompanyId } = useAuth(); // Get currentCompanyId
   const [clientLocale, setClientLocale] = useState('en-US');
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [allJournalEntries, setAllJournalEntries] = useState<StoredJournalEntry[]>([]);
@@ -90,7 +90,7 @@ export default function DashboardPage() {
     };
   });
   const { toast } = useToast();
-  const pathname = usePathname(); 
+  const pathname = usePathname();
 
   const [summaryData, setSummaryData] = useState({
     totalRevenue: 0,
@@ -117,12 +117,11 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function loadInitialData() {
-      if (!currentUser) {
+      if (!currentUser || !currentCompanyId) { // Check for currentCompanyId too
         setIsLoadingData(false);
         setIsLoadingNotifications(false);
         setAllJournalEntries([]);
         setNotifications([]);
-        // Reset all derived states
         setSummaryData({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
         const now = new Date();
         setChartDisplayData(
@@ -143,13 +142,13 @@ export default function DashboardPage() {
         }
         return;
       }
-      console.log("Dashboard: Starting to load initial data...");
+      console.log(`Dashboard: Starting to load initial data for company ${currentCompanyId}...`);
       setIsLoadingData(true);
       setIsLoadingNotifications(true);
       try {
         const [fetchedEntries, fetchedNotifications] = await Promise.all([
-          getJournalEntries(),
-          getNotifications()
+          getJournalEntries(currentCompanyId), // Pass companyId
+          getNotifications(currentCompanyId)  // Pass companyId
         ]);
 
         setAllJournalEntries(fetchedEntries);
@@ -176,15 +175,15 @@ export default function DashboardPage() {
          setAnalyticsKpis({ avgTransactionValue: 0, profitMargin: 0, incomeTransactions: 0, expenseTransactions: 0 });
          setAnalyticsExpenseCategories([]);
          setProfitLossReportData(undefined);
-         setIsLoadingData(false); // Ensure loading stops on error
+         setIsLoadingData(false);
       } finally {
         setIsLoadingNotifications(false);
         console.log("Dashboard: Finished loading initial notifications.");
       }
     }
-    if (pathname === '/dashboard') { // Only run if on dashboard page
+    if (pathname === '/dashboard') {
       loadInitialData();
-    } else if (!currentUser) { // Handle explicit no user case if not on dashboard (though layout should redirect)
+    } else if (!currentUser || !currentCompanyId) { // Also check for companyId here
       setIsLoadingData(false);
       setIsLoadingNotifications(false);
       setAllJournalEntries([]);
@@ -208,7 +207,7 @@ export default function DashboardPage() {
         setProfitLossReportData(undefined);
       }
     }
-  }, [currentUser, pathname, clientLocale, dateRange, toast]); 
+  }, [currentUser, currentCompanyId, pathname, clientLocale, dateRange, toast]); // Added currentCompanyId
 
 
   useEffect(() => {
@@ -217,18 +216,14 @@ export default function DashboardPage() {
 
     if (!dateRange?.from || !dateRange?.to) {
       console.log("Dashboard: Date range not fully set, skipping processing.");
-      // If entries are also empty, and initial notifications load might be done, set loading false.
-      if (allJournalEntries.length === 0 && !isLoadingNotifications) setIsLoadingData(false); 
+      if (allJournalEntries.length === 0 && !isLoadingNotifications) setIsLoadingData(false);
       return;
     }
     
-    // If there are entries to process, set loading true.
-    // If no entries, and notification loading is done, then there's truly no data to process.
     if (allJournalEntries.length > 0) {
         setIsLoadingData(true);
-    } else if (allJournalEntries.length === 0 && !isLoadingNotifications) { 
-        setIsLoadingData(false); 
-        // Set defaults for empty state if no entries AND notifications are done loading
+    } else if (allJournalEntries.length === 0 && !isLoadingNotifications) {
+        setIsLoadingData(false);
         console.log("Dashboard: No entries and notifications loaded. Setting defaults for empty state.");
         setSummaryData({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
         const now = new Date();
@@ -245,29 +240,19 @@ export default function DashboardPage() {
             revenueItems: [], expenseItems: [], totalRevenue: 0, totalExpenses: 0, netProfit: 0, formattedDateRange: formattedRange
         });
         console.log(`Dashboard: Finished processing (empty state) in ${Date.now() - overallProcessingStartTime}ms.`);
-        return; // Exit early if no entries and initial load done
+        return;
     }
 
-
     if (!currentUser && allJournalEntries.length === 0) {
-        // This case should be covered by the one above if !isLoadingNotifications
         console.log("Dashboard: No current user and no journal entries. Setting defaults for empty state (covered).");
-        // Defaults already set above if isLoadingNotifications is false.
-        // If isLoadingNotifications is true, we wait.
         if (!isLoadingNotifications) setIsLoadingData(false);
         return;
     }
     
-    // If allJournalEntries is still empty here, it means initial load is not yet complete (isLoadingNotifications true)
-    // OR it is complete and there are no entries (handled by the block above).
-    // So, if we have entries, we proceed. If not, we return (unless still loading notifications).
     if (allJournalEntries.length === 0) {
         console.log(`Dashboard: No entries to process (count: ${allJournalEntries.length}). isLoadingNotifications: ${isLoadingNotifications}`);
-        // If notifications are NOT done, we don't set isLoadingData(false) yet, as `loadInitialData` is still running.
-        // If notifications ARE done, the block above should have handled it.
-        return; 
+        return;
     }
-
 
     console.log("Dashboard: Starting calculations for", allJournalEntries.length, "entries.");
     let sectionStartTime = Date.now();
@@ -316,21 +301,17 @@ export default function DashboardPage() {
       const creditAccountLower = entry.creditAccount?.toLowerCase() || "";
       const descriptionLower = entry.description.toLowerCase();
 
-      // Determine if income
       if (incomeKeywords.some(keyword => creditAccountLower.includes(keyword) || descriptionLower.includes(keyword)) ||
           (debitAccountLower.includes('cash') || debitAccountLower.includes('bank'))) {
           isIncomeEntry = true;
       }
       
-      // Determine if expense
       if (expenseKeywords.some(keyword => debitAccountLower.includes(keyword) || descriptionLower.includes(keyword))) {
           isExpenseEntry = true;
-      } else if ((creditAccountLower.includes('cash') || creditAccountLower.includes('bank')) && !isIncomeEntry) { 
-          // If money went out (credit cash/bank) and it wasn't already classified as income, it's an expense.
+      } else if ((creditAccountLower.includes('cash') || creditAccountLower.includes('bank')) && !isIncomeEntry) {
           isExpenseEntry = true;
       }
       
-      // Debugging for a specific entry type like "Web Development Expense"
       if (entry.description.toLowerCase().includes("web development")) {
           console.log(`DEBUG: Entry for Web Dev: "${entry.description}", Debit: ${entry.debitAccount}, Credit: ${entry.creditAccount}, Amount: ${entry.amount}`);
           console.log(`  - debitAccountMatchesExpenseKeyword: ${expenseKeywords.some(keyword => debitAccountLower.includes(keyword))}`);
@@ -338,13 +319,12 @@ export default function DashboardPage() {
           console.log(`  - isIncome (initial): ${isIncomeEntry}, isExpense (initial): ${isExpenseEntry}`);
       }
 
-
       if (isWithinRange) {
         transactionCountInRange++;
         if (isIncomeEntry) calculatedTotalRevenue += entry.amount;
         if (isExpenseEntry) {
           calculatedTotalExpenses += entry.amount;
-          const userId = entry.creatorUserId;
+          const userId = entry.creatorUserId; // creatorUserId from entry
           userExpenses[userId] = (userExpenses[userId] || 0) + entry.amount;
         }
       }
@@ -354,7 +334,6 @@ export default function DashboardPage() {
         if (isExpenseEntry) monthlyAggregates[entryYearMonth].expense += entry.amount;
       }
 
-      // Analytics always use all entries for these global KPIs
       analyticsTotalTransactionAmount += entry.amount;
       if (isIncomeEntry) {
         analyticsIncomeTransactions++;
@@ -367,7 +346,6 @@ export default function DashboardPage() {
         expensesByAccountForAnalytics[analyticsAccount] = (expensesByAccountForAnalytics[analyticsAccount] || 0) + entry.amount;
       }
 
-      // P&L report uses entries within the selected date range
       if (isWithinRange) {
         if (isIncomeEntry) {
           const account = entry.creditAccount || "Uncategorized Revenue";
@@ -418,7 +396,7 @@ export default function DashboardPage() {
         
         return { userId, totalSpent, displayName, avatarFallback: avatarFallbackInitials };
       })
-      .sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 5); 
+      .sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 5);
     setUserSpendingData(topSpenders);
     console.log(`Dashboard: Top spenders state update took ${Date.now() - sectionStartTime}ms.`);
     sectionStartTime = Date.now();
@@ -469,10 +447,14 @@ export default function DashboardPage() {
       });
       return;
     }
+    if (!currentCompanyId) {
+       toast({ variant: "destructive", title: "Company ID Missing", description: "Cannot generate report without a Company ID." });
+       return;
+    }
 
     const { revenueItems, expenseItems, totalRevenue, totalExpenses, netProfit, formattedDateRange } = profitLossReportData;
 
-    let csvContent = "KENESIS Accounting - Profit & Loss Statement\n";
+    let csvContent = `Company: ${currentCompanyId} - Profit & Loss Statement\n`; // Updated to use currentCompanyId
     csvContent += `Period: ${formattedDateRange}\n\n`;
     csvContent += "Account,Amount (INR)\n";
 
@@ -497,7 +479,7 @@ export default function DashboardPage() {
       const fromDateStr = dateRange?.from ? format(dateRange.from, "yyyyMMdd") : "alltime";
       const toDateStr = dateRange?.to ? format(dateRange.to, "yyyyMMdd") : "";
       link.setAttribute("href", url);
-      link.setAttribute("download", `Profit_Loss_Report_KENESIS_${fromDateStr}${toDateStr ? '-' + toDateStr : ''}.csv`);
+      link.setAttribute("download", `Profit_Loss_Report_${currentCompanyId.replace(/\s+/g, '_')}_${fromDateStr}${toDateStr ? '-' + toDateStr : ''}.csv`);
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
@@ -516,11 +498,23 @@ export default function DashboardPage() {
     }
   };
 
+  if (!currentCompanyId && !isLoadingData) {
+    return (
+      <div className="space-y-6 md:space-y-8 p-4">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            No Company ID selected. Please go to the login page to set a Company ID.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 md:space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">Dashboard {currentCompanyId ? `(${currentCompanyId})` : ''}</h1>
         <div className="flex items-center gap-2">
             <Popover>
               <PopoverTrigger asChild>
@@ -552,7 +546,7 @@ export default function DashboardPage() {
                 />
               </PopoverContent>
             </Popover>
-          <Button variant="default" onClick={handleDownloadReport}>
+          <Button variant="default" onClick={handleDownloadReport} disabled={!currentCompanyId || isLoadingData}>
             <Download className="mr-2 h-4 w-4" /> Download
           </Button>
         </div>
@@ -609,4 +603,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

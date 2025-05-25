@@ -26,18 +26,19 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useState, useEffect } from "react";
-import type { JournalEntry } from "@/lib/data-service"; 
+import type { JournalEntry } from "@/lib/data-service";
 import { deleteJournalEntry } from "@/lib/data-service";
 import { useToast } from "@/hooks/use-toast";
 
 interface JournalTableProps {
-  entries: JournalEntry[]; 
-  onEntryDeleted: () => void; // Callback to refresh data on parent
+  entries: JournalEntry[];
+  onEntryDeleted: () => void;
+  companyId: string; // Expect companyId to be passed
 }
 
-export function JournalTable({ entries = [], onEntryDeleted }: JournalTableProps) { 
-  const [clientLocale, setClientLocale] = useState('en-US'); 
-  const [isDeleting, setIsDeleting] = useState<string | null>(null); // Store ID of entry being deleted
+export function JournalTable({ entries = [], onEntryDeleted, companyId }: JournalTableProps) {
+  const [clientLocale, setClientLocale] = useState('en-US');
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -47,14 +48,18 @@ export function JournalTable({ entries = [], onEntryDeleted }: JournalTableProps
   }, []);
 
   const handleDeleteEntry = async (entryId: string) => {
+    if (!companyId) {
+      toast({ variant: "destructive", title: "Error", description: "Company ID is missing. Cannot delete entry." });
+      return;
+    }
     setIsDeleting(entryId);
     try {
-      await deleteJournalEntry(entryId);
+      await deleteJournalEntry(companyId, entryId); // Pass companyId
       toast({
         title: "Entry Deleted",
         description: "The journal entry has been successfully deleted.",
       });
-      onEntryDeleted(); // Notify parent to refresh data
+      onEntryDeleted();
     } catch (error) {
       console.error("Failed to delete entry:", error);
       toast({
@@ -70,7 +75,7 @@ export function JournalTable({ entries = [], onEntryDeleted }: JournalTableProps
   return (
     <Card className="shadow-lg">
       <CardContent className="p-0">
-        <ScrollArea className="h-[calc(100vh-20rem)]"> 
+        <ScrollArea className="h-[calc(100vh-20rem)]">
           <Table>
             <TableHeader className="sticky top-0 bg-background z-10">
               <TableRow>
@@ -80,14 +85,14 @@ export function JournalTable({ entries = [], onEntryDeleted }: JournalTableProps
                 <TableHead>Credit Account</TableHead>
                 <TableHead className="text-right w-[120px]">Amount</TableHead>
                 <TableHead className="w-[200px]">Tags</TableHead>
-                <TableHead className="w-[100px] text-center">Actions</TableHead> 
+                <TableHead className="w-[100px] text-center">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {entries.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center h-24 text-muted-foreground">
-                    No journal entries found.
+                    No journal entries found for this company.
                   </TableCell>
                 </TableRow>
               ) : (
@@ -108,7 +113,7 @@ export function JournalTable({ entries = [], onEntryDeleted }: JournalTableProps
                     <TableCell className="text-center">
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive-foreground hover:bg-destructive/90" disabled={isDeleting === entry.id}>
+                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive-foreground hover:bg-destructive/90" disabled={isDeleting === entry.id || !companyId}>
                             {isDeleting === entry.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                           </Button>
                         </AlertDialogTrigger>

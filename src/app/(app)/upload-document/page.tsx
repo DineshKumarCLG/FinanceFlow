@@ -8,11 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, FileText, CheckCircle, AlertCircle, CornerDownLeft } from 'lucide-react';
-import { extractAccountingData, type ExtractAccountingDataOutput, type ExtractAccountingDataInput } from '@/ai/flows/extract-accounting-data';
+import { extractAccountingData, type ExtractAccountingDataOutput } from '@/ai/flows/extract-accounting-data'; // Removed ExtractAccountingDataInput as it's not used here directly
 import { useToast } from '@/hooks/use-toast';
 import { addJournalEntries } from '@/lib/data-service';
+import { useAuth } from "@/contexts/AuthContext"; // Import useAuth
 
 export default function UploadDocumentPage() {
+  const { currentCompanyId } = useAuth(); // Get currentCompanyId
   const [isProcessingAi, setIsProcessingAi] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [extractedData, setExtractedData] = useState<ExtractAccountingDataOutput | null>(null);
@@ -28,6 +30,11 @@ export default function UploadDocumentPage() {
   }, []);
 
   const handleFileUpload = async (file: File, dataUri: string) => {
+    if (!currentCompanyId) {
+      toast({ variant: "destructive", title: "Error", description: "No Company ID selected. Cannot process document." });
+      setError("No Company ID selected. Please ensure you are logged in with a company.");
+      return;
+    }
     setCurrentFile(file);
     setIsProcessingAi(true);
     setExtractedData(null);
@@ -45,7 +52,7 @@ export default function UploadDocumentPage() {
       console.error("[UploadDocumentPage] Error during AI processing:", e);
       let aiErrorMessage = "The AI failed to process the document. Please try a different document or check its quality/format.";
       if (e instanceof Error && e.message) {
-        aiErrorMessage = `AI Error: ${e.message.substring(0, 100)}${e.message.length > 100 ? '...' : ''}`; 
+        aiErrorMessage = `AI Error: ${e.message.substring(0, 100)}${e.message.length > 100 ? '...' : ''}`;
       } else if (typeof e === 'string' && e) {
         aiErrorMessage = `AI Error: ${e.substring(0, 100)}${e.length > 100 ? '...' : ''}`;
       }
@@ -57,7 +64,10 @@ export default function UploadDocumentPage() {
   };
   
   const handleConfirmEntries = async () => {
-    if (!extractedData || extractedData.entries.length === 0) return;
+    if (!extractedData || extractedData.entries.length === 0 || !currentCompanyId) {
+      toast({ variant: "destructive", title: "Error", description: "Missing data, entries, or Company ID. Cannot save." });
+      return;
+    }
     setIsSaving(true);
     try {
       const entriesToSave = extractedData.entries.map(entry => ({
@@ -67,11 +77,10 @@ export default function UploadDocumentPage() {
         creditAccount: entry.creditAccount,
         amount: entry.amount,
       }));
-      await addJournalEntries(entriesToSave);
+      await addJournalEntries(currentCompanyId, entriesToSave); // Pass companyId
       toast({ title: "Entries Saved!", description: "The extracted accounting entries have been recorded." });
-      setExtractedData(null); // Clear the extracted data
-      setCurrentFile(null);  // Clear the current file
-      // Optionally, reset the FileUploader component itself if it has an internal reset mechanism
+      setExtractedData(null);
+      setCurrentFile(null);
     } catch (e: any)      {
       console.error("[UploadDocumentPage] Error saving entries:", e);
       let savingErrorMessage = "Could not save the entries. Please try again.";
@@ -88,10 +97,30 @@ export default function UploadDocumentPage() {
 
   const isLoading = isProcessingAi || isSaving;
 
+  if (!currentCompanyId && !isLoading) {
+     return (
+      <div>
+        <PageTitle
+          title="Upload Document"
+          description="Upload your receipts, bills, or invoices. Our AI will extract the accounting data."
+        />
+        <div className="max-w-2xl mx-auto space-y-6">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Company ID Missing</AlertTitle>
+            <AlertDescription>
+              Please ensure a Company ID is selected/entered on the main login page to upload documents.
+            </AlertDescription>
+          </Alert>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageTitle
-        title="Upload Document"
+        title={`Upload Document ${currentCompanyId ? `(${currentCompanyId})` : ''}`}
         description="Upload your receipts, bills, or invoices. Our AI will extract the accounting data."
       />
       <div className="max-w-2xl mx-auto space-y-6">
@@ -147,7 +176,7 @@ export default function UploadDocumentPage() {
             </CardContent>
             {extractedData.entries.length > 0 && (
               <CardFooter>
-                <Button onClick={handleConfirmEntries} className="w-full" disabled={isSaving}>
+                <Button onClick={handleConfirmEntries} className="w-full" disabled={isSaving || !currentCompanyId}>
                   {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CornerDownLeft className="mr-2 h-4 w-4" />}
                    Confirm and Save All Entries
                 </Button>

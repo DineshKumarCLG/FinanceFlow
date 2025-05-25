@@ -18,12 +18,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
 
 const profileFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
-  email: z.string().email().optional(), // Email comes from Firebase Auth, not directly editable here
+  email: z.string().email().optional(),
+  // currentCompanyIdDisplay: z.string().optional(), // For display only
+  // Business name and type might be company-specific, not user-specific in a multi-company setup
+  // Or they could be user's default business info if they manage multiple companies.
+  // For now, let's keep them as user-level settings.
   businessName: z.string().min(2, "Business name must be at least 2 characters.").optional(),
   businessType: z.string().optional(),
 });
@@ -41,7 +47,7 @@ const businessTypes = [
 ];
 
 export function ProfileForm() {
-  const { user, updateUserProfileName, isLoading: authIsLoading } = useAuth();
+  const { user, updateUserProfileName, isLoading: authIsLoading, currentCompanyId } = useAuth();
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
 
@@ -50,8 +56,8 @@ export function ProfileForm() {
     defaultValues: {
       name: user?.displayName || "",
       email: user?.email || "",
-      businessName: "KENESIS", // Default or fetch from user profile if stored
-      businessType: "startup", // Default or fetch
+      businessName: "", // This should ideally be fetched from a user profile if stored
+      businessType: "", // This too
     },
     mode: "onChange",
   });
@@ -61,12 +67,13 @@ export function ProfileForm() {
       form.reset({
         name: user.displayName || "",
         email: user.email || "",
-        // TODO: Fetch businessName and businessType from a user profile in Firestore if you store them
-        businessName: form.getValues("businessName") || "KENESIS", // Keep existing if already set, else default
-        businessType: form.getValues("businessType") || "startup",
+        // Fetch businessName and businessType from a user profile in Firestore if you store them
+        // For now, if they are empty in the form, keep them empty or set a default
+        businessName: form.getValues("businessName") || (currentCompanyId === "KENESIS" ? "KENESIS" : ""),
+        businessType: form.getValues("businessType") || (currentCompanyId === "KENESIS" ? "startup" : ""),
       });
     }
-  }, [user, form]);
+  }, [user, form, currentCompanyId]);
 
   async function onSubmit(data: ProfileFormValues) {
     setIsSaving(true);
@@ -74,9 +81,9 @@ export function ProfileForm() {
       if (data.name !== user?.displayName) {
         await updateUserProfileName(data.name);
       }
-      // TODO: Add logic to save businessName and businessType to a Firestore user profile document
-      // For now, we just log them and show a success toast for the name change.
-      console.log("Profile data to save (potentially to Firestore):", { businessName: data.businessName, businessType: data.businessType });
+      // TODO: Add logic to save businessName and businessType to a Firestore user profile document,
+      // potentially scoped by companyId or as general user info.
+      console.log("Profile data to save (potentially to Firestore):", { businessName: data.businessName, businessType: data.businessType, forCompany: currentCompanyId });
       
       toast({
         title: "Profile Updated",
@@ -94,12 +101,32 @@ export function ProfileForm() {
   }
 
   const isLoading = authIsLoading || isSaving;
+  
+  if (!currentCompanyId && !authIsLoading) {
+    return (
+       <Card>
+        <CardHeader>
+            <CardTitle>User Profile</CardTitle>
+        </CardHeader>
+        <CardContent>
+             <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>No Company Selected</AlertTitle>
+                <AlertDescription>
+                Please select or enter a Company ID on the main page to manage profile settings.
+                </AlertDescription>
+            </Alert>
+        </CardContent>
+       </Card>
+    );
+  }
+
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>User Profile</CardTitle>
-        <CardDescription>Manage your personal and business information for KENESIS.</CardDescription>
+        <CardTitle>User Profile {currentCompanyId ? `(Company: ${currentCompanyId})` : ''}</CardTitle>
+        <CardDescription>Manage your personal and business information.</CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -111,7 +138,7 @@ export function ProfileForm() {
                 <FormItem>
                   <FormLabel>Full Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Your full name" {...field} />
+                    <Input placeholder="Your full name" {...field} disabled={isLoading} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -131,15 +158,21 @@ export function ProfileForm() {
                 </FormItem>
               )}
             />
+             {/* Display Current Company ID - Not editable here */}
+            <div>
+              <FormLabel>Current Company ID</FormLabel>
+              <Input value={currentCompanyId || "N/A"} disabled readOnly className="mt-1"/>
+              <p className="text-xs text-muted-foreground">Company context for the current session. Change on login page.</p>
+            </div>
+
             <FormField
               control={form.control}
               name="businessName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Business Name</FormLabel>
+                  <FormLabel>Business Name (Optional)</FormLabel>
                   <FormControl>
-                    {/* For KENESIS, this is likely fixed */}
-                    <Input placeholder="Your business name" {...field} value="KENESIS" disabled />
+                    <Input placeholder="Your business name" {...field} disabled={isLoading || (currentCompanyId === "KENESIS" && field.value === "KENESIS")}/>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -150,8 +183,8 @@ export function ProfileForm() {
               name="businessType"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Business Type</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormLabel>Business Type (Optional)</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value} disabled={isLoading}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select your business type" />

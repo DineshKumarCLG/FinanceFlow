@@ -21,19 +21,21 @@ import { parseAccountingEntry, type ParseAccountingEntryOutput } from "@/ai/flow
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { addJournalEntry } from "@/lib/data-service";
+import { useAuth } from "@/contexts/AuthContext"; // Import useAuth
 
 const formSchema = z.object({
   entryText: z.string().min(5, { message: "Please describe the transaction in a few words." }),
 });
 
 export function AddEntryForm() {
+  const { currentCompanyId } = useAuth(); // Get currentCompanyId
   const [isLoading, setIsLoading] = useState(false);
   const [parsedResult, setParsedResult] = useState<ParseAccountingEntryOutput | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const [clientLocale, setClientLocale] = useState('en-US'); 
+  const [clientLocale, setClientLocale] = useState('en-US');
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -47,7 +49,6 @@ export function AddEntryForm() {
       setClientLocale(navigator.language || 'en-US');
     }
   }, []);
-
 
   useEffect(() => {
     if (typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
@@ -90,6 +91,11 @@ export function AddEntryForm() {
   };
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
+    if (!currentCompanyId) {
+      toast({ variant: "destructive", title: "Error", description: "No Company ID selected. Cannot parse entry." });
+      setError("No Company ID selected. Please ensure you are logged in with a company.");
+      return;
+    }
     setIsLoading(true);
     setParsedResult(null);
     setError(null);
@@ -107,7 +113,10 @@ export function AddEntryForm() {
   }
   
   const handleConfirmEntry = async () => {
-    if (!parsedResult) return;
+    if (!parsedResult || !currentCompanyId) {
+      toast({ variant: "destructive", title: "Error", description: "Missing parsed data or Company ID. Cannot save entry." });
+      return;
+    }
     
     setIsLoading(true);
     try {
@@ -118,10 +127,10 @@ export function AddEntryForm() {
         creditAccount: parsedResult.creditAccount,
         amount: parsedResult.amount,
       };
-      await addJournalEntry(entryToSave);
+      await addJournalEntry(currentCompanyId, entryToSave); // Pass companyId
       toast({ title: "Entry Saved!", description: "The accounting entry has been successfully recorded." });
-      setParsedResult(null); // Clear the parsed result
-      form.reset(); // Reset the form fields
+      setParsedResult(null);
+      form.reset();
     } catch (e: any) {
       toast({ variant: "destructive", title: "Saving Error", description: "Could not save the entry." });
       console.error("Saving error:", e);
@@ -130,10 +139,29 @@ export function AddEntryForm() {
     }
   }
 
+  if (!currentCompanyId) {
+    return (
+      <Card className="w-full shadow-xl">
+        <CardHeader>
+          <CardTitle className="text-2xl">Add New Accounting Entry</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Company ID Missing</AlertTitle>
+            <AlertDescription>
+              Please ensure a Company ID is selected/entered on the main login page to add entries.
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className="w-full shadow-xl">
       <CardHeader>
-        <CardTitle className="text-2xl">Add New Accounting Entry</CardTitle>
+        <CardTitle className="text-2xl">Add New Accounting Entry ({currentCompanyId})</CardTitle>
         <CardDescription>Describe your transaction using text or voice. Our AI will parse it for you.</CardDescription>
       </CardHeader>
       <Form {...form}>
@@ -157,12 +185,12 @@ export function AddEntryForm() {
               )}
             />
             <div className="flex items-center gap-2">
-              <Button type="submit" disabled={isLoading} className="flex-grow">
+              <Button type="submit" disabled={isLoading || !currentCompanyId} className="flex-grow">
                 {isLoading && !parsedResult ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                 Parse Entry with AI
               </Button>
               {recognitionRef.current && (
-                <Button type="button" variant="outline" onClick={handleVoiceInput} disabled={isLoading}>
+                <Button type="button" variant="outline" onClick={handleVoiceInput} disabled={isLoading || !currentCompanyId}>
                   <Mic className={isListening ? "mr-2 h-4 w-4 text-destructive animate-pulse" : "mr-2 h-4 w-4"} />
                   {isListening ? "Listening..." : "Use Voice"}
                 </Button>
@@ -195,7 +223,7 @@ export function AddEntryForm() {
                   <div><strong>Description:</strong> {parsedResult.description}</div>
                 </CardContent>
                 <CardFooter>
-                  <Button onClick={handleConfirmEntry} className="w-full" disabled={isLoading}>
+                  <Button onClick={handleConfirmEntry} className="w-full" disabled={isLoading || !currentCompanyId}>
                      {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CornerDownLeft className="mr-2 h-4 w-4" />}
                     Confirm and Save Entry
                   </Button>

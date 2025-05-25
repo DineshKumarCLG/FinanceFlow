@@ -15,10 +15,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { suggestLedgerTags } from "@/ai/flows/suggest-ledger-tags";
 import { Button } from "@/components/ui/button";
-import { Wand2, Loader2 } from "lucide-react"; 
+import { Wand2, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-
 
 export interface LedgerTransaction {
   id: string;
@@ -30,38 +29,42 @@ export interface LedgerTransaction {
   tags?: string[];
 }
 
-const sampleTransactions: LedgerTransaction[] = [
-  { id: "1", date: "2024-07-01", description: "Opening Balance", debit: null, credit: null, balance: 1000.00 },
-  { id: "2", date: "2024-07-05", description: "Invoice #101 Payment", debit: 500.00, credit: null, balance: 1500.00, tags: ["income", "client A"] },
-];
+// Sample transactions removed as data will come from props
 
 interface LedgerTableProps {
   accountName: string;
-  transactions?: LedgerTransaction[];
+  transactions: LedgerTransaction[]; // Changed from optional
+  companyId: string; // Expect companyId
 }
 
-export function LedgerTable({ accountName, transactions = sampleTransactions }: LedgerTableProps) {
+export function LedgerTable({ accountName, transactions = [], companyId }: LedgerTableProps) {
   const [currentTransactions, setCurrentTransactions] = useState(transactions);
   const [loadingTagsFor, setLoadingTagsFor] = useState<string | null>(null);
   const { toast } = useToast();
-  const [clientLocale, setClientLocale] = useState('en-US'); 
+  const [clientLocale, setClientLocale] = useState('en-US');
 
   useEffect(() => {
     if (typeof navigator !== 'undefined') {
       setClientLocale(navigator.language || 'en-US');
     }
-  }, []); 
+  }, []);
 
   useEffect(() => {
     setCurrentTransactions(transactions);
   }, [transactions]);
 
   const handleSuggestTags = async (transactionId: string, description: string) => {
+    if (!companyId) { // Ensure companyId is present
+      toast({ variant: "destructive", title: "Error", description: "Company ID is missing. Cannot suggest tags." });
+      return;
+    }
     setLoadingTagsFor(transactionId);
     try {
+      // Assuming suggestLedgerTags does not need companyId, if it does, it would need to be passed.
+      // For now, the flow itself is not company-scoped in its input.
       const { tags } = await suggestLedgerTags({ entryDescription: description });
-      setCurrentTransactions(prev => 
-        prev.map(tx => 
+      setCurrentTransactions(prev =>
+        prev.map(tx =>
           tx.id === transactionId ? { ...tx, tags: Array.from(new Set([...(tx.tags || []), ...tags])) } : tx
         )
       );
@@ -73,20 +76,19 @@ export function LedgerTable({ accountName, transactions = sampleTransactions }: 
       setLoadingTagsFor(null);
     }
   };
-  
+
   const totalDebits = currentTransactions.reduce((sum, tx) => sum + (tx.debit || 0), 0);
   const totalCredits = currentTransactions.reduce((sum, tx) => sum + (tx.credit || 0), 0);
   const finalBalance = currentTransactions.length > 0 ? currentTransactions[currentTransactions.length - 1].balance : 0;
 
-
   return (
     <Card className="shadow-lg">
       <CardHeader>
-        <CardTitle className="text-xl">Ledger: {accountName}</CardTitle>
+        <CardTitle className="text-xl">Ledger: {accountName} {companyId ? `(${companyId})` : ''}</CardTitle>
         <CardDescription>Detailed transactions for the selected account.</CardDescription>
       </CardHeader>
       <CardContent className="p-0">
-        <ScrollArea className="h-[calc(100vh-28rem)]"> 
+        <ScrollArea className="h-[calc(100vh-28rem)]">
           <Table>
             <TableHeader className="sticky top-0 bg-background z-10">
               <TableRow>
@@ -122,12 +124,12 @@ export function LedgerTable({ accountName, transactions = sampleTransactions }: 
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-1">
                         {tx.tags?.map(tag => <Badge key={tag} variant="secondary">{tag}</Badge>)}
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           className="h-6 px-1.5"
                           onClick={() => handleSuggestTags(tx.id, tx.description)}
-                          disabled={loadingTagsFor === tx.id}
+                          disabled={loadingTagsFor === tx.id || !companyId}
                           title="Suggest tags with AI"
                         >
                            {loadingTagsFor === tx.id ? (
