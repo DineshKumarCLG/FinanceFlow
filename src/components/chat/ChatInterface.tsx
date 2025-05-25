@@ -10,6 +10,7 @@ import { chatWithAiAssistant } from '@/ai/flows/chat-with-ai-assistant';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent } from '@/components/ui/card';
 import Image from 'next/image';
+import { cn } from "@/lib/utils";
 
 // Helper to convert file to data URI
 const fileToDataUri = (file: File): Promise<string> => {
