@@ -36,6 +36,7 @@ export function ChatInterface() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [filePreviews, setFilePreviews] = useState<string[]>([]);
+  const [isMicSupported, setIsMicSupported] = useState(false); // New state for mic support
 
   useEffect(() => {
     // Scroll to bottom when messages change
@@ -61,7 +62,7 @@ export function ChatInterface() {
           console.error("Speech recognition error", event.error);
           if (event.error === "no-speech") {
             toast({ variant: "default", title: "Voice Input", description: "No speech detected. Please try speaking again." });
-          } else if (event.error === "not-allowed") {
+          } else if (event.error === "not-allowed" || event.error === "service-not-allowed") {
             toast({ variant: "destructive", title: "Voice Error", description: "Microphone access denied. Please enable it in your browser settings." });
           } else {
             toast({ variant: "destructive", title: "Voice Error", description: "Could not recognize speech." });
@@ -69,7 +70,12 @@ export function ChatInterface() {
           setIsListening(false);
         };
         recognitionRef.current.onend = () => setIsListening(false);
+        setIsMicSupported(true); // Set mic support to true
+      } else {
+        setIsMicSupported(false);
       }
+    } else {
+      setIsMicSupported(false);
     }
   }, [toast]);
 
@@ -80,7 +86,7 @@ export function ChatInterface() {
     }
     if (isListening) {
       recognitionRef.current.stop();
-      setIsListening(false); // Explicitly set here in case onend doesn't fire immediately
+      setIsListening(false); 
     } else {
       try {
         recognitionRef.current.start();
@@ -101,7 +107,7 @@ export function ChatInterface() {
       const previews = await Promise.all(files.map(fileToDataUri));
       setFilePreviews(prev => [...prev, ...previews]);
       
-      if (event.target) event.target.value = ""; // Reset file input
+      if (event.target) event.target.value = ""; 
     }
   };
 
@@ -216,7 +222,7 @@ export function ChatInterface() {
             <Paperclip className="h-5 w-5" />
           </Button>
           <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" multiple accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv"/>
-          {recognitionRef.current && (
+          {isMicSupported && (
             <Button type="button" variant="ghost" size="icon" onClick={handleVoiceInput} disabled={isLoading} title="Use voice input">
               <Mic className={cn("h-5 w-5", isListening && "text-destructive animate-pulse")} />
             </Button>
