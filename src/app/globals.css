@@ -2,50 +2,46 @@
 @tailwind components;
 @tailwind utilities;
 
-/* @layer base {
-  :root { */
-    /* Default values to prevent catastrophic failure, app will look unstyled */
-    /* --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
-    --radius: 0.5rem; */
+@layer base {
+  :root {
+    --background: 0 0% 100%; /* White background */
+    --foreground: 220 9% 23%; /* Dark grey text, similar to image */
+    --card: 0 0% 100%; /* White cards */
+    --card-foreground: 220 9% 23%; /* Dark grey text on cards */
+    --popover: 0 0% 100%; /* White popovers */
+    --popover-foreground: 220 9% 23%; /* Dark grey text on popovers */
+    --primary: 100 60% 50%; /* Vibrant Green for primary actions & active states */
+    --primary-foreground: 0 0% 98%; /* White or very light text on primary green */
+    --secondary: 240 5% 96%; /* Light grey for secondary elements */
+    --secondary-foreground: 220 9% 23%; /* Dark grey text on secondary */
+    --muted:  240 5% 96%; /* Light grey for muted elements */
+    --muted-foreground: 240 4% 46%; /* Mid-grey for muted text */
+    --accent: 100 60% 50%;  /* Vibrant Green for accents (can be same as primary) */
+    --accent-foreground: 0 0% 98%; /* White or very light text on accent green */
+    --destructive: 0 84.2% 60.2%; /* Standard destructive red */
+    --destructive-foreground: 0 0% 98%; /* White text on destructive red */
+    --border: 240 6% 90%; /* Light grey for borders */
+    --input: 240 6% 90%; /* Light grey for input backgrounds/borders */
+    --ring: 100 60% 55%; /* Slightly darker/more saturated green for focus rings */
+    --radius: 0.5rem; /* Default radius from shadcn */
 
 
-    /* Chart variables - Commented out for diagnosis */
-    /*
-    --chart-1: 100 60% 50%;
-    --chart-2: 100 70% 60%;
-    --chart-3: 220 50% 65%;
-    --chart-4: 30 80% 65%;
-    --chart-5: 270 70% 60%;
-    */
+    /* Chart variables */
+    --chart-1: 100 60% 50%; /* Main green for charts */
+    --chart-2: 100 70% 60%; /* Lighter green */
+    --chart-3: 220 50% 65%; /* A blue */
+    --chart-4: 30 80% 65%;  /* An orange/yellow */
+    --chart-5: 270 70% 60%; /* A purple */
 
-    /* Sidebar specific theme - Commented out for diagnosis */
-    /*
-    --sidebar-background-hsl: 0 0% 100%;
-    --sidebar-foreground-hsl: 220 9% 23%;
-    --sidebar-primary-hsl: 100 60% 50%;
-    --sidebar-primary-foreground-hsl: 0 0% 100%;
-    --sidebar-accent-hsl: 100 60% 50%;
-    --sidebar-accent-foreground-hsl: 0 0% 100%;
-    --sidebar-border-hsl: 240 5.9% 90%;
-    --sidebar-ring-hsl: 100 60% 50%;
+    /* Sidebar specific theme */
+    --sidebar-background-hsl: 0 0% 100%; /* White sidebar background */
+    --sidebar-foreground-hsl: 220 9% 23%; /* Dark grey text */
+    --sidebar-primary-hsl: 100 60% 50%; /* Green accent for active items */
+    --sidebar-primary-foreground-hsl: 0 0% 98%; /* White text on green accent */
+    --sidebar-accent-hsl: 100 50% 95%; /* Very light green for hover, or a light grey */
+    --sidebar-accent-foreground-hsl: 100 60% 40%; /* Darker green text on hover */
+    --sidebar-border-hsl: 240 5.9% 90%; /* Light grey border */
+    --sidebar-ring-hsl: 100 60% 55%; /* Green for focus rings */
 
     --sidebar-background: hsl(var(--sidebar-background-hsl));
     --sidebar-foreground: hsl(var(--sidebar-foreground-hsl));
@@ -55,10 +51,9 @@
     --sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground-hsl));
     --sidebar-border: hsl(var(--sidebar-border-hsl));
     --sidebar-ring: hsl(var(--sidebar-ring-hsl));
-    */
-  /* } */
+  }
 
-  /* Dark theme - Commented out for diagnosis */
+  /* Dark theme - Kept commented out for now, can be enabled later */
   /*
   .dark {
     --background-hsl: 220 14% 10%;
@@ -97,13 +92,13 @@
     --sidebar-ring-hsl: 100 60% 55%;
   }
   */
-/* } */
+}
 
-/* @layer base {
+@layer base {
   * {
     @apply border-border;
   }
   body {
     @apply bg-background text-foreground;
   }
-} */
+}
