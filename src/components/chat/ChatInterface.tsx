@@ -53,13 +53,19 @@ export function ChatInterface() {
         recognitionRef.current.continuous = false;
         recognitionRef.current.interimResults = false;
         recognitionRef.current.lang = 'en-US';
-        recognitionRef.current.onresult = (event) => {
+        recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
           setInput(prev => prev + event.results[0][0].transcript);
           setIsListening(false);
         };
-        recognitionRef.current.onerror = (event) => {
+        recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
           console.error("Speech recognition error", event.error);
-          toast({ variant: "destructive", title: "Voice Error", description: "Could not recognize speech." });
+          if (event.error === "no-speech") {
+            toast({ variant: "default", title: "Voice Input", description: "No speech detected. Please try speaking again." });
+          } else if (event.error === "not-allowed") {
+            toast({ variant: "destructive", title: "Voice Error", description: "Microphone access denied. Please enable it in your browser settings." });
+          } else {
+            toast({ variant: "destructive", title: "Voice Error", description: "Could not recognize speech." });
+          }
           setIsListening(false);
         };
         recognitionRef.current.onend = () => setIsListening(false);
@@ -74,9 +80,16 @@ export function ChatInterface() {
     }
     if (isListening) {
       recognitionRef.current.stop();
+      setIsListening(false); // Explicitly set here in case onend doesn't fire immediately
     } else {
-      recognitionRef.current.start();
-      setIsListening(true);
+      try {
+        recognitionRef.current.start();
+        setIsListening(true);
+      } catch (e: any) {
+        console.error("Error starting speech recognition:", e);
+        toast({ variant: "destructive", title: "Voice Error", description: "Could not start voice input. Is microphone access allowed?"});
+        setIsListening(false);
+      }
     }
   };
 
@@ -142,7 +155,7 @@ export function ChatInterface() {
   };
 
   return (
-    <Card className="h-full flex flex-col shadow-xl"> {/* Changed from h-[calc(100vh-10rem)] to h-full */}
+    <Card className="h-full flex flex-col shadow-xl">
       <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
         <div className="space-y-2">
           {messages.map((msg) => (
