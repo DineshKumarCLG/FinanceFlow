@@ -103,7 +103,6 @@ export interface CompanySettings {
   billingAddress?: string; // Company's own billing address
   companyEmail?: string;
   companyPhone?: string;
-  // logoUrl?: string; // Removed logoUrl
   bankDetails?: string;
   authorizedSignatory?: string;
   updatedAt?: Timestamp;
@@ -129,10 +128,9 @@ export async function addNotification(
   message: string,
   type: Notification['type'],
   companyId: string,
-  userId?: string,
+  userId?: string, // This userId is the one performing the action or related to the notification
   relatedId?: string
 ): Promise<void> {
-  const currentUser = auth.currentUser;
   if (!companyId) {
     console.error("DataService: Error adding notification: companyId is required.");
     return;
@@ -140,7 +138,7 @@ export async function addNotification(
   const notificationData = {
     message,
     type,
-    userId: userId || (currentUser ? currentUser.uid : 'SYSTEM'),
+    userId: userId || 'SYSTEM', // If userId is not passed, mark as SYSTEM
     relatedId: relatedId || null,
     companyId: companyId,
     timestamp: serverTimestamp(),
@@ -416,11 +414,11 @@ export type UpdateInvoiceData = Partial<Omit<Invoice, 'id' | 'companyId' | 'crea
 
 export async function addInvoice(
   companyId: string,
+  creatorUserId: string, // Added creatorUserId parameter
   newInvoiceData: NewInvoiceData
 ): Promise<Invoice> {
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
-    throw new Error("User not authenticated. Cannot add invoice.");
+  if (!creatorUserId) { // Check passed parameter
+    throw new Error("Creator User ID is required. Cannot add invoice.");
   }
   if (!companyId) {
     throw new Error("Company ID is required to add an invoice.");
@@ -444,19 +442,17 @@ export async function addInvoice(
     notes: newInvoiceData.notes,
     status: newInvoiceData.status || 'draft',
     companyId: companyId,
-    creatorUserId: currentUser.uid,
+    creatorUserId: creatorUserId, // Use passed creatorUserId
     createdAt: serverTimestamp() as Timestamp,
     updatedAt: serverTimestamp() as Timestamp,
   };
   
-  // Filter out undefined values before saving
   const cleanPayload: { [key: string]: any } = {};
   for (const key in invoicePayload) {
     if ((invoicePayload as any)[key] !== undefined) {
       cleanPayload[key] = (invoicePayload as any)[key];
     }
   }
-
 
   try {
     const docRef = await addDoc(collection(db, INVOICE_COLLECTION), cleanPayload);
@@ -465,7 +461,7 @@ export async function addInvoice(
       ...newInvoiceData, 
       lineItems: newInvoiceData.lineItems || [], 
       companyId: companyId,
-      creatorUserId: currentUser.uid,
+      creatorUserId: creatorUserId,
       createdAt: Timestamp.now(), 
       updatedAt: Timestamp.now(),
       dueDate: newInvoiceData.dueDate,
@@ -479,18 +475,17 @@ export async function addInvoice(
       status: newInvoiceData.status || 'draft',
     };
     
-    const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
     addNotification(
-      `${userName} created invoice #${savedInvoice.invoiceNumber} for ${savedInvoice.customerName}.`,
+      `Invoice #${savedInvoice.invoiceNumber} for ${savedInvoice.customerName} created.`,
       'invoice_created',
       companyId,
-      currentUser.uid,
+      creatorUserId, // Pass creatorUserId for notification
       savedInvoice.id
     ).catch(err => console.error("DataService: Failed to add notification for new invoice:", err));
 
     return savedInvoice;
   } catch (error) {
-    console.error(`DataService: Error adding invoice to Firestore for company '${companyId}' (User: ${currentUser.uid}):`, error);
+    console.error(`DataService: Error adding invoice to Firestore for company '${companyId}' (User: ${creatorUserId}):`, error);
     throw error;
   }
 }
@@ -498,11 +493,11 @@ export async function addInvoice(
 export async function updateInvoice(
   companyId: string,
   invoiceId: string,
+  creatorUserId: string, // Added creatorUserId (even if only for notification consistency)
   invoiceDataToUpdate: UpdateInvoiceData
 ): Promise<Invoice> {
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
-    throw new Error("User not authenticated. Cannot update invoice.");
+  if (!creatorUserId) { 
+    throw new Error("Creator User ID is required for updating an invoice (for audit/notification).");
   }
   if (!companyId) {
     throw new Error("Company ID is required to update an invoice.");
@@ -530,24 +525,27 @@ export async function updateInvoice(
     if (!docSnap.exists() || docSnap.data().companyId !== companyId) {
         throw new Error("Invoice not found or access denied.");
     }
+    // Check if the updater is the original creator (optional, depending on business logic)
+    // if (docSnap.data().creatorUserId !== creatorUserId) {
+    //   console.warn(`User ${creatorUserId} is updating an invoice not created by them.`);
+    // }
 
     await updateDoc(invoiceRef, cleanUpdatePayload);
     
     const updatedInvoiceData = { ...docSnap.data(), ...invoiceDataToUpdate, id: invoiceId, updatedAt: Timestamp.now() } as Invoice;
 
-    const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
     addNotification(
-      `${userName} updated invoice #${updatedInvoiceData.invoiceNumber}.`,
+      `Invoice #${updatedInvoiceData.invoiceNumber} updated.`,
       'invoice_updated',
       companyId,
-      currentUser.uid,
+      creatorUserId, // Pass creatorUserId for notification
       invoiceId
     ).catch(err => console.error("DataService: Failed to add notification for invoice update:", err));
     
     return updatedInvoiceData;
 
   } catch (error) {
-    console.error(`DataService: Error updating invoice ${invoiceId} for company '${companyId}' (User: ${currentUser.uid}):`, error);
+    console.error(`DataService: Error updating invoice ${invoiceId} for company '${companyId}' (User: ${creatorUserId}):`, error);
     throw error;
   }
 }
@@ -573,11 +571,14 @@ export async function deleteInvoice(companyId: string, invoiceId: string): Promi
       if (invoiceData.companyId !== companyId) {
         throw new Error("Invoice does not belong to the specified company or access denied.");
       }
+      // Ensure only creator can delete, or implement role-based access
+      if (invoiceData.creatorUserId !== currentUser.uid) {
+         throw new Error("User not authorized to delete this invoice.");
+      }
       await deleteDoc(invoiceRef);
 
-      const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
       addNotification(
-        `${userName} deleted invoice #${invoiceData.invoiceNumber || invoiceId.slice(0,8)}.`,
+        `Invoice #${invoiceData.invoiceNumber || invoiceId.slice(0,8)} deleted.`,
         'invoice_deleted',
         companyId,
         currentUser.uid,
@@ -662,6 +663,7 @@ export async function getInvoiceById(companyId: string, invoiceId: string): Prom
     if (docSnap.exists()) {
       const data = docSnap.data();
       if (data.companyId === companyId) {
+        // Ideally, also check if currentUser.uid is allowed to view this invoice
         return { 
           id: docSnap.id, 
           invoiceNumber: data.invoiceNumber,
@@ -728,7 +730,6 @@ export async function getCompanySettings(companyId: string): Promise<CompanySett
         billingAddress: data.billingAddress,
         companyEmail: data.companyEmail,
         companyPhone: data.companyPhone,
-        // logoUrl: data.logoUrl, // Removed logoUrl
         bankDetails: data.bankDetails,
         authorizedSignatory: data.authorizedSignatory,
         updatedAt: data.updatedAt,
@@ -759,21 +760,25 @@ export async function saveCompanySettings(
   
   const updatePayload: { [key: string]: any } = { ...settingsData };
   updatePayload.updatedAt = serverTimestamp() as Timestamp;
-  // Ensure logoUrl is explicitly handled if it was part of settingsData,
-  // and set to an empty string if it's meant to be cleared.
-  // if (settingsData.hasOwnProperty('logoUrl')) { // Check if logoUrl was intentionally passed
-  //   updatePayload.logoUrl = settingsData.logoUrl || ""; // Ensure it's a string
-  // } // Removed logoUrl
+  
+  // Ensure all fields are present, even if empty, to avoid 'undefined' in Firestore
+  const fieldsToEnsure: (keyof CompanySettings)[] = ['businessName', 'businessType', 'companyGstin', 'gstRegion', 'companyAddress', 'registeredAddress', 'corporateAddress', 'billingAddress', 'companyEmail', 'companyPhone', 'bankDetails', 'authorizedSignatory'];
+  fieldsToEnsure.forEach(field => {
+    if (updatePayload[field] === undefined) {
+      updatePayload[field] = ""; // Or null, depending on how you want to treat empty fields
+    }
+  });
+  if (updatePayload.gstRegion === "") updatePayload.gstRegion = "none";
+
 
   try {
     await setDoc(settingsRef, updatePayload, { merge: true });
 
-    const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
     addNotification(
-      `${userName} updated company settings for ${companyId}.`,
+      `Company settings for ${companyId} updated.`,
       'company_settings_updated',
       companyId,
-      currentUser.uid,
+      currentUser.uid, 
       companyId 
     ).catch(err => console.error("DataService: Failed to add notification for company settings update:", err));
 
@@ -843,9 +848,8 @@ export async function saveAiPreferences(
   try {
     await setDoc(prefsRef, updatePayload, { merge: true });
     
-    const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
     addNotification(
-      `${userName} updated AI preferences for ${companyId}.`,
+      `AI preferences for ${companyId} updated.`,
       'ai_preferences_updated',
       companyId,
       currentUser.uid,

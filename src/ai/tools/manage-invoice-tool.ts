@@ -38,6 +38,7 @@ const InvoiceDetailsForToolSchema = z.object({
 const ManageInvoiceInputSchema = z.object({
   action: z.enum(['create', 'update']).describe("Whether to create a new invoice or update an existing one."),
   companyId: z.string().describe("The ID of the company for which the invoice is being managed."),
+  creatorUserId: z.string().describe("The ID of the user performing the action."), // Added creatorUserId
   invoiceId: z.string().optional().describe("The ID of the invoice to update (required if action is 'update')."),
   textDescription: z.string().optional().describe("Full natural language description of the invoice provided by the user. The tool will parse this if direct details are not sufficient."),
   invoiceDetails: InvoiceDetailsForToolSchema.optional().describe("Pre-structured details for the invoice. If textDescription is also provided, this can be used as a base and textDescription can augment it."),
@@ -141,20 +142,20 @@ export const manageInvoiceTool = ai.defineTool(
     if (!input.companyId) {
       return { success: false, message: "Error: Company ID is required to manage an invoice." };
     }
+    if (!input.creatorUserId) { // Check for creatorUserId
+      return { success: false, message: "Error: User ID is required to manage an invoice." };
+    }
 
     // 1. Determine structured details
     if (input.textDescription) {
       try {
         const genInput: GenerateInvoiceDetailsInput = { description: input.textDescription };
-        // If some details are already provided, they can prime the generation process (though current flow doesn't accept prior details)
-        // For now, generateInvoiceDetails will parse from scratch.
         structuredDetails = await generateInvoiceDetails(genInput);
 
-        // Merge with any explicitly provided invoiceDetails
         if (input.invoiceDetails) {
           structuredDetails = {
-            ...structuredDetails, // Parsed from textDescription
-            ...input.invoiceDetails, // Explicit details override
+            ...structuredDetails, 
+            ...input.invoiceDetails, 
             lineItems: input.invoiceDetails.lineItems && input.invoiceDetails.lineItems.length > 0
                        ? input.invoiceDetails.lineItems
                        : structuredDetails.lineItems,
@@ -165,8 +166,6 @@ export const manageInvoiceTool = ai.defineTool(
         return { success: false, message: `Failed to parse invoice description: ${e.message}` };
       }
     } else if (input.invoiceDetails) {
-      // Ensure invoiceDetails conforms to GenerateInvoiceDetailsOutput structure
-      // This is a bit of a type cast, ensure schemas are compatible
       structuredDetails = input.invoiceDetails as GenerateInvoiceDetailsOutput;
        if (!structuredDetails.invoiceDate) {
           structuredDetails.invoiceDate = format(new Date(), "yyyy-MM-dd");
@@ -184,7 +183,8 @@ export const manageInvoiceTool = ai.defineTool(
     try {
       if (input.action === 'create') {
         const newInvoiceData = mapAiOutputToInvoiceData(structuredDetails);
-        const savedInvoice = await addInvoice(input.companyId, newInvoiceData);
+        // Pass companyId and creatorUserId to addInvoice
+        const savedInvoice = await addInvoice(input.companyId, input.creatorUserId, newInvoiceData);
         return {
           success: true,
           message: `Successfully created invoice #${savedInvoice.invoiceNumber}.`,
@@ -195,13 +195,12 @@ export const manageInvoiceTool = ai.defineTool(
         if (!input.invoiceId) {
           return { success: false, message: "Invoice ID is required for updates." };
         }
-        // For updates, we might want to fetch the existing invoice to preserve fields
-        // not explicitly overwritten by the AI.
         const existingInvoice = await getInvoiceById(input.companyId, input.invoiceId);
         let existingInvoiceNumber = existingInvoice?.invoiceNumber;
 
         const updatedInvoiceData = mapAiOutputToInvoiceData(structuredDetails, existingInvoiceNumber);
-        const savedInvoice = await updateInvoice(input.companyId, input.invoiceId, updatedInvoiceData);
+        // Pass companyId, invoiceId, creatorUserId (though updateInvoice might not use creatorUserId for auth, but for consistency)
+        const savedInvoice = await updateInvoice(input.companyId, input.invoiceId, input.creatorUserId, updatedInvoiceData);
         return {
           success: true,
           message: `Successfully updated invoice #${savedInvoice.invoiceNumber}.`,

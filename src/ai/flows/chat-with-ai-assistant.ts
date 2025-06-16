@@ -11,7 +11,6 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import { manageInvoiceTool } from '@/ai/tools/manage-invoice-tool'; // Import the new tool
-import { type User } from 'firebase/auth'; // Assuming you might pass user/company info
 
 const ChatWithAiAssistantInputSchema = z.object({
   message: z.string().describe('The user message to the AI assistant.'),
@@ -21,6 +20,7 @@ const ChatWithAiAssistantInputSchema = z.object({
   })).optional().describe('The conversation history between the user and the AI assistant.'),
   uploadedFiles: z.array(z.string()).optional().describe('List of data URIs of uploaded files.'),
   companyId: z.string().optional().describe("The current user's active company ID."),
+  creatorUserId: z.string().optional().describe("The ID of the user initiating the chat action."), // Added creatorUserId
 });
 export type ChatWithAiAssistantInput = z.infer<typeof ChatWithAiAssistantInputSchema>;
 
@@ -51,6 +51,7 @@ const prompt = ai.definePrompt({
     - For creating an invoice, set action to 'create'.
     - For updating an invoice, set action to 'update' and ensure you provide the invoiceId if the user mentions it or if it's in the conversation context.
     - You MUST provide the companyId to this tool. It is available as '{{companyId}}' if provided in the input. If not available, you should inform the user that a company context is needed.
+    - You MUST provide the creatorUserId to this tool. It is available as '{{creatorUserId}}' if provided in the input. If not available, you should inform the user that they need to be identified.
 
   Here's the conversation history:
   {{#each conversationHistory}}
@@ -86,7 +87,7 @@ const chatWithAiAssistantFlow = ai.defineFlow(
     }));
 
     const promptData = {
-      ...input,
+      ...input, // This now includes companyId and creatorUserId
       conversationHistory: currentHistory,
     };
 
@@ -106,9 +107,16 @@ const chatWithAiAssistantFlow = ai.defineFlow(
               if (input.companyId && !toolInput.companyId) {
                 toolInput.companyId = input.companyId;
               }
+              if (input.creatorUserId && !toolInput.creatorUserId) { // Ensure creatorUserId is passed
+                toolInput.creatorUserId = input.creatorUserId;
+              }
+
               if (!toolInput.companyId) {
                 console.warn("ManageInvoiceTool called without companyId from AI or user input.");
                 toolOutput = { success: false, message: "Tool Error: Company ID was not provided for the invoice operation." };
+              } else if (!toolInput.creatorUserId) {
+                console.warn("ManageInvoiceTool called without creatorUserId.");
+                toolOutput = { success: false, message: "Tool Error: User ID was not provided for the invoice operation." };
               } else {
                 toolOutput = await manageInvoiceTool(toolInput);
               }
@@ -130,7 +138,7 @@ const chatWithAiAssistantFlow = ai.defineFlow(
                   finalContent += followUpPart.text;
                 }
               }
-            } else if (followUpResponse.text) { // Fallback if parts isn't there on follow-up but direct text is
+            } else if (followUpResponse.text) { 
                 finalContent += followUpResponse.text;
             }
 
@@ -140,7 +148,7 @@ const chatWithAiAssistantFlow = ai.defineFlow(
           }
         }
       }
-    } else if (llmResponse.text) { // Fallback if parts isn't there at all but direct text is
+    } else if (llmResponse.text) { 
         finalContent = llmResponse.text;
     }
 
@@ -157,4 +165,3 @@ const chatWithAiAssistantFlow = ai.defineFlow(
     return { response: finalContent };
   }
 );
-

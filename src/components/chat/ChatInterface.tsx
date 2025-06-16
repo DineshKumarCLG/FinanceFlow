@@ -26,7 +26,7 @@ const fileToDataUri = (file: File): Promise<string> => {
 };
 
 export function ChatInterface() {
-  const { currentCompanyId } = useAuth();
+  const { user: currentUser, currentCompanyId } = useAuth(); // Get currentUser
   const [messages, setMessages] = useState<Message[]>([
     { id: "0", role: "assistant", content: "Hello! I'm your AI Accounting Assistant. How can I help you today? You can ask me to create invoices, add entries, or analyze documents.", timestamp: new Date() }
   ]);
@@ -46,7 +46,7 @@ export function ChatInterface() {
       const viewport = scrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
       if (viewport) viewport.scrollTop = viewport.scrollHeight;
     }
-  }, [messages, isLoading]); // Added isLoading to scroll down when loading bubble appears
+  }, [messages, isLoading]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
@@ -109,7 +109,7 @@ export function ChatInterface() {
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
       const files = Array.from(event.target.files);
-      setAttachedFiles(prev => [...prev, ...files].slice(0, 5)); // Limit to 5 files
+      setAttachedFiles(prev => [...prev, ...files].slice(0, 5)); 
       
       const previews = await Promise.all(files.map(fileToDataUri));
       setFilePreviews(prev => [...prev, ...previews].slice(0, 5));
@@ -131,10 +131,15 @@ export function ChatInterface() {
       toast({ variant: "destructive", title: "Company ID Missing", description: "Please select a company before chatting with the AI." });
       return;
     }
+    if (!currentUser) {
+      toast({ variant: "destructive", title: "User Not Authenticated", description: "Please ensure you are logged in." });
+      return;
+    }
+
 
     const userMessageContent = input.trim();
     const userMessage: Message = {
-      id: String(Date.now()), // More unique ID
+      id: String(Date.now()), 
       role: "user",
       content: userMessageContent,
       timestamp: new Date(),
@@ -161,6 +166,7 @@ export function ChatInterface() {
         conversationHistory: conversationHistoryForFlow,
         uploadedFiles: fileDataUris,
         companyId: currentCompanyId,
+        creatorUserId: currentUser.uid, // Pass creatorUserId
       });
       
       setMessages((prev) => [

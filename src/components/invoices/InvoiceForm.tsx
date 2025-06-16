@@ -87,7 +87,7 @@ const defaultFormValues: InvoiceFormValues = {
 };
 
 export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceFormProps) {
-  const { currentCompanyId } = useAuth();
+  const { user: currentUser, currentCompanyId } = useAuth(); // Get currentUser
   const [isParsing, setIsParsing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -276,8 +276,8 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
   };
 
   async function onSubmit(values: InvoiceFormValues) {
-    if (!currentCompanyId) {
-      toast({ variant: "destructive", title: "Error", description: "No Company ID selected. Cannot save invoice." });
+    if (!currentCompanyId || !currentUser?.uid) {
+      toast({ variant: "destructive", title: "Error", description: "Company ID or User ID missing. Cannot save invoice." });
       return;
     }
     setIsSaving(true);
@@ -313,7 +313,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
     }
 
     try {
-      const invoiceData: NewInvoiceData | UpdateInvoiceData = {
+      const invoiceData: Omit<NewInvoiceData, 'creatorUserId'> | Omit<UpdateInvoiceData, 'creatorUserId'> = {
         invoiceNumber: values.invoiceNumber,
         customerName: values.customerName,
         customerEmail: values.customerEmail || undefined,
@@ -333,10 +333,10 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
       };
 
       if (mode === 'create') {
-        await addInvoice(currentCompanyId, invoiceData as NewInvoiceData);
+        await addInvoice(currentCompanyId, currentUser.uid, invoiceData as NewInvoiceData);
         toast({ title: "Invoice Saved!", description: `Invoice #${values.invoiceNumber} has been saved.` });
       } else if (mode === 'edit' && initialInvoiceData?.id) {
-        await updateInvoice(currentCompanyId, initialInvoiceData.id, invoiceData as UpdateInvoiceData);
+        await updateInvoice(currentCompanyId, initialInvoiceData.id, currentUser.uid, invoiceData as UpdateInvoiceData);
         toast({ title: "Invoice Updated!", description: `Invoice #${values.invoiceNumber} has been updated.` });
       }
 
@@ -610,7 +610,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
                               type="number" 
                               placeholder="1" 
                               {...field} 
-                              value={Number.isNaN(field.value) ? '' : field.value ?? ''}
+                              value={Number.isNaN(parseFloat(String(field.value))) ? '' : field.value ?? ''}
                               onChange={(e) => {
                                 const val = e.target.value;
                                 field.onChange(val === '' ? undefined : parseFloat(val));
@@ -634,7 +634,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
                               type="number" 
                               placeholder="0.00" 
                               {...field} 
-                              value={Number.isNaN(field.value) ? '' : field.value ?? ''}
+                              value={Number.isNaN(parseFloat(String(field.value))) ? '' : field.value ?? ''}
                               onChange={(e) => {
                                 const val = e.target.value;
                                 field.onChange(val === '' ? undefined : parseFloat(val));
@@ -669,7 +669,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
                                 type="number" 
                                 placeholder="e.g., 18" 
                                 {...field} 
-                                value={Number.isNaN(field.value) ? '' : field.value ?? ''}
+                                value={Number.isNaN(parseFloat(String(field.value))) ? '' : field.value ?? ''}
                                 onChange={(e) => {
                                   const val = e.target.value;
                                   field.onChange(val === '' ? undefined : parseFloat(val));
