@@ -103,7 +103,7 @@ export interface CompanySettings {
   billingAddress?: string; // Company's own billing address
   companyEmail?: string;
   companyPhone?: string;
-  logoUrl?: string;
+  logoUrl?: string; // Added logoUrl
   bankDetails?: string;
   authorizedSignatory?: string;
   updatedAt?: Timestamp;
@@ -728,7 +728,7 @@ export async function getCompanySettings(companyId: string): Promise<CompanySett
         billingAddress: data.billingAddress,
         companyEmail: data.companyEmail,
         companyPhone: data.companyPhone,
-        logoUrl: data.logoUrl,
+        logoUrl: data.logoUrl, // Include logoUrl
         bankDetails: data.bankDetails,
         authorizedSignatory: data.authorizedSignatory,
         updatedAt: data.updatedAt,
@@ -760,8 +760,19 @@ export async function saveCompanySettings(
   const updatePayload: { [key: string]: any } = {};
   for (const key in settingsData) {
     const typedKey = key as keyof typeof settingsData;
-    if (settingsData[typedKey] !== undefined) { // Check explicitly for undefined
+    if (settingsData[typedKey] !== undefined) { 
       updatePayload[typedKey] = settingsData[typedKey];
+    } else {
+      // If a field is explicitly set to undefined (e.g. clearing logoUrl),
+      // we should pass it to Firestore if Firestore allows deleting fields this way,
+      // or handle field deletion specifically if required.
+      // For simplicity, we'll let Firestore handle `undefined` as "no change" for merge,
+      // but explicitly set `null` if we want to clear a field.
+      // However, since ProfileForm passes `""` for empty optional fields, which become `undefined` here,
+      // this means `undefined` fields are effectively ignored by setDoc with merge.
+      // If we want to *delete* a field, it should be passed as `deleteField()` from Firestore.
+      // For now, setting a field to `null` or an empty string will suffice for most cases.
+      // The current logic correctly omits `undefined` values.
     }
   }
   updatePayload.updatedAt = serverTimestamp() as Timestamp; 

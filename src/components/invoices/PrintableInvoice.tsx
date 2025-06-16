@@ -19,7 +19,7 @@ const fallbackCompanyDetails: Required<Pick<CompanySettings, 'businessName' | 'c
   companyGstin: "YOUR_GSTIN_HERE",
   email: "your.email@example.com",
   phone: "+1234567890",
-  logoUrl: "https://placehold.co/200x60.png?text=YourLogo&font=roboto",
+  logoUrl: "", // Default to no logo, will be handled by conditional rendering
   bankDetails: "Bank: Default Bank\nAccount Name: Your Company\nAccount No: 0000000000\nIFSC: DEFB0000000",
   authorizedSignatory: "Authorized Signatory",
 };
@@ -92,11 +92,21 @@ export function PrintableInvoice({ invoice, companyDetails }: PrintableInvoicePr
     <div className="bg-white p-6 sm:p-10 text-sm font-sans printable-card text-gray-800 printable-text">
       <header className="grid grid-cols-2 gap-4 mb-8 items-start">
         <div>
-          {currentCompanyDetails.logoUrl && (
-            <Image src={currentCompanyDetails.logoUrl} alt={`${currentCompanyDetails.name} Logo`} width={180} height={50} className="mb-3 h-auto" data-ai-hint="company brandmark"/>
+          {currentCompanyDetails.logoUrl ? (
+            <div className="relative w-[180px] h-[60px] mb-3">
+              <Image 
+                src={currentCompanyDetails.logoUrl} 
+                alt={`${currentCompanyDetails.name} Logo`} 
+                layout="fill" 
+                objectFit="contain" 
+                className="h-auto"
+                data-ai-hint="company brandmark"
+              />
+            </div>
+          ) : (
+             <h2 className="text-xl font-bold text-gray-900 mb-3">{currentCompanyDetails.name}</h2>
           )}
-          <h2 className="text-xl font-bold text-gray-900">{currentCompanyDetails.name}</h2>
-          {currentCompanyDetails.address && <p className="text-xs text-gray-600 whitespace-pre-line">{currentCompanyDetails.address}</p>}
+          <p className="text-xs text-gray-600 whitespace-pre-line">{currentCompanyDetails.address || fallbackCompanyDetails.address}</p>
           {currentCompanyDetails.gstin && <p className="text-xs text-gray-600">GSTIN/VAT: {currentCompanyDetails.gstin}</p>}
           {currentCompanyDetails.email && <p className="text-xs text-gray-600">Email: {currentCompanyDetails.email}</p>}
           {currentCompanyDetails.phone && <p className="text-xs text-gray-600">Phone: {currentCompanyDetails.phone}</p>}
@@ -223,7 +233,7 @@ export function PrintableInvoice({ invoice, companyDetails }: PrintableInvoicePr
         <div>
           <Separator className="mb-2 bg-gray-200 md:hidden"/>
           <h4 className="font-semibold text-gray-700 mb-0.5">Bank Details for Payment:</h4>
-          <p className="text-gray-600 whitespace-pre-line">{currentCompanyDetails.bankDetails}</p>
+          <p className="text-gray-600 whitespace-pre-line">{currentCompanyDetails.bankDetails || fallbackCompanyDetails.bankDetails}</p>
         </div>
       </section>
 
@@ -234,7 +244,7 @@ export function PrintableInvoice({ invoice, companyDetails }: PrintableInvoicePr
             <p>For {currentCompanyDetails.name}</p>
             <div className="mt-10">
                <Separator className="w-48 bg-gray-400"/>
-              <p className="mt-1">({currentCompanyDetails.authorizedSignatory})</p>
+              <p className="mt-1">({currentCompanyDetails.authorizedSignatory || fallbackCompanyDetails.authorizedSignatory})</p>
               <p>Authorized Signatory</p>
             </div>
           </div>
@@ -254,4 +264,3 @@ export function PrintableInvoice({ invoice, companyDetails }: PrintableInvoicePr
     </div>
   );
 }
-

@@ -18,11 +18,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { useState, useEffect } from "react";
-import { Loader2, AlertCircle } from "lucide-react";
+import { useState, useEffect, ChangeEvent } from "react";
+import { Loader2, AlertCircle, UploadCloud, Image as ImageIcon, Trash2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import * as DataService from "@/lib/data-service"; 
+import { storage } from "@/lib/firebase"; // Import Firebase storage
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import Image from "next/image"; // For preview
 
 const profileFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -33,10 +36,11 @@ const profileFormSchema = z.object({
     message: "Invalid GSTIN format (e.g., 29ABCDE1234F1Z5)",
   }).or(z.literal('')),
   gstRegion: z.enum(["india", "international_other", "none"]).optional(),
-  companyAddress: z.string().optional().or(z.literal('')), // Primary address for general use
+  logoUrl: z.string().url("Invalid URL.").optional().or(z.literal('')), // Added logoUrl
+  companyAddress: z.string().optional().or(z.literal('')),
   registeredAddress: z.string().optional().or(z.literal('')),
   corporateAddress: z.string().optional().or(z.literal('')),
-  billingAddress: z.string().optional().or(z.literal('')), // Company's own billing address
+  billingAddress: z.string().optional().or(z.literal('')),
 });
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
@@ -63,6 +67,10 @@ export function ProfileForm() {
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
   const [isFetchingSettings, setIsFetchingSettings] = useState(false);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+  const [selectedLogoFile, setSelectedLogoFile] = useState<File | null>(null);
+
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
@@ -73,6 +81,7 @@ export function ProfileForm() {
       businessType: "",
       companyGstin: "",
       gstRegion: "none",
+      logoUrl: "",
       companyAddress: "",
       registeredAddress: "",
       corporateAddress: "",
@@ -94,11 +103,17 @@ export function ProfileForm() {
             businessType: companySettings?.businessType || "",
             companyGstin: companySettings?.companyGstin || "",
             gstRegion: companySettings?.gstRegion || "none",
+            logoUrl: companySettings?.logoUrl || "",
             companyAddress: companySettings?.companyAddress || "",
             registeredAddress: companySettings?.registeredAddress || "",
             corporateAddress: companySettings?.corporateAddress || "",
             billingAddress: companySettings?.billingAddress || "",
           });
+          if (companySettings?.logoUrl) {
+            setLogoPreviewUrl(companySettings.logoUrl);
+          } else {
+            setLogoPreviewUrl(null);
+          }
         } catch (error) {
           console.error("Failed to load company settings:", error);
           toast({ variant: "destructive", title: "Error", description: "Could not load company settings." });
@@ -109,11 +124,13 @@ export function ProfileForm() {
             businessType: "",
             companyGstin: "",
             gstRegion: "none",
+            logoUrl: "",
             companyAddress: "",
             registeredAddress: "",
             corporateAddress: "",
             billingAddress: "",
           });
+          setLogoPreviewUrl(null);
         } finally {
           setIsFetchingSettings(false);
         }
@@ -125,15 +142,87 @@ export function ProfileForm() {
           businessType: "",
           companyGstin: "",
           gstRegion: "none",
+          logoUrl: "",
           companyAddress: "",
           registeredAddress: "",
           corporateAddress: "",
           billingAddress: "",
         });
+        setLogoPreviewUrl(null);
       }
     }
     loadProfileAndSettings();
   }, [user, currentCompanyId, form, toast]);
+
+  const handleLogoFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && currentCompanyId) {
+      setSelectedLogoFile(file);
+      setIsUploadingLogo(true);
+      toast({title: "Uploading Logo...", description: "Please wait."});
+      try {
+        const fileExtension = file.name.split('.').pop();
+        const logoFileName = `logo.${fileExtension}`;
+        const storageRef = ref(storage, `companyLogos/${currentCompanyId}/${logoFileName}`);
+        
+        // Delete existing logo if one exists at this specific path to prevent multiple logo files
+        // For more robust multi-logo management, a different strategy would be needed.
+        try {
+            await getDownloadURL(storageRef); // Check if file exists
+            await deleteObject(storageRef); // Delete if it exists
+            console.log("Previous logo deleted successfully.");
+        } catch (error: any) {
+            if (error.code !== 'storage/object-not-found') {
+                console.warn("Could not delete previous logo or no previous logo found:", error);
+            }
+        }
+
+        const snapshot = await uploadBytes(storageRef, file);
+        const downloadURL = await getDownloadURL(snapshot.ref);
+        
+        form.setValue("logoUrl", downloadURL, { shouldValidate: true });
+        setLogoPreviewUrl(downloadURL);
+        toast({ title: "Logo Uploaded", description: "Logo updated successfully. Save changes to persist." });
+      } catch (error: any) {
+        console.error("Logo upload error:", error);
+        toast({ variant: "destructive", title: "Logo Upload Failed", description: error.message || "Could not upload logo." });
+      } finally {
+        setIsUploadingLogo(false);
+        if(event.target) event.target.value = ""; // Reset file input
+      }
+    } else if (!currentCompanyId) {
+        toast({variant: "destructive", title: "Company ID Missing", description: "Cannot upload logo without a Company ID."})
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    if (!currentCompanyId || !form.getValues("logoUrl")) {
+        toast({ variant: "destructive", title: "Error", description: "No logo to remove or company ID missing." });
+        return;
+    }
+    setIsUploadingLogo(true); // Use same state for visual feedback
+    toast({ title: "Removing Logo..." });
+    try {
+        const currentLogoUrl = form.getValues("logoUrl");
+        if (currentLogoUrl) {
+            // Attempt to delete from storage only if it's a firebase storage URL
+            if (currentLogoUrl.includes("firebasestorage.googleapis.com")) {
+                 const logoRef = ref(storage, currentLogoUrl);
+                 await deleteObject(logoRef);
+            }
+        }
+        form.setValue("logoUrl", "", { shouldValidate: true });
+        setLogoPreviewUrl(null);
+        setSelectedLogoFile(null);
+        toast({ title: "Logo Removed", description: "Logo has been cleared. Save changes to persist." });
+    } catch (error: any) {
+        console.error("Error removing logo:", error);
+        toast({ variant: "destructive", title: "Removal Failed", description: "Could not remove logo from storage. " + error.message });
+    } finally {
+        setIsUploadingLogo(false);
+    }
+  };
+
 
   async function onSubmit(data: ProfileFormValues) {
     if (!currentCompanyId) {
@@ -151,6 +240,7 @@ export function ProfileForm() {
         businessType: data.businessType || undefined,
         companyGstin: data.companyGstin || undefined,
         gstRegion: data.gstRegion || undefined,
+        logoUrl: data.logoUrl || "", // Ensure empty string if no logo, not undefined
         companyAddress: data.companyAddress || undefined,
         registeredAddress: data.registeredAddress || undefined,
         corporateAddress: data.corporateAddress || undefined,
@@ -173,7 +263,7 @@ export function ProfileForm() {
     }
   }
 
-  const isLoading = authIsLoading || isSaving || isFetchingSettings;
+  const isLoading = authIsLoading || isSaving || isFetchingSettings || isUploadingLogo;
   
   if (!currentCompanyId && !authIsLoading && !isFetchingSettings) {
     return (
@@ -199,7 +289,7 @@ export function ProfileForm() {
     <Card>
       <CardHeader>
         <CardTitle>User Profile & Company Settings {currentCompanyId ? `(${currentCompanyId})` : ''}</CardTitle>
-        <CardDescription>Manage your personal information and company-specific details like GST and addresses.</CardDescription>
+        <CardDescription>Manage your personal information and company-specific details like GST, addresses, and logo.</CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -236,6 +326,34 @@ export function ProfileForm() {
               <Input value={currentCompanyId || "N/A"} disabled readOnly className="mt-1"/>
               <p className="text-xs text-muted-foreground">Company context for the current session. Change on login page.</p>
             </div>
+            
+            <div className="space-y-2">
+              <FormLabel>Company Logo</FormLabel>
+              <div className="flex items-center gap-4">
+                {logoPreviewUrl ? (
+                  <Image src={logoPreviewUrl} alt="Company Logo Preview" width={80} height={80} className="rounded border object-contain" data-ai-hint="company logo"/>
+                ) : (
+                  <div className="h-20 w-20 rounded border bg-muted flex items-center justify-center text-muted-foreground">
+                    <ImageIcon className="h-8 w-8" />
+                  </div>
+                )}
+                <div className="flex flex-col gap-2">
+                    <Button type="button" variant="outline" onClick={() => document.getElementById('logo-upload-input')?.click()} disabled={isLoading}>
+                        <UploadCloud className="mr-2 h-4 w-4" /> {logoPreviewUrl ? "Change Logo" : "Upload Logo"}
+                    </Button>
+                    <Input id="logo-upload-input" type="file" className="hidden" onChange={handleLogoFileChange} accept="image/png, image/jpeg, image/svg+xml" disabled={isLoading} />
+                    {logoPreviewUrl && (
+                        <Button type="button" variant="ghost" size="sm" onClick={handleRemoveLogo} className="text-destructive hover:text-destructive-foreground hover:bg-destructive/10" disabled={isLoading}>
+                            <Trash2 className="mr-2 h-4 w-4"/>Remove Logo
+                        </Button>
+                    )}
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">Recommended: Square or wide logo, max 1MB (PNG, JPG, SVG).</p>
+              <FormField control={form.control} name="logoUrl" render={({ field }) => <Input type="hidden" {...field} />} />
+               <FormMessage>{form.formState.errors.logoUrl?.message}</FormMessage>
+            </div>
+
 
             <FormField
               control={form.control}
@@ -374,4 +492,3 @@ export function ProfileForm() {
     </Card>
   );
 }
-

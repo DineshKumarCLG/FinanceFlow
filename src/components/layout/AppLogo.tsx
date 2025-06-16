@@ -1,50 +1,84 @@
+
 import type { SVGProps } from 'react';
 import { cn } from '@/lib/utils';
-import Image from 'next/image'; // Import the Image component
+import Image from 'next/image'; 
 
 interface AppLogoProps {
   className?: string;
-  iconClassName?: string; // This will now apply to the img tag
+  iconClassName?: string; 
   textClassName?: string;
   collapsed?: boolean;
-  showText?: boolean; // Prop to explicitly control text visibility (used when showing logo)
-  variant?: 'logo' | 'icon'; // New prop to explicitly choose variant
+  showText?: boolean; 
+  variant?: 'logo' | 'icon';
+  companyLogoUrl?: string; // New prop for company-specific logo
 }
 
-export function AppLogo({ className, iconClassName, textClassName, collapsed = false, showText = true, variant }: AppLogoProps) {
+export function AppLogo({ 
+  className, 
+  iconClassName, 
+  textClassName, 
+  collapsed = false, 
+  showText = true, 
+  variant,
+  companyLogoUrl 
+}: AppLogoProps) {
 
-  // Determine which variant to show based on variant prop or collapsed prop
-  // If variant is provided, use it. Otherwise, use collapsed state (icon when collapsed, logo when not).
   const displayVariant = variant || (collapsed ? 'icon' : 'logo');
+  const effectiveShowText = (displayVariant === 'logo' && showText);
 
+  // If a company logo URL is provided, prioritize displaying it.
+  if (companyLogoUrl) {
+    return (
+      <div className={cn("flex items-center gap-2", className)}>
+        <Image
+          src={companyLogoUrl}
+          alt="Company Logo" // Generic alt text, or could pass company name
+          width={36} 
+          height={36}
+          className={cn(
+            "h-7 w-7 sm:h-9 sm:w-9 object-contain", // Ensure object-contain
+            iconClassName 
+          )}
+          data-ai-hint="company brandmark"
+        />
+        {effectiveShowText && (
+          <span className={cn("text-xl font-semibold text-foreground", textClassName)}>
+            FinanceFlow AI 
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  // Fallback to default FinanceFlow logo/icon if no companyLogoUrl
   return (
     <div className={cn("flex items-center gap-2", className)}>
       {displayVariant === 'icon' ? (
-        // Show icon
         <Image
-          src="/assets/images/financeflow_icon.png" // Path to your icon file
-          alt="FinanceFlow Icon" // Accessible alt text
-          width={36} // Base width, adjusted by CSS
-          height={36} // Base height, adjusted by CSS
+          src="/assets/images/financeflow_icon.png" 
+          alt="FinanceFlow Icon" 
+          width={36} 
+          height={36}
           className={cn(
-            "h-7 w-7 sm:h-9 sm:w-9", // Responsive sizing
-            iconClassName // Apply any additional icon class names
+            "h-7 w-7 sm:h-9 sm:w-9", 
+            iconClassName 
           )}
+          data-ai-hint="application icon"
         />
       ) : (
-        // Show full logo and optional text
         <>
           <Image
-            src="/assets/images/financeflow_logo.png" // Path to your logo file
-            alt="FinanceFlow Logo" // Accessible alt text
-            width={36} // Base width, adjusted by CSS
-            height={36} // Base height, adjusted by CSS
+            src="/assets/images/financeflow_logo.png" 
+            alt="FinanceFlow Logo" 
+            width={36} 
+            height={36}
             className={cn(
-              "h-7 w-7 sm:h-9 sm:w-9", // Responsive sizing
-              iconClassName // Apply any additional icon class names
+              "h-7 w-7 sm:h-9 sm:w-9", 
+              iconClassName 
             )}
+            data-ai-hint="application logo"
           />
-          {showText && (
+          {effectiveShowText && (
             <span className={cn("text-xl font-semibold text-foreground", textClassName)}>
               FinanceFlow AI
             </span>
