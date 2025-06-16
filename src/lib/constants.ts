@@ -40,14 +40,9 @@ export const NAV_ITEMS_MAIN: NavItem[] = [
     icon: BookCopy,
   },
   {
-    title: "Trial Balance",
-    href: "/trial-balance",
-    icon: ListChecks,
-  },
-  {
-    title: "Balance Sheet",
-    href: "/balance-sheet",
-    icon: Landmark,
+    title: "Financial Statements", // New Hub Page
+    href: "/financial-statements",
+    icon: BarChart3,
   },
   {
     title: "AI Assistant",
@@ -64,3 +59,18 @@ export const NAV_ITEMS_BOTTOM: NavItem[] = [
   },
 ];
 
+// Individual statement links can be kept if direct access is still desired,
+// or removed if the hub page is preferred as the sole entry point.
+// For now, I'm keeping them and adding the new hub.
+// If you want to remove the direct links for Trial Balance and Balance Sheet from NAV_ITEMS_MAIN,
+// you can delete these from the array above:
+// {
+//   title: "Trial Balance",
+//   href: "/trial-balance",
+//   icon: ListChecks,
+// },
+// {
+//   title: "Balance Sheet",
+//   href: "/balance-sheet",
+//   icon: Landmark,
+// },
