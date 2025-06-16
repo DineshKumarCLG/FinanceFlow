@@ -10,16 +10,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 interface PrintableInvoiceProps {
   invoice: Invoice;
-  companyDetails: CompanySettings | null; // Changed from yourCompanyDetails
+  companyDetails: CompanySettings | null;
 }
 
-// Default company details to use if specific ones aren't loaded
 const fallbackCompanyDetails: Required<Pick<CompanySettings, 'businessName' | 'companyGstin'>> & Partial<CompanySettings> = {
   businessName: "Your Company Name",
-  address: "123 Business Street, City, Country", // Added address here
+  address: "123 Business Street, City, Country",
   companyGstin: "YOUR_GSTIN_HERE",
-  email: "your.email@example.com", // Added email
-  phone: "+1234567890", // Added phone
+  email: "your.email@example.com",
+  phone: "+1234567890",
   logoUrl: "https://placehold.co/200x60.png?text=YourLogo&font=roboto",
   bankDetails: "Bank: Default Bank\nAccount Name: Your Company\nAccount No: 0000000000\nIFSC: DEFB0000000",
   authorizedSignatory: "Authorized Signatory",
@@ -38,10 +37,10 @@ export function PrintableInvoice({ invoice, companyDetails }: PrintableInvoicePr
 
   const currentCompanyDetails = {
     name: companyDetails?.businessName || fallbackCompanyDetails.businessName,
-    address: companyDetails?.companyAddress || fallbackCompanyDetails.address, // Assuming companyAddress might be a field
+    address: companyDetails?.companyAddress || fallbackCompanyDetails.address,
     gstin: companyDetails?.companyGstin || fallbackCompanyDetails.companyGstin,
-    email: companyDetails?.companyEmail || fallbackCompanyDetails.email, // Assuming companyEmail might be a field
-    phone: companyDetails?.companyPhone || fallbackCompanyDetails.phone, // Assuming companyPhone might be a field
+    email: companyDetails?.companyEmail || fallbackCompanyDetails.email,
+    phone: companyDetails?.companyPhone || fallbackCompanyDetails.phone,
     logoUrl: companyDetails?.logoUrl || fallbackCompanyDetails.logoUrl,
     bankDetails: companyDetails?.bankDetails || fallbackCompanyDetails.bankDetails,
     authorizedSignatory: companyDetails?.authorizedSignatory || fallbackCompanyDetails.authorizedSignatory,
@@ -94,7 +93,7 @@ export function PrintableInvoice({ invoice, companyDetails }: PrintableInvoicePr
       <header className="grid grid-cols-2 gap-4 mb-8 items-start">
         <div>
           {currentCompanyDetails.logoUrl && (
-            <Image src={currentCompanyDetails.logoUrl} alt={`${currentCompanyDetails.name} Logo`} width={180} height={50} className="mb-3 h-auto" data-ai-hint="company brandmark" />
+            <Image src={currentCompanyDetails.logoUrl} alt={`${currentCompanyDetails.name} Logo`} width={180} height={50} className="mb-3 h-auto" data-ai-hint="company brandmark"/>
           )}
           <h2 className="text-xl font-bold text-gray-900">{currentCompanyDetails.name}</h2>
           {currentCompanyDetails.address && <p className="text-xs text-gray-600 whitespace-pre-line">{currentCompanyDetails.address}</p>}
@@ -207,19 +206,19 @@ export function PrintableInvoice({ invoice, companyDetails }: PrintableInvoicePr
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 text-xs">
         <div>
-          {(invoice.paymentTerms || invoice.notes) && <Separator className="mb-2 bg-gray-200 md:hidden"/>}
-          {invoice.paymentTerms && (
-            <div className="mb-3">
-              <h4 className="font-semibold text-gray-700 mb-0.5">Payment Terms:</h4>
-              <p className="text-gray-600 whitespace-pre-line">{invoice.paymentTerms}</p>
-            </div>
-          )}
-          {invoice.notes && (
-            <div>
-              <h4 className="font-semibold text-gray-700 mb-0.5">Notes:</h4>
-              <p className="text-gray-600 whitespace-pre-line">{invoice.notes}</p>
-            </div>
-          )}
+          {(invoice.paymentTerms || invoice.notes) && <Separator className="mb-2 bg-gray-200 md:hidden" />}
+          <div className="mb-3">
+            <h4 className="font-semibold text-gray-700 mb-0.5">Payment Terms:</h4>
+            <p className="text-gray-600 whitespace-pre-line">
+              {invoice.paymentTerms ? invoice.paymentTerms : <span className="text-gray-500 italic">Not specified</span>}
+            </p>
+          </div>
+          <div>
+            <h4 className="font-semibold text-gray-700 mb-0.5">Notes:</h4>
+            <p className="text-gray-600 whitespace-pre-line">
+              {invoice.notes ? invoice.notes : <span className="text-gray-500 italic">No additional notes</span>}
+            </p>
+          </div>
         </div>
         <div>
           <Separator className="mb-2 bg-gray-200 md:hidden"/>
