@@ -105,10 +105,9 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
     resolver: zodResolver(invoiceFormSchema),
     defaultValues: initialInvoiceData
       ? {
-          ...defaultFormValues, // Start with base defaults
-          invoiceDescription: initialInvoiceData.itemsSummary || initialInvoiceData.lineItems?.map(li => `${li.description} (Qty: ${li.quantity}, Rate: ${li.unitPrice})`).join('\n') || "",
-          invoiceNumber: initialInvoiceData.invoiceNumber, // Assumed to be always string
-          customerName: initialInvoiceData.customerName, // Assumed to be always string
+          invoiceDescription: initialInvoiceData.itemsSummary || initialInvoiceData.lineItems?.map(li => `${li.description} (Qty: ${li.quantity || 1}, Rate: ${li.unitPrice || 0})`).join('\n') || "",
+          invoiceNumber: initialInvoiceData.invoiceNumber || "",
+          customerName: initialInvoiceData.customerName || "",
           customerEmail: initialInvoiceData.customerEmail || "",
           billingAddress: initialInvoiceData.billingAddress || "",
           shippingAddress: initialInvoiceData.shippingAddress || "",
@@ -121,9 +120,9 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
             description: item.description || "",
             quantity: item.quantity || 1,
             unitPrice: item.unitPrice || 0,
-            amount: item.amount || 0,
+            amount: item.amount || 0, // This is taxable_value
             hsnSacCode: item.hsnSacCode || "",
-            gstRate: item.gstRate, // Can be undefined or number
+            gstRate: item.gstRate === undefined ? undefined : Number(item.gstRate),
           }))) || [],
           status: initialInvoiceData.status || 'draft',
           notes: initialInvoiceData.notes || "",
@@ -140,9 +139,9 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
   useEffect(() => {
     if (mode === 'edit' && initialInvoiceData) {
       const resetData = {
-        invoiceDescription: initialInvoiceData.itemsSummary || initialInvoiceData.lineItems?.map(li => `${li.description} (Qty: ${li.quantity}, Rate: ${li.unitPrice})`).join('\n') || "",
-        invoiceNumber: initialInvoiceData.invoiceNumber,
-        customerName: initialInvoiceData.customerName,
+        invoiceDescription: initialInvoiceData.itemsSummary || initialInvoiceData.lineItems?.map(li => `${li.description} (Qty: ${li.quantity || 1}, Rate: ${li.unitPrice || 0})`).join('\n') || "",
+        invoiceNumber: initialInvoiceData.invoiceNumber || "",
+        customerName: initialInvoiceData.customerName || "",
         customerEmail: initialInvoiceData.customerEmail || "",
         billingAddress: initialInvoiceData.billingAddress || "",
         shippingAddress: initialInvoiceData.shippingAddress || "",
@@ -157,7 +156,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
             unitPrice: item.unitPrice || 0,
             amount: item.amount || 0,
             hsnSacCode: item.hsnSacCode || "",
-            gstRate: item.gstRate,
+            gstRate: item.gstRate === undefined ? undefined : Number(item.gstRate),
         }))) || [],
         status: initialInvoiceData.status || 'draft',
         notes: initialInvoiceData.notes || "",
@@ -166,9 +165,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
     } else if (mode === 'create') {
        form.reset(defaultFormValues);
     }
-  // form.reset should not be in dependency array usually if form instance is stable.
-  // If form instance can change, then it should be. For this case, mode & initialInvoiceData are the main triggers.
-  }, [mode, initialInvoiceData, form.reset]);
+  }, [mode, initialInvoiceData, form]); // form added to dependency array
 
 
   const watchedLineItems = form.watch("lineItems");
@@ -207,13 +204,17 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
     try {
       const result: GenerateInvoiceDetailsOutput = await generateInvoiceDetails({ description });
 
-      form.setValue("customerName", result.customerName || "", { shouldValidate: true });
-      form.setValue("customerEmail", result.customerEmail || "", { shouldValidate: true });
-      form.setValue("billingAddress", result.billingAddress || "", { shouldValidate: true });
-      form.setValue("shippingAddress", result.shippingAddress || "", { shouldValidate: true });
-      if (mode === 'create') form.setValue("invoiceNumber", result.invoiceNumber || "", { shouldValidate: true });
-      form.setValue("paymentTerms", result.paymentTerms || "", { shouldValidate: true });
-      form.setValue("notes", result.notes || "", { shouldValidate: true });
+      form.setValue("customerName", result.customerName || form.getValues("customerName") || "", { shouldValidate: true });
+      form.setValue("customerEmail", result.customerEmail || form.getValues("customerEmail") || "", { shouldValidate: true });
+      form.setValue("billingAddress", result.billingAddress || form.getValues("billingAddress") || "", { shouldValidate: true });
+      form.setValue("shippingAddress", result.shippingAddress || form.getValues("shippingAddress") || "", { shouldValidate: true });
+      
+      if (mode === 'create') { // Only set invoice number from AI if creating
+        form.setValue("invoiceNumber", result.invoiceNumber || "", { shouldValidate: true });
+      }
+
+      form.setValue("paymentTerms", result.paymentTerms || form.getValues("paymentTerms") || "", { shouldValidate: true });
+      form.setValue("notes", result.notes || form.getValues("notes") || "", { shouldValidate: true });
 
 
       if (result.lineItems && result.lineItems.length > 0) {
@@ -241,12 +242,12 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
             if (!isNaN(parsedDate.getTime())) {
                  form.setValue("invoiceDate", parsedDate, { shouldValidate: true });
             } else {
-                form.setValue("invoiceDate", todayForForm, { shouldValidate: true });
+                form.setValue("invoiceDate", form.getValues("invoiceDate") || todayForForm, { shouldValidate: true });
             }
         } catch (e) {
-            form.setValue("invoiceDate", todayForForm, { shouldValidate: true });
+            form.setValue("invoiceDate", form.getValues("invoiceDate") || todayForForm, { shouldValidate: true });
         }
-      } else {
+      } else if (mode === 'create'){ // Only default invoiceDate if creating
         form.setValue("invoiceDate", todayForForm, { shouldValidate: true });
       }
 
@@ -256,13 +257,13 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
             if (!isNaN(parsedDueDate.getTime())) {
                 form.setValue("dueDate", parsedDueDate, { shouldValidate: true });
             } else {
-                form.setValue("dueDate", undefined);
+                form.setValue("dueDate", form.getValues("dueDate") || undefined);
             }
         } catch (e) {
-            form.setValue("dueDate", undefined);
+            form.setValue("dueDate", form.getValues("dueDate") || undefined);
         }
       } else {
-        form.setValue("dueDate", undefined);
+        form.setValue("dueDate", form.getValues("dueDate") || undefined);
       }
 
       toast({ title: "AI Parsing Complete", description: "Review the extracted details and fill in the rest." });
@@ -289,7 +290,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
         unitPrice: item.unitPrice || 0,
         amount: taxableAmount,
         hsnSacCode: item.hsnSacCode || undefined,
-        gstRate: item.gstRate,
+        gstRate: item.gstRate === undefined ? undefined : Number(item.gstRate),
       };
     }) || [];
 
@@ -298,7 +299,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
     processedLineItems.forEach(item => {
       currentSubTotal += item.amount;
       if (item.gstRate) {
-        currentTotalGstAmount += item.amount * (item.gstRate / 100);
+        currentTotalGstAmount += item.amount * (Number(item.gstRate) / 100);
       }
     });
     currentSubTotal = parseFloat(currentSubTotal.toFixed(2));
@@ -376,39 +377,38 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
         <CardDescription>
           {mode === 'create'
             ? "Describe the invoice for AI to parse, or fill in the details manually."
-            : "Edit the invoice details below."
+            : "Edit the invoice details below. You can also update the description and re-parse with AI."
           }
         </CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <CardContent className="space-y-6">
-            {mode === 'create' && (
-              <>
-                <FormField
-                  control={form.control}
-                  name="invoiceDescription"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Describe Invoice for AI (Optional - AI will attempt to populate fields below)</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="e.g., 'Invoice Tech Solutions Inc. for 20 hours of software development at 75 USD/hr and 2 server licenses at 100 USD each, due in 15 days. Project: Alpha Site Rebuild. Email: contact@techsolutions.com. Bill to: 123 Main St, Anytown. Ship to: 789 Tech Park, Future City.'"
-                          className="min-h-[80px] resize-none"
-                          {...field}
-                          disabled={isLoading}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <Button type="button" onClick={handleAiParse} disabled={isLoading || !form.getValues("invoiceDescription")} variant="outline" className="w-full sm:w-auto">
-                  {isParsing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
-                  Parse with AI & Populate Fields
-                </Button>
-              </>
-            )}
+            {/* AI Parsing Section - Always Visible */}
+            <>
+              <FormField
+                control={form.control}
+                name="invoiceDescription"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Describe Invoice for AI (Populates fields below)</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="e.g., 'Invoice Tech Solutions Inc. for 20 hours of software development at 75 USD/hr and 2 server licenses at 100 USD each, due in 15 days. Project: Alpha Site Rebuild. Email: contact@techsolutions.com. Bill to: 123 Main St, Anytown. Ship to: 789 Tech Park, Future City.'"
+                        className="min-h-[80px] resize-none"
+                        {...field}
+                        disabled={isLoading}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <Button type="button" onClick={handleAiParse} disabled={isLoading || !form.getValues("invoiceDescription")} variant="outline" className="w-full sm:w-auto">
+                {isParsing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
+                Parse with AI & Populate Fields
+              </Button>
+            </>
 
             {aiError && (
               <Alert variant="destructive">
@@ -426,7 +426,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Invoice Number</FormLabel>
-                    <FormControl><Input placeholder="e.g., INV-2024-001" {...field} disabled={isLoading} /></FormControl>
+                    <FormControl><Input placeholder="e.g., INV-2024-001" {...field} disabled={isLoading || mode === 'edit'} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -542,7 +542,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
                     render={({ field }) => (
                     <FormItem>
                         <FormLabel>Customer Email (Optional)</FormLabel>
-                        <FormControl><Input type="email" placeholder="client@example.com" {...field} disabled={isLoading} /></FormControl>
+                        <FormControl><Input type="email" placeholder="client@example.com" {...field} value={field.value ?? ""} disabled={isLoading} /></FormControl>
                         <FormMessage />
                     </FormItem>
                     )}
@@ -553,7 +553,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
                     render={({ field }) => (
                     <FormItem className="md:col-span-2">
                         <FormLabel>Customer GSTIN (Optional)</FormLabel>
-                        <FormControl><Input placeholder="Customer's GSTIN" {...field} disabled={isLoading} /></FormControl>
+                        <FormControl><Input placeholder="Customer's GSTIN" {...field} value={field.value ?? ""} disabled={isLoading} /></FormControl>
                         <FormMessage />
                     </FormItem>
                     )}
@@ -564,7 +564,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
                     render={({ field }) => (
                     <FormItem>
                         <FormLabel>Billing Address (Optional)</FormLabel>
-                        <FormControl><Textarea placeholder="123 Main St, Anytown, USA" {...field} disabled={isLoading} rows={3} /></FormControl>
+                        <FormControl><Textarea placeholder="123 Main St, Anytown, USA" {...field} value={field.value ?? ""} disabled={isLoading} rows={3} /></FormControl>
                         <FormMessage />
                     </FormItem>
                     )}
@@ -575,7 +575,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
                     render={({ field }) => (
                     <FormItem>
                         <FormLabel>Shipping Address (Optional)</FormLabel>
-                        <FormControl><Textarea placeholder="456 Oak Ave, Otherville, USA (If different)" {...field} disabled={isLoading} rows={3} /></FormControl>
+                        <FormControl><Textarea placeholder="456 Oak Ave, Otherville, USA (If different)" {...field} value={field.value ?? ""} disabled={isLoading} rows={3} /></FormControl>
                         <FormMessage />
                     </FormItem>
                     )}
@@ -627,7 +627,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
                         render={({ field }) => (
                             <FormItem>
                             <FormLabel className="text-xs">HSN/SAC</FormLabel>
-                            <FormControl><Input placeholder="HSN/SAC" {...field} disabled={isLoading} /></FormControl>
+                            <FormControl><Input placeholder="HSN/SAC" {...field} value={field.value ?? ""} disabled={isLoading} /></FormControl>
                             <FormMessage />
                             </FormItem>
                         )}
@@ -638,7 +638,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
                         render={({ field }) => (
                             <FormItem>
                             <FormLabel className="text-xs">GST Rate %</FormLabel>
-                            <FormControl><Input type="number" placeholder="e.g., 18" {...field} step="any" disabled={isLoading} onChange={(e) => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))} /></FormControl>
+                            <FormControl><Input type="number" placeholder="e.g., 18" {...field} step="any" disabled={isLoading} onChange={(e) => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))} value={field.value ?? ""} /></FormControl>
                             <FormMessage />
                             </FormItem>
                         )}
@@ -667,7 +667,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
                       <FormItem>
                         <FormLabel>Items/Services Summary (Use if not adding detailed line items)</FormLabel>
                         <FormControl>
-                          <Textarea placeholder="e.g., Consulting services for Q3, Sale of 10 widgets" {...field} disabled={isLoading} className="min-h-[60px]"/>
+                          <Textarea placeholder="e.g., Consulting services for Q3, Sale of 10 widgets" {...field} value={field.value ?? ""} disabled={isLoading} className="min-h-[60px]"/>
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -699,7 +699,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Payment Terms (Optional)</FormLabel>
-                  <FormControl><Textarea placeholder="e.g., Net 30 days, Due upon receipt" {...field} disabled={isLoading} rows={2}/></FormControl>
+                  <FormControl><Textarea placeholder="e.g., Net 30 days, Due upon receipt" {...field} value={field.value ?? ""} disabled={isLoading} rows={2}/></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -711,7 +711,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
                 <FormItem>
                   <FormLabel>Additional Notes (Optional)</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Any additional notes for the customer, bank details, etc." {...field} disabled={isLoading} rows={3}/>
+                    <Textarea placeholder="Any additional notes for the customer, bank details, etc." {...field} value={field.value ?? ""} disabled={isLoading} rows={3}/>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -729,3 +729,5 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
     </Card>
   );
 }
+
+    
