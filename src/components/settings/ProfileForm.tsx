@@ -152,7 +152,7 @@ export function ProfileForm() {
       }
     }
     loadProfileAndSettings();
-  }, [user, currentCompanyId]); // Refined dependencies
+  }, [user, currentCompanyId]); 
 
   const handleLogoFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -260,7 +260,7 @@ export function ProfileForm() {
     }
   }
 
-  const isLoading = authIsLoading || isSaving || isFetchingSettings || isUploadingLogo;
+  const isLoading = authIsLoading || isFetchingSettings || isUploadingLogo;
   
   if (!currentCompanyId && !authIsLoading && !isFetchingSettings) {
     return (
@@ -328,7 +328,15 @@ export function ProfileForm() {
               <FormLabel>Company Logo</FormLabel>
               <div className="flex items-center gap-4">
                 {logoPreviewUrl ? (
-                  <Image src={logoPreviewUrl} alt="Company Logo Preview" width={80} height={80} className="rounded border object-contain" data-ai-hint="company logo"/>
+                  <Image 
+                    key={logoPreviewUrl} 
+                    src={logoPreviewUrl} 
+                    alt="Company Logo Preview" 
+                    width={80} 
+                    height={80} 
+                    className="rounded border object-contain" 
+                    data-ai-hint="company logo"
+                  />
                 ) : (
                   <div className="h-20 w-20 rounded border bg-muted flex items-center justify-center text-muted-foreground">
                     <ImageIcon className="h-8 w-8" />
@@ -479,7 +487,7 @@ export function ProfileForm() {
             />
           </CardContent>
           <CardFooter>
-            <Button type="submit" disabled={isLoading}>
+            <Button type="submit" disabled={isSaving}>
               {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save Changes
             </Button>
