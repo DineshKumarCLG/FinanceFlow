@@ -394,19 +394,25 @@ export async function addInvoice(
     throw new Error("Company ID is required to add an invoice.");
   }
 
-  const invoiceToSave = {
-    ...newInvoiceData,
+  const { dueDate, ...restOfNewInvoiceData } = newInvoiceData;
+
+  const invoicePayload: any = {
+    ...restOfNewInvoiceData,
     companyId: companyId,
     creatorUserId: currentUser.uid,
     createdAt: serverTimestamp() as Timestamp,
     updatedAt: serverTimestamp() as Timestamp,
   };
 
+  if (dueDate !== undefined) {
+    invoicePayload.dueDate = dueDate;
+  }
+
   try {
-    const docRef = await addDoc(collection(db, INVOICE_COLLECTION), invoiceToSave);
+    const docRef = await addDoc(collection(db, INVOICE_COLLECTION), invoicePayload);
     const savedInvoice: Invoice = {
       id: docRef.id,
-      ...invoiceToSave,
+      ...invoicePayload,
       createdAt: Timestamp.now(), // Use client-side timestamp for immediate return
       updatedAt: Timestamp.now(),
     };
