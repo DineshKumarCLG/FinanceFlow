@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { LayoutDashboard, BookOpenText, BookCopy, MessageCircle, Settings, PlusCircle, UploadCloud } from "lucide-react";
+import { LayoutDashboard, BookOpenText, BookCopy, MessageCircle, Settings, PlusCircle, UploadCloud, ListChecks, Landmark } from "lucide-react";
 
 export interface NavItem {
   title: string;
@@ -37,6 +37,16 @@ export const NAV_ITEMS_MAIN: NavItem[] = [
     title: "Ledger",
     href: "/ledger",
     icon: BookCopy,
+  },
+  {
+    title: "Trial Balance",
+    href: "/trial-balance",
+    icon: ListChecks,
+  },
+  {
+    title: "Balance Sheet",
+    href: "/balance-sheet",
+    icon: Landmark,
   },
   {
     title: "AI Assistant",
