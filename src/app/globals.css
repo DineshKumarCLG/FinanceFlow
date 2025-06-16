@@ -102,3 +102,37 @@
     @apply bg-background text-foreground;
   }
 }
+
+@media print {
+  body {
+    -webkit-print-color-adjust: exact; /* Chrome, Safari, Edge */
+    print-color-adjust: exact; /* Firefox */
+    background-color: #fff !important; /* Ensure background is white for printing */
+    color: #000 !important; /* Ensure text is black */
+  }
+  .no-print, .no-print * {
+    display: none !important;
+  }
+  /* Ensure cards and specific elements have transparent backgrounds or white */
+  .printable-card, .printable-card * {
+     background-color: #fff !important;
+     border-color: #ccc !important; /* Light grey border for print */
+     box-shadow: none !important;
+  }
+  .printable-text {
+    color: #000 !important;
+  }
+  /* Remove padding/margin from body for full page print */
+  body, html {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  /* Ensure the printable area takes up the full page */
+  .printable-invoice-area {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 20px !important; /* Add some padding for print layout */
+    box-shadow: none !important;
+    border: none !important;
+  }
+}

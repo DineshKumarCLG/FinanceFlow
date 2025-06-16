@@ -117,11 +117,9 @@ export function InvoiceList({ invoices = [], companyId }: InvoiceListProps) {
                     <TableCell className="text-center">
                       <div className="flex justify-center gap-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7" title="View Invoice" asChild>
-                           {/* <Link href={`/invoices/view/${invoice.id}`}> <Eye className="h-4 w-4" /> </Link> */}
-                           <span className="cursor-not-allowed"><Eye className="h-4 w-4 opacity-50" /></span>
+                           <Link href={`/invoices/${invoice.id}/view`}> <Eye className="h-4 w-4" /> </Link>
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit Invoice" asChild>
-                          {/* <Link href={`/invoices/edit/${invoice.id}`}> <Edit3 className="h-4 w-4" /> </Link> */}
+                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit Invoice (Not implemented)" asChild>
                           <span className="cursor-not-allowed"><Edit3 className="h-4 w-4 opacity-50" /></span>
                         </Button>
                         {/* Delete functionality can be added later
@@ -148,3 +146,4 @@ export function InvoiceList({ invoices = [], companyId }: InvoiceListProps) {
     </Card>
   );
 }
+

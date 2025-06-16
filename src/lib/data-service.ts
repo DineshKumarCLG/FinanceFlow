@@ -13,7 +13,7 @@ import {
   writeBatch,
   doc,
   deleteDoc,
-  // getDoc, // Potentially needed for update/get single invoice
+  getDoc, // Added for getInvoiceById
   // updateDoc, // Potentially needed for update invoice
 } from 'firebase/firestore';
 
@@ -458,9 +458,45 @@ export async function getInvoices(companyId: string): Promise<Invoice[]> {
   }
 }
 
+export async function getInvoiceById(companyId: string, invoiceId: string): Promise<Invoice | null> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error("User not authenticated.");
+  }
+  if (!companyId) {
+    throw new Error("Company ID is required.");
+  }
+  if (!invoiceId) {
+    throw new Error("Invoice ID is required.");
+  }
+
+  try {
+    const invoiceRef = doc(db, INVOICE_COLLECTION, invoiceId);
+    const docSnap = await getDoc(invoiceRef);
+
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      // Basic check to ensure the fetched invoice belongs to the current company
+      if (data.companyId === companyId) {
+        return { id: docSnap.id, ...data } as Invoice;
+      } else {
+        console.warn(`DataService: Invoice ${invoiceId} does not belong to company ${companyId}.`);
+        return null; // Or throw an error for unauthorized access
+      }
+    } else {
+      console.log(`DataService: No invoice found with ID ${invoiceId} for company ${companyId}.`);
+      return null;
+    }
+  } catch (error) {
+    console.error(`DataService: Error fetching invoice ${invoiceId} for company '${companyId}' (User: ${currentUser.uid}) from Firestore:`, error);
+    throw error;
+  }
+}
+
 
 export interface UserProfile {
   uid: string;
   email: string | null;
   displayName: string | null;
 }
+
