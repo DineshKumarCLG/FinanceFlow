@@ -24,7 +24,7 @@ export default function FinancialStatementsPage() {
     {
       title: "Profit & Loss Statement",
       description: "Analyze your company's revenues and expenses over a period. Track profitability. (Available on Dashboard)",
-      href: "/dashboard?tab=reports", // Link directly to the reports tab on dashboard
+      href: "/dashboard?tab=reports#reports", // Updated href to target the reports tab
       icon: PieChart,
       imageHint: "chart graph"
     },

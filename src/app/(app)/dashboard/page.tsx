@@ -5,7 +5,7 @@ import { PageTitle } from "@/components/shared/PageTitle";
 import { SummaryCard } from "@/components/dashboard/SummaryCard";
 import { IncomeExpenseChart } from "@/components/dashboard/IncomeExpenseChart";
 import { DollarSign, TrendingUp, TrendingDown, Activity, CalendarDays, Download, AlertCircle } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"; // Removed CardDescription for now
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"; 
 import { UserSpendingList, type UserSpending } from "@/components/dashboard/UserSpendingList";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -19,8 +19,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import dynamic from 'next/dynamic';
-import { usePathname } from 'next/navigation';
-import { Alert, AlertDescription } from "@/components/ui/alert"; // Import Alert for messages
+import { usePathname, useSearchParams } from 'next/navigation';
+import { Alert, AlertDescription as AlertDescriptionComponent } from "@/components/ui/alert"; // Renamed AlertDescription
 
 const AnalyticsOverview = dynamic(() => import('@/components/dashboard/AnalyticsOverview').then(mod => mod.AnalyticsOverview), {
   ssr: false,
@@ -41,7 +41,7 @@ import type { ProfitLossReportData, ReportLineItem as PLReportLineItem } from "@
 const NotificationList = dynamic(() => import('@/components/dashboard/NotificationList').then(mod => mod.NotificationList), {
   ssr: false,
   loading: () => {
-    const { Card: DynCard, CardHeader: DynCardHeader, CardTitle: DynCardTitle, CardDescription: DynCardDescription, CardContent: DynCardContent } = require('@/components/ui/card'); // Re-added DynCardDescription
+    const { Card: DynCard, CardHeader: DynCardHeader, CardTitle: DynCardTitle, CardDescription: DynCardDescription, CardContent: DynCardContent } = require('@/components/ui/card');
     const { Skeleton: DynSkeleton } = require('@/components/ui/skeleton');
     return (
       <DynCard>
@@ -78,7 +78,7 @@ export const expenseKeywords = ['expense', 'cost', 'supply', 'rent', 'salary', '
 
 
 export default function DashboardPage() {
-  const { user: currentUser, currentCompanyId } = useAuth(); // Get currentCompanyId
+  const { user: currentUser, currentCompanyId } = useAuth(); 
   const [clientLocale, setClientLocale] = useState('en-US');
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [allJournalEntries, setAllJournalEntries] = useState<StoredJournalEntry[]>([]);
@@ -91,6 +91,8 @@ export default function DashboardPage() {
   });
   const { toast } = useToast();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState("overview");
 
   const [summaryData, setSummaryData] = useState({
     totalRevenue: 0,
@@ -116,8 +118,16 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    const tabFromUrl = searchParams.get('tab');
+    if (tabFromUrl && ["overview", "analytics", "reports", "notifications"].includes(tabFromUrl)) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [searchParams]);
+
+
+  useEffect(() => {
     async function loadInitialData() {
-      if (!currentUser || !currentCompanyId) { // Check for currentCompanyId too
+      if (!currentUser || !currentCompanyId) { 
         setIsLoadingData(false);
         setIsLoadingNotifications(false);
         setAllJournalEntries([]);
@@ -147,8 +157,8 @@ export default function DashboardPage() {
       setIsLoadingNotifications(true);
       try {
         const [fetchedEntries, fetchedNotifications] = await Promise.all([
-          getJournalEntries(currentCompanyId), // Pass companyId
-          getNotifications(currentCompanyId)  // Pass companyId
+          getJournalEntries(currentCompanyId), 
+          getNotifications(currentCompanyId)  
         ]);
 
         setAllJournalEntries(fetchedEntries);
@@ -183,7 +193,7 @@ export default function DashboardPage() {
     }
     if (pathname === '/dashboard') {
       loadInitialData();
-    } else if (!currentUser || !currentCompanyId) { // Also check for companyId here
+    } else if (!currentUser || !currentCompanyId) { 
       setIsLoadingData(false);
       setIsLoadingNotifications(false);
       setAllJournalEntries([]);
@@ -207,7 +217,7 @@ export default function DashboardPage() {
         setProfitLossReportData(undefined);
       }
     }
-  }, [currentUser, currentCompanyId, pathname, clientLocale, dateRange, toast]); // Added currentCompanyId
+  }, [currentUser, currentCompanyId, pathname, clientLocale, dateRange, toast]); 
 
 
   useEffect(() => {
@@ -324,7 +334,7 @@ export default function DashboardPage() {
         if (isIncomeEntry) calculatedTotalRevenue += entry.amount;
         if (isExpenseEntry) {
           calculatedTotalExpenses += entry.amount;
-          const userId = entry.creatorUserId; // creatorUserId from entry
+          const userId = entry.creatorUserId; 
           userExpenses[userId] = (userExpenses[userId] || 0) + entry.amount;
         }
       }
@@ -454,7 +464,7 @@ export default function DashboardPage() {
 
     const { revenueItems, expenseItems, totalRevenue, totalExpenses, netProfit, formattedDateRange } = profitLossReportData;
 
-    let csvContent = `Company: ${currentCompanyId} - Profit & Loss Statement\n`; // Updated to use currentCompanyId
+    let csvContent = `Company: ${currentCompanyId} - Profit & Loss Statement\n`; 
     csvContent += `Period: ${formattedDateRange}\n\n`;
     csvContent += "Account,Amount (INR)\n";
 
@@ -503,9 +513,9 @@ export default function DashboardPage() {
       <div className="space-y-6 md:space-y-8 p-4">
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
+          <AlertDescriptionComponent>
             No Company ID selected. Please go to the login page to set a Company ID.
-          </AlertDescription>
+          </AlertDescriptionComponent>
         </Alert>
       </div>
     );
@@ -552,11 +562,11 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="overview" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="border-b-0 justify-start bg-transparent p-0 mb-6">
           <TabsTrigger value="overview" className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none px-3 py-1.5 hover:bg-muted">Overview</TabsTrigger>
           <TabsTrigger value="analytics" className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none px-3 py-1.5 hover:bg-muted">Analytics</TabsTrigger>
-          <TabsTrigger value="reports" className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none px-3 py-1.5 hover:bg-muted">Reports</TabsTrigger>
+          <TabsTrigger value="reports" id="reports" className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none px-3 py-1.5 hover:bg-muted">Reports</TabsTrigger>
           <TabsTrigger value="notifications" className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none px-3 py-1.5 hover:bg-muted">Notifications</TabsTrigger>
         </TabsList>
 
