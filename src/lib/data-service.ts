@@ -103,7 +103,7 @@ export interface CompanySettings {
   billingAddress?: string; // Company's own billing address
   companyEmail?: string;
   companyPhone?: string;
-  logoUrl?: string; 
+  // logoUrl?: string; // Removed logoUrl
   bankDetails?: string;
   authorizedSignatory?: string;
   updatedAt?: Timestamp;
@@ -728,7 +728,7 @@ export async function getCompanySettings(companyId: string): Promise<CompanySett
         billingAddress: data.billingAddress,
         companyEmail: data.companyEmail,
         companyPhone: data.companyPhone,
-        logoUrl: data.logoUrl,
+        // logoUrl: data.logoUrl, // Removed logoUrl
         bankDetails: data.bankDetails,
         authorizedSignatory: data.authorizedSignatory,
         updatedAt: data.updatedAt,
@@ -759,6 +759,8 @@ export async function saveCompanySettings(
   
   const updatePayload: { [key: string]: any } = { ...settingsData };
   updatePayload.updatedAt = serverTimestamp() as Timestamp; 
+  // Ensure logoUrl is not included if it was removed from settingsData
+  // delete updatePayload.logoUrl; // Explicitly remove if not needed
 
   try {
     await setDoc(settingsRef, updatePayload, { merge: true });
@@ -858,5 +860,3 @@ export interface UserProfile {
   email: string | null;
   displayName: string | null;
 }
-
-

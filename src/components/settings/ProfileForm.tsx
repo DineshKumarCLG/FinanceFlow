@@ -18,14 +18,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { useState, useEffect, ChangeEvent } from "react";
-import { Loader2, AlertCircle, UploadCloud, Image as ImageIcon, Trash2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Loader2, AlertCircle } from "lucide-react"; // Removed UploadCloud, ImageIcon, Trash2
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import * as DataService from "@/lib/data-service";
-import { storage } from "@/lib/firebase"; // Import Firebase storage
-import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import Image from "next/image"; // For preview
+// Firebase Storage imports removed
 
 const profileFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -36,7 +34,7 @@ const profileFormSchema = z.object({
     message: "Invalid GSTIN format (e.g., 29ABCDE1234F1Z5)",
   }).or(z.literal('')),
   gstRegion: z.enum(["india", "international_other", "none"]).optional(),
-  logoUrl: z.string().url("Invalid URL for logo.").optional().or(z.literal('')),
+  // logoUrl: z.string().url("Invalid URL for logo.").optional().or(z.literal('')), // Removed logoUrl
   companyAddress: z.string().optional().or(z.literal('')),
   registeredAddress: z.string().optional().or(z.literal('')),
   corporateAddress: z.string().optional().or(z.literal('')),
@@ -67,9 +65,10 @@ export function ProfileForm() {
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
   const [isFetchingSettings, setIsFetchingSettings] = useState(false);
-  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
-  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
-  const [selectedLogoFile, setSelectedLogoFile] = useState<File | null>(null);
+  // Logo related state removed
+  // const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  // const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+  // const [selectedLogoFile, setSelectedLogoFile] = useState<File | null>(null);
 
 
   const form = useForm<ProfileFormValues>({
@@ -81,7 +80,7 @@ export function ProfileForm() {
       businessType: "",
       companyGstin: "",
       gstRegion: "none",
-      logoUrl: "",
+      // logoUrl: "", // Removed logoUrl
       companyAddress: "",
       registeredAddress: "",
       corporateAddress: "",
@@ -103,17 +102,17 @@ export function ProfileForm() {
             businessType: companySettings?.businessType || "",
             companyGstin: companySettings?.companyGstin || "",
             gstRegion: companySettings?.gstRegion || "none",
-            logoUrl: companySettings?.logoUrl || "",
+            // logoUrl: companySettings?.logoUrl || "", // Removed logoUrl
             companyAddress: companySettings?.companyAddress || "",
             registeredAddress: companySettings?.registeredAddress || "",
             corporateAddress: companySettings?.corporateAddress || "",
             billingAddress: companySettings?.billingAddress || "",
           });
-          if (companySettings?.logoUrl) {
-            setLogoPreviewUrl(companySettings.logoUrl);
-          } else {
-            setLogoPreviewUrl(null);
-          }
+          // if (companySettings?.logoUrl) { // Removed logoUrl
+          //   setLogoPreviewUrl(companySettings.logoUrl);
+          // } else {
+          //   setLogoPreviewUrl(null);
+          // }
         } catch (error) {
           console.error("Failed to load company settings:", error);
           toast({ variant: "destructive", title: "Error", description: "Could not load company settings." });
@@ -124,13 +123,13 @@ export function ProfileForm() {
             businessType: "",
             companyGstin: "",
             gstRegion: "none",
-            logoUrl: "",
+            // logoUrl: "", // Removed logoUrl
             companyAddress: "",
             registeredAddress: "",
             corporateAddress: "",
             billingAddress: "",
           });
-          setLogoPreviewUrl(null);
+          // setLogoPreviewUrl(null); // Removed logoUrl
         } finally {
           setIsFetchingSettings(false);
         }
@@ -142,121 +141,19 @@ export function ProfileForm() {
           businessType: "",
           companyGstin: "",
           gstRegion: "none",
-          logoUrl: "",
+          // logoUrl: "", // Removed logoUrl
           companyAddress: "",
           registeredAddress: "",
           corporateAddress: "",
           billingAddress: "",
         });
-        setLogoPreviewUrl(null);
+        // setLogoPreviewUrl(null); // Removed logoUrl
       }
     }
     loadProfileAndSettings();
   }, [user, currentCompanyId, form, toast]);
 
-  const handleLogoFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file && currentCompanyId) {
-      setSelectedLogoFile(file);
-      setIsUploadingLogo(true);
-      toast({title: "Uploading Logo...", description: "Please wait."});
-      try {
-        const currentLogoUrlInForm = form.getValues("logoUrl");
-        if (currentLogoUrlInForm && currentLogoUrlInForm.includes("firebasestorage.googleapis.com")) {
-            try {
-                const oldLogoRef = ref(storage, currentLogoUrlInForm);
-                await deleteObject(oldLogoRef);
-            } catch (deleteError: any) {
-                if (deleteError.code !== 'storage/object-not-found') {
-                    console.warn("Could not delete previous logo during new upload:", deleteError);
-                }
-            }
-        }
-        
-        const fileExtension = file.name.split('.').pop();
-        const logoFileName = `logo_${Date.now()}.${fileExtension}`;
-        const storageRefPath = `companyLogos/${currentCompanyId}/${logoFileName}`;
-        const storageRefInstance = ref(storage, storageRefPath);
-        
-        const snapshot = await uploadBytes(storageRefInstance, file);
-
-        if (snapshot.totalBytes !== file.size) {
-            console.error(`Uploaded file size (${snapshot.totalBytes}) does not match original file size (${file.size}). Path: ${storageRefPath}`);
-            throw new Error(`File upload size mismatch. Expected ${file.size} bytes, got ${snapshot.totalBytes}. The file may not have uploaded correctly. Please check Firebase Storage and your Storage rules.`);
-        }
-        
-        const downloadURL = await getDownloadURL(snapshot.ref);
-        
-        form.setValue("logoUrl", downloadURL, { shouldValidate: true });
-        setLogoPreviewUrl(downloadURL);
-        toast({ title: "Logo Uploaded", description: "Logo updated successfully. Save changes to persist." });
-      } catch (error: any) {
-        console.error("Logo upload error:", error);
-        toast({ variant: "destructive", title: "Logo Upload Failed", description: error.message || "Could not upload logo. Check console for details." });
-        // Clear potentially bad preview if upload fails
-        if (selectedLogoFile && logoPreviewUrl && !logoPreviewUrl.startsWith('data:')) { // if preview was already a real URL
-            const currentSavedUrl = await DataService.getCompanySettings(currentCompanyId).then(s => s?.logoUrl);
-            if (currentSavedUrl) {
-                 setLogoPreviewUrl(currentSavedUrl); // revert to previously saved URL
-                 form.setValue("logoUrl", currentSavedUrl);
-            } else {
-                 setLogoPreviewUrl(null);
-                 form.setValue("logoUrl", "");
-            }
-        } else { // if preview was a data URI or null
-            setLogoPreviewUrl(null);
-            form.setValue("logoUrl", "");
-        }
-      } finally {
-        setIsUploadingLogo(false);
-        setSelectedLogoFile(null);
-        if(event.target) event.target.value = ""; 
-      }
-    } else if (!currentCompanyId) {
-        toast({variant: "destructive", title: "Company ID Missing", description: "Cannot upload logo without a Company ID."})
-    }
-  };
-
-  const handleRemoveLogo = async () => {
-    if (!currentCompanyId) {
-        toast({ variant: "destructive", title: "Error", description: "No Company ID, cannot remove logo." });
-        return;
-    }
-    const currentLogoUrlValue = form.getValues("logoUrl");
-    if (!currentLogoUrlValue) {
-        toast({ variant: "default", title: "No Logo", description: "No logo is currently set to remove." });
-        setLogoPreviewUrl(null);
-        setSelectedLogoFile(null);
-        form.setValue("logoUrl", "", {shouldValidate: true});
-        return;
-    }
-
-    setIsUploadingLogo(true); 
-    toast({ title: "Removing Logo..." });
-    try {
-        if (currentLogoUrlValue.includes("firebasestorage.googleapis.com")) {
-             const logoRef = ref(storage, currentLogoUrlValue);
-             await deleteObject(logoRef);
-        }
-        form.setValue("logoUrl", "", { shouldValidate: true });
-        setLogoPreviewUrl(null);
-        setSelectedLogoFile(null);
-        toast({ title: "Logo Removed", description: "Logo has been cleared. Save changes to persist." });
-    } catch (error: any) {
-        console.error("Error removing logo:", error);
-        if (error.code === 'storage/object-not-found') {
-            toast({ title: "Logo Cleared", description: "Logo was not found in storage or already removed. Cleared from form." });
-        } else {
-            toast({ variant: "destructive", title: "Removal Failed", description: "Could not remove logo from storage. " + error.message });
-        }
-        form.setValue("logoUrl", "", { shouldValidate: true }); 
-        setLogoPreviewUrl(null);
-        setSelectedLogoFile(null);
-    } finally {
-        setIsUploadingLogo(false);
-    }
-  };
-
+  // Logo upload and remove handlers removed
 
   async function onSubmit(data: ProfileFormValues) {
     if (!currentCompanyId) {
@@ -274,7 +171,7 @@ export function ProfileForm() {
         businessType: data.businessType || "",
         companyGstin: data.companyGstin || "",
         gstRegion: data.gstRegion || "none",
-        logoUrl: data.logoUrl || "",
+        // logoUrl: data.logoUrl || "", // Removed logoUrl
         companyAddress: data.companyAddress || "",
         registeredAddress: data.registeredAddress || "",
         corporateAddress: data.corporateAddress || "",
@@ -298,7 +195,7 @@ export function ProfileForm() {
     }
   }
 
-  const isLoadingUiElements = authIsLoading || isFetchingSettings || isUploadingLogo;
+  const isLoadingUiElements = authIsLoading || isFetchingSettings; // Removed isUploadingLogo
   const isSaveButtonDisabled = authIsLoading || isFetchingSettings || isSaving;
   
   if (!currentCompanyId && !authIsLoading && !isFetchingSettings) {
@@ -325,7 +222,7 @@ export function ProfileForm() {
     <Card>
       <CardHeader>
         <CardTitle>User Profile & Company Settings {currentCompanyId ? `(${currentCompanyId})` : ''}</CardTitle>
-        <CardDescription>Manage your personal information and company-specific details like GST, addresses, and logo.</CardDescription>
+        <CardDescription>Manage your personal information and company-specific details like GST and addresses.</CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -363,41 +260,7 @@ export function ProfileForm() {
               <p className="text-xs text-muted-foreground">Company context for the current session. Change on login page.</p>
             </div>
             
-            <div className="space-y-2">
-              <FormLabel>Company Logo</FormLabel>
-              <div className="flex items-center gap-4">
-                {logoPreviewUrl ? (
-                  <Image 
-                    key={logoPreviewUrl} 
-                    src={logoPreviewUrl} 
-                    alt="Company Logo Preview" 
-                    width={80} 
-                    height={80} 
-                    className="rounded border object-contain bg-slate-100" 
-                    data-ai-hint="company logo"
-                  />
-                ) : (
-                  <div className="h-20 w-20 rounded border bg-muted flex items-center justify-center text-muted-foreground">
-                    <ImageIcon className="h-8 w-8" />
-                  </div>
-                )}
-                <div className="flex flex-col gap-2">
-                    <Button type="button" variant="outline" onClick={() => document.getElementById('logo-upload-input')?.click()} disabled={isLoadingUiElements}>
-                        <UploadCloud className="mr-2 h-4 w-4" /> {logoPreviewUrl ? "Change Logo" : "Upload Logo"}
-                    </Button>
-                    <Input id="logo-upload-input" type="file" className="hidden" onChange={handleLogoFileChange} accept="image/png, image/jpeg, image/svg+xml" disabled={isLoadingUiElements} />
-                    {logoPreviewUrl && (
-                        <Button type="button" variant="ghost" size="sm" onClick={handleRemoveLogo} className="text-destructive hover:text-destructive-foreground hover:bg-destructive/10" disabled={isLoadingUiElements}>
-                            <Trash2 className="mr-2 h-4 w-4"/>Remove Logo
-                        </Button>
-                    )}
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">Recommended: Square or wide logo, max 1MB (PNG, JPG, SVG).</p>
-              <FormField control={form.control} name="logoUrl" render={({ field }) => <Input type="hidden" {...field} />} />
-               <FormMessage>{form.formState.errors.logoUrl?.message}</FormMessage>
-            </div>
-
+            {/* Company Logo Section Removed */}
 
             <FormField
               control={form.control}

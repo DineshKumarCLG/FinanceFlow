@@ -17,10 +17,11 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
-      { // Added for Firebase Storage
-        protocol: 'https',
-        hostname: 'firebasestorage.googleapis.com',
-      },
+      // Firebase Storage pattern removed
+      // {
+      //   protocol: 'https',
+      //   hostname: 'firebasestorage.googleapis.com',
+      // },
     ],
   },
   // Required for Genkit to ensure server-side dependencies are handled correctly

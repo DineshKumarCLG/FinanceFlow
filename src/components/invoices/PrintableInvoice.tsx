@@ -19,7 +19,7 @@ const fallbackCompanyDetails: Required<Pick<CompanySettings, 'businessName' | 'c
   companyGstin: "YOUR_GSTIN_HERE",
   email: "your.email@example.com",
   phone: "+1234567890",
-  logoUrl: "", // Default to no logo, will be handled by conditional rendering
+  // logoUrl: "", // Removed logoUrl
   bankDetails: "Bank: Default Bank\nAccount Name: Your Company\nAccount No: 0000000000\nIFSC: DEFB0000000",
   authorizedSignatory: "Authorized Signatory",
 };
@@ -41,7 +41,7 @@ export function PrintableInvoice({ invoice, companyDetails }: PrintableInvoicePr
     gstin: companyDetails?.companyGstin || fallbackCompanyDetails.companyGstin,
     email: companyDetails?.companyEmail || fallbackCompanyDetails.email,
     phone: companyDetails?.companyPhone || fallbackCompanyDetails.phone,
-    logoUrl: companyDetails?.logoUrl || fallbackCompanyDetails.logoUrl,
+    // logoUrl: companyDetails?.logoUrl || fallbackCompanyDetails.logoUrl, // Removed logoUrl
     bankDetails: companyDetails?.bankDetails || fallbackCompanyDetails.bankDetails,
     authorizedSignatory: companyDetails?.authorizedSignatory || fallbackCompanyDetails.authorizedSignatory,
   };
@@ -92,20 +92,8 @@ export function PrintableInvoice({ invoice, companyDetails }: PrintableInvoicePr
     <div className="bg-white p-6 sm:p-10 text-sm font-sans printable-card text-gray-800 printable-text">
       <header className="grid grid-cols-2 gap-4 mb-8 items-start">
         <div>
-          {currentCompanyDetails.logoUrl ? (
-            <div className="relative w-[180px] h-[60px] mb-3">
-              <Image 
-                src={currentCompanyDetails.logoUrl} 
-                alt={`${currentCompanyDetails.name} Logo`} 
-                layout="fill" 
-                objectFit="contain" 
-                className="h-auto"
-                data-ai-hint="company brandmark"
-              />
-            </div>
-          ) : (
-             <h2 className="text-xl font-bold text-gray-900 mb-3">{currentCompanyDetails.name}</h2>
-          )}
+          {/* Logo display logic removed, fallback to company name */}
+          <h2 className="text-xl font-bold text-gray-900 mb-3">{currentCompanyDetails.name}</h2>
           <p className="text-xs text-gray-600 whitespace-pre-line">{currentCompanyDetails.address || fallbackCompanyDetails.address}</p>
           {currentCompanyDetails.gstin && <p className="text-xs text-gray-600">GSTIN/VAT: {currentCompanyDetails.gstin}</p>}
           {currentCompanyDetails.email && <p className="text-xs text-gray-600">Email: {currentCompanyDetails.email}</p>}
