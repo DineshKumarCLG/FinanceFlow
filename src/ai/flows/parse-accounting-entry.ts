@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview Parses accounting entries from text or voice input and generates double-entry journal entries.
@@ -45,7 +46,9 @@ const prompt = ai.definePrompt({
 
   Extract the date, amount, type, and purpose of the transaction. Then, determine the appropriate debit and credit accounts for the journal entry. Provide a detailed description of the entry.
 
-  Ensure that the output is a valid JSON object conforming to the ParseAccountingEntryOutputSchema. The date must be YYYY-MM-DD.
+  If the date is not explicitly mentioned in the entry text, assume today's date and format it as YYYY-MM-DD. Otherwise, use the date mentioned in the text, also formatted as YYYY-MM-DD.
+
+  Ensure that the output is a valid JSON object conforming to the ParseAccountingEntryOutputSchema.
 
   Output: {
     "date": "YYYY-MM-DD",
@@ -69,3 +72,4 @@ const parseAccountingEntryFlow = ai.defineFlow(
     return output!;
   }
 );
+
