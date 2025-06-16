@@ -1,5 +1,6 @@
 
 import Link from 'next/link';
+import Image from 'next/image'; // Import next/image
 import { PageTitle } from "@/components/shared/PageTitle";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,21 +13,24 @@ export default function FinancialStatementsPage() {
       description: "View your company's assets, liabilities, and equity at a specific point in time. Understand your financial position.",
       href: "/balance-sheet",
       icon: Landmark,
-      imageHint: "financial document business"
+      imageUrl: "/images/balance_sheet_illustration.png", // Specific image for Balance Sheet
+      // data-ai-hint is not needed here as we have a specific image.
     },
     {
       title: "Trial Balance",
       description: "Review a summary of all ledger accounts and their debit or credit balances. Ensure your books are balanced.",
       href: "/trial-balance",
       icon: ListChecks,
-      imageHint: "checklist report"
+      imageHint: "checklist report", // Placeholder hint
+      placeholderUrl: "https://placehold.co/600x338/E8F5E9/4CAF50.png",
     },
     {
       title: "Profit & Loss Statement",
       description: "Analyze your company's revenues and expenses over a period. Track profitability. (Available on Dashboard)",
-      href: "/dashboard?tab=reports#reports", // Updated href to target the reports tab
+      href: "/dashboard?tab=reports#reports",
       icon: PieChart,
-      imageHint: "chart graph"
+      imageHint: "chart graph", // Placeholder hint
+      placeholderUrl: "https://placehold.co/600x338/E8F5E9/4CAF50.png",
     },
   ];
 
@@ -48,14 +52,25 @@ export default function FinancialStatementsPage() {
               <CardDescription>{statement.description}</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow">
-              {/* Placeholder for a small visual or more info if needed */}
-              <div className="aspect-video bg-muted rounded-md flex items-center justify-center mb-4">
-                <img 
-                  src={`https://placehold.co/600x338/E8F5E9/4CAF50.png`} 
-                  alt={`${statement.title} placeholder`} 
-                  className="w-full h-full object-cover rounded-md"
-                  data-ai-hint={statement.imageHint} 
-                />
+              <div className="aspect-video bg-muted rounded-md flex items-center justify-center mb-4 relative overflow-hidden">
+                {statement.imageUrl ? (
+                  <Image
+                    src={statement.imageUrl}
+                    alt={`${statement.title} illustration`}
+                    layout="fill"
+                    objectFit="cover"
+                    className="rounded-md"
+                  />
+                ) : (
+                  <Image
+                    src={statement.placeholderUrl || "https://placehold.co/600x338.png"} // Fallback just in case
+                    alt={`${statement.title} placeholder`}
+                    layout="fill"
+                    objectFit="cover"
+                    className="rounded-md"
+                    data-ai-hint={statement.imageHint}
+                  />
+                )}
               </div>
             </CardContent>
             <div className="p-6 pt-0">
