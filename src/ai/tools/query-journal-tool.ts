@@ -1,0 +1,137 @@
+
+'use server';
+/**
+ * @fileOverview AI tool for querying journal entries.
+ * This tool allows the AI assistant to retrieve and summarize journal entries
+ * based on various criteria.
+ */
+
+import { ai } from '@/ai/genkit';
+import { z } from 'zod';
+import { getJournalEntries, type JournalEntry as StoredJournalEntry } from '@/lib/data-service';
+import { parseISO, isWithinInterval, isValid } from 'date-fns';
+
+const QueriedJournalEntrySchema = z.object({
+  date: z.string(),
+  description: z.string(),
+  debitAccount: z.string(),
+  creditAccount: z.string(),
+  amount: z.number(),
+});
+
+const QueryJournalInputSchema = z.object({
+  companyId: z.string().describe("The ID of the company for which to query journal entries."),
+  dateFrom: z.string().optional().describe("Start date for the query (YYYY-MM-DD)."),
+  dateTo: z.string().optional().describe("End date for the query (YYYY-MM-DD)."),
+  accountName: z.string().optional().describe("Filter by account name (matches debit or credit account)."),
+  keywords: z.string().optional().describe("Keywords to search for in the entry description."),
+  limit: z.number().optional().default(5).describe("Maximum number of example entries to describe in the output."),
+});
+export type QueryJournalInput = z.infer<typeof QueryJournalInputSchema>;
+
+const QueryJournalOutputSchema = z.object({
+  querySummary: z.string().describe("A concise textual summary of the query results. For example, 'Found 15 entries totaling $1,234.56 matching your criteria.' or 'No entries found for the specified period.'"),
+  matchCount: z.number().describe("The total number of entries matching the query criteria (before any display limits)."),
+  displayedEntriesDescription: z.string().optional().describe("A brief description of up to 'limit' key entries, if any were found. E.g., 'Recent entries: 2024-07-15: Office Supplies ($50); 2024-07-10: Client Payment ($200).'"),
+});
+export type QueryJournalOutput = z.infer<typeof QueryJournalOutputSchema>;
+
+export const queryJournalTool = ai.defineTool(
+  {
+    name: 'queryJournalTool',
+    description: 'Queries historical journal entries based on criteria like date range, account name, or keywords. Returns a summary and examples of matching entries.',
+    inputSchema: QueryJournalInputSchema,
+    outputSchema: QueryJournalOutputSchema,
+  },
+  async (input: QueryJournalInput): Promise<QueryJournalOutput> => {
+    if (!input.companyId) {
+      return { querySummary: "Error: Company ID is required to query journal entries.", matchCount: 0 };
+    }
+
+    try {
+      const allEntries = await getJournalEntries(input.companyId);
+      if (allEntries.length === 0) {
+        return { querySummary: "No journal entries found for this company.", matchCount: 0 };
+      }
+
+      let filteredEntries = allEntries;
+
+      // Date filtering
+      if (input.dateFrom || input.dateTo) {
+        const startDate = input.dateFrom ? parseISO(input.dateFrom) : null;
+        const endDate = input.dateTo ? parseISO(input.dateTo) : null;
+
+        if ((startDate && !isValid(startDate)) || (endDate && !isValid(endDate))) {
+          return { querySummary: "Error: Invalid date format provided. Please use YYYY-MM-DD.", matchCount: 0 };
+        }
+        
+        const interval: Interval = {};
+        if (startDate) interval.start = startDate;
+        if (endDate) interval.end = endDate;
+        // Adjust endDate to be end of day if only one date is provided or for range end
+        if (endDate && startDate && startDate.getTime() === endDate.getTime()) {
+            interval.end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999);
+        } else if (endDate) {
+            interval.end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999);
+        }
+
+
+        filteredEntries = filteredEntries.filter(entry => {
+          const entryDate = parseISO(entry.date);
+          if (!isValid(entryDate)) return false;
+          
+          if (startDate && endDate) return isWithinInterval(entryDate, { start: startDate, end: interval.end! });
+          if (startDate) return entryDate >= startDate;
+          if (endDate) return entryDate <= interval.end!;
+          return false; 
+        });
+      }
+
+      // Account name filtering
+      if (input.accountName) {
+        const lowerAccountName = input.accountName.toLowerCase();
+        filteredEntries = filteredEntries.filter(entry =>
+          entry.debitAccount.toLowerCase().includes(lowerAccountName) ||
+          entry.creditAccount.toLowerCase().includes(lowerAccountName)
+        );
+      }
+
+      // Keyword filtering
+      if (input.keywords) {
+        const lowerKeywords = input.keywords.toLowerCase();
+        filteredEntries = filteredEntries.filter(entry =>
+          entry.description.toLowerCase().includes(lowerKeywords)
+        );
+      }
+      
+      filteredEntries.sort((a,b) => parseISO(b.date).getTime() - parseISO(a.date).getTime());
+
+
+      const matchCount = filteredEntries.length;
+      let totalAmount = 0;
+      filteredEntries.forEach(entry => totalAmount += entry.amount);
+
+      let displayedEntriesDescription: string | undefined = undefined;
+      if (matchCount > 0) {
+        const entriesToDisplay = filteredEntries.slice(0, input.limit);
+        displayedEntriesDescription = "Examples: " + entriesToDisplay.map(e => 
+          `${e.date}: ${e.description.substring(0,30)}... (${e.amount.toLocaleString(undefined, {style: 'currency', currency: 'INR'})})`
+        ).join('; ');
+      }
+
+      const querySummary = matchCount > 0
+        ? `Found ${matchCount} journal entr${matchCount === 1 ? 'y' : 'ies'} totaling ${totalAmount.toLocaleString(undefined, {style: 'currency', currency: 'INR'})} matching your criteria.`
+        : "No journal entries found matching your criteria.";
+
+      return {
+        querySummary,
+        matchCount,
+        displayedEntriesDescription,
+      };
+
+    } catch (e: any) {
+      console.error("Error in queryJournalTool:", e);
+      return { querySummary: `Error querying journal entries: ${e.message}`, matchCount: 0 };
+    }
+  }
+);

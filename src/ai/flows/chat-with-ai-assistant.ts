@@ -10,7 +10,8 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import { manageInvoiceTool } from '@/ai/tools/manage-invoice-tool'; // Import the new tool
+import { manageInvoiceTool } from '@/ai/tools/manage-invoice-tool';
+import { queryJournalTool } from '@/ai/tools/query-journal-tool'; // Import the new tool
 
 const ChatWithAiAssistantInputSchema = z.object({
   message: z.string().describe('The user message to the AI assistant.'),
@@ -20,7 +21,7 @@ const ChatWithAiAssistantInputSchema = z.object({
   })).optional().describe('The conversation history between the user and the AI assistant.'),
   uploadedFiles: z.array(z.string()).optional().describe('List of data URIs of uploaded files.'),
   companyId: z.string().optional().describe("The current user's active company ID."),
-  creatorUserId: z.string().optional().describe("The ID of the user initiating the chat action."), // Added creatorUserId
+  creatorUserId: z.string().optional().describe("The ID of the user initiating the chat action."),
 });
 export type ChatWithAiAssistantInput = z.infer<typeof ChatWithAiAssistantInputSchema>;
 
@@ -36,11 +37,11 @@ export async function chatWithAiAssistant(input: ChatWithAiAssistantInput): Prom
 const prompt = ai.definePrompt({
   name: 'chatWithAiAssistantPrompt',
   input: {schema: ChatWithAiAssistantInputSchema},
-  // output: {schema: ChatWithAiAssistantOutputSchema}, // Removed: This conflicts with tool usage. Flow output schema is handled by defineFlow.
-  tools: [manageInvoiceTool],
+  tools: [manageInvoiceTool, queryJournalTool], // Added queryJournalTool
   prompt: `You are a helpful AI assistant specializing in accounting and financial management for small businesses.
   Your goal is to help users manage their finances through a conversational interface.
   You can answer questions about their finances, help them add entries, process uploaded documents, and manage invoices.
+  You can also query historical journal entries.
   Maintain context throughout the conversation.
 
   Available Tools:
@@ -52,6 +53,12 @@ const prompt = ai.definePrompt({
     - For updating an invoice, set action to 'update' and ensure you provide the invoiceId if the user mentions it or if it's in the conversation context.
     - You MUST provide the companyId to this tool. It is available as '{{companyId}}' if provided in the input. If not available, you should inform the user that a company context is needed.
     - You MUST provide the creatorUserId to this tool. It is available as '{{creatorUserId}}' if provided in the input. If not available, you should inform the user that they need to be identified.
+
+  - queryJournalTool: Use this tool to answer questions about past financial transactions, search for specific entries, or get summaries.
+    - When a user asks "What were my expenses last month?", "Find transactions related to 'office supplies'", "Show me income entries from January", "How much did I spend on rent in Q1?", or any question requiring access to historical journal data, use this tool.
+    - Extract relevant query parameters from the user's request like dateFrom, dateTo, accountName, keywords, and a reasonable limit.
+    - You MUST provide the companyId to this tool. It is available as '{{companyId}}'. If not available, inform the user.
+    - After getting the result from the tool, formulate a natural language response for the user based on the tool's output (querySummary, matchCount, displayedEntriesDescription).
 
   Here's the conversation history:
   {{#each conversationHistory}}
@@ -74,7 +81,7 @@ const chatWithAiAssistantFlow = ai.defineFlow(
   {
     name: 'chatWithAiAssistantFlow',
     inputSchema: ChatWithAiAssistantInputSchema,
-    outputSchema: ChatWithAiAssistantOutputSchema, // Flow output schema remains
+    outputSchema: ChatWithAiAssistantOutputSchema,
   },
   async (input: ChatWithAiAssistantInput) => {
 
@@ -87,7 +94,7 @@ const chatWithAiAssistantFlow = ai.defineFlow(
     }));
 
     const promptData = {
-      ...input, // This now includes companyId and creatorUserId
+      ...input,
       conversationHistory: currentHistory,
     };
 
@@ -102,17 +109,18 @@ const chatWithAiAssistantFlow = ai.defineFlow(
           console.log(`AI Assistant: Attempting to call tool: ${part.toolRequest.name}`);
           let toolOutput: any;
           try {
-            if (part.toolRequest.name === 'manageInvoiceTool') {
-              const toolInput = { ...part.toolRequest.input };
-              if (input.companyId && !toolInput.companyId) {
+            const toolInput = { ...part.toolRequest.input };
+             // Ensure companyId is passed to tools
+            if (input.companyId && !toolInput.companyId) {
                 toolInput.companyId = input.companyId;
-              }
-              if (input.creatorUserId && !toolInput.creatorUserId) { // Ensure creatorUserId is passed
+            }
+
+            if (part.toolRequest.name === 'manageInvoiceTool') {
+              if (input.creatorUserId && !toolInput.creatorUserId) {
                 toolInput.creatorUserId = input.creatorUserId;
               }
-
               if (!toolInput.companyId) {
-                console.warn("ManageInvoiceTool called without companyId from AI or user input.");
+                console.warn("ManageInvoiceTool called without companyId.");
                 toolOutput = { success: false, message: "Tool Error: Company ID was not provided for the invoice operation." };
               } else if (!toolInput.creatorUserId) {
                 console.warn("ManageInvoiceTool called without creatorUserId.");
@@ -120,7 +128,15 @@ const chatWithAiAssistantFlow = ai.defineFlow(
               } else {
                 toolOutput = await manageInvoiceTool(toolInput);
               }
-            } else {
+            } else if (part.toolRequest.name === 'queryJournalTool') {
+               if (!toolInput.companyId) {
+                console.warn("QueryJournalTool called without companyId.");
+                toolOutput = { querySummary: "Tool Error: Company ID was not provided to query journal entries.", matchCount: 0 };
+              } else {
+                toolOutput = await queryJournalTool(toolInput);
+              }
+            }
+             else {
               throw new Error(`Unknown tool requested: ${part.toolRequest.name}`);
             }
 
@@ -151,7 +167,6 @@ const chatWithAiAssistantFlow = ai.defineFlow(
     } else if (llmResponse.text) { 
         finalContent = llmResponse.text;
     }
-
 
     if (!finalContent) {
       const lastHistoryItem = currentHistory.length > 0 ? currentHistory[currentHistory.length - 1] : null;
