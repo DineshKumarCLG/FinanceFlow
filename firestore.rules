@@ -3,43 +3,63 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default deny all access
+
+    // Default deny all access if no other rule matches.
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Journal Entries:
-    // Allow authenticated users to read and write journal entries.
-    // For company-specific access, you'd typically check if the
-    // request.auth.uid is part of the company or if a custom claim matches.
-    // For simplicity, we'll allow any authenticated user for now.
+    // Rules for 'journalEntries' collection
     match /journalEntries/{entryId} {
-      allow read, write: if request.auth != null;
-      // More granular rules for production might look like:
-      // allow create: if request.auth != null && request.resource.data.creatorUserId == request.auth.uid && request.resource.data.companyId != null;
-      // allow read, update, delete: if request.auth != null && resource.data.creatorUserId == request.auth.uid;
-      // Or, if you have a user_companies collection:
-      // allow read, write: if request.auth != null && exists(/databases/$(database)/documents/user_companies/$(request.auth.uid)_$(resource.data.companyId));
+      // Allow a user to create an entry if authenticated,
+      // and the entry includes a creatorUserId and companyId.
+      // This is relaxed for server-side Genkit flows.
+      allow create: if request.auth != null
+                    && request.resource.data.creatorUserId != null
+                    && request.resource.data.companyId != null;
+
+      // Allow an authenticated user to read entries if the entry has a companyId.
+      allow read: if request.auth != null && resource.data.companyId != null;
+
+      // Allow a user to update or delete an entry only if they are its creator.
+      allow update, delete: if request.auth != null
+                             && request.auth.uid == resource.data.creatorUserId;
     }
 
-    // Notifications:
-    // Allow authenticated users to read and write notifications.
-    match /notifications/{notificationId} {
-      allow read, write: if request.auth != null;
-      // Similar granular rules could apply here.
-    }
-
-    // Invoices:
-    // Allow authenticated users to read and write invoices.
+    // Rules for 'invoices' collection
     match /invoices/{invoiceId} {
-      allow read, write: if request.auth != null;
-      // Similar granular rules could apply here.
+      // Allow a user to create an invoice if authenticated,
+      // and the invoice includes a creatorUserId and companyId.
+      // This is relaxed for server-side Genkit flows.
+      allow create: if request.auth != null
+                    && request.resource.data.creatorUserId != null
+                    && request.resource.data.companyId != null;
+
+      // Allow an authenticated user to read invoices if the invoice has a companyId.
+      allow read: if request.auth != null && resource.data.companyId != null;
+
+      // Allow a user to update or delete an invoice only if they are its creator.
+      allow update, delete: if request.auth != null
+                             && request.auth.uid == resource.data.creatorUserId;
     }
 
-    // You might need rules for user profiles if you store them, e.g.,
-    // match /users/{userId} {
-    //   allow read: if request.auth != null;
-    //   allow write: if request.auth != null && request.auth.uid == userId;
-    // }
+    // Rules for 'companySettings' collection
+    // The document ID for these settings IS the companyId.
+    match /companySettings/{companyId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Rules for 'aiPreferencesSettings' collection
+    // The document ID for these settings IS the companyId.
+    match /aiPreferencesSettings/{companyId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Rules for 'notifications' collection
+    match /notifications/{notificationId} {
+      allow read: if request.auth != null && resource.data.companyId != null;
+      allow create: if request.auth != null && request.resource.data.companyId != null;
+      allow update, delete: if false;
+    }
   }
 }
