@@ -8,7 +8,7 @@ import type { NavItem } from "@/lib/constants";
 import { NAV_ITEMS_MAIN, NAV_ITEMS_BOTTOM } from "@/lib/constants";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Ellipsis, X } from "lucide-react"; // Added Ellipsis for "More" and X for close
+import { Ellipsis } from "lucide-react"; // Using Ellipsis for "More"
 import React from "react";
 
 // Combine main and bottom navigation items
@@ -16,7 +16,7 @@ const allNavItems = [...NAV_ITEMS_MAIN, ...NAV_ITEMS_BOTTOM];
 // Exclude "Add Entry" as it's a FAB
 const navItemsForBottomBar = allNavItems.filter(item => item.href !== '/add-entry');
 
-const ITEMS_DIRECT_DISPLAY_COUNT = 5; // Number of items to display directly
+const ITEMS_DIRECT_DISPLAY_COUNT = 4; // Number of items to display directly (4 primary + 1 More button = 5 total)
 
 export function BottomNavBar() {
   const pathname = usePathname();
@@ -35,7 +35,7 @@ export function BottomNavBar() {
           "flex items-center gap-2 rounded-md text-sm font-medium transition-colors",
           inSheet
             ? "w-full p-3 hover:bg-muted data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
-            : "flex-col justify-center p-2 text-xs min-w-[70px] max-w-[90px] h-full shrink-0 hover:bg-muted",
+            : "flex-col justify-center p-2 text-xs min-w-[70px] max-w-[90px] h-full shrink-0 hover:bg-muted", // Adjusted for 5 items
           isActive && !inSheet ? "text-primary" : "text-muted-foreground",
           isActive && inSheet ? "bg-primary text-primary-foreground" : "hover:text-foreground"
         )}
@@ -64,7 +64,7 @@ export function BottomNavBar() {
                 variant="ghost"
                 className={cn(
                   "flex flex-col items-center justify-center gap-0.5 p-2 text-xs font-medium transition-colors",
-                  "min-w-[70px] max-w-[90px] h-full shrink-0 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  "min-w-[70px] max-w-[90px] h-full shrink-0 text-muted-foreground hover:bg-muted hover:text-foreground" // Adjusted for 5 items
                 )}
                 title="More options"
               >
@@ -73,11 +73,8 @@ export function BottomNavBar() {
               </Button>
             </SheetTrigger>
             <SheetContent side="bottom" className="rounded-t-lg p-0 h-auto max-h-[70svh] flex flex-col">
-              <SheetHeader className="p-4 border-b flex flex-row justify-between items-center">
-                <SheetTitle className="text-base">More Options</SheetTitle>
-                 <Button variant="ghost" size="icon" onClick={() => setIsSheetOpen(false)} className="h-7 w-7">
-                    <X className="h-4 w-4" />
-                 </Button>
+              <SheetHeader className="p-4 border-b"> {/* Removed custom close button */}
+                <SheetTitle className="text-base text-left">More Options</SheetTitle>
               </SheetHeader>
               <div className="flex-1 overflow-y-auto p-2 space-y-1">
                 {moreItems.map((item) => (
