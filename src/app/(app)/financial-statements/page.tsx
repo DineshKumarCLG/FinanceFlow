@@ -51,7 +51,7 @@ export default function FinancialStatementsPage() {
               {/* Placeholder for a small visual or more info if needed */}
               <div className="aspect-video bg-muted rounded-md flex items-center justify-center mb-4">
                 <img 
-                  src={`https://placehold.co/600x338.png`} 
+                  src={`https://placehold.co/600x338/E8F5E9/4CAF50.png`} 
                   alt={`${statement.title} placeholder`} 
                   className="w-full h-full object-cover rounded-md"
                   data-ai-hint={statement.imageHint} 
