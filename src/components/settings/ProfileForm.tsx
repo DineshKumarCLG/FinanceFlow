@@ -152,7 +152,7 @@ export function ProfileForm() {
       }
     }
     loadProfileAndSettings();
-  }, [user, currentCompanyId]); 
+  }, [user, currentCompanyId, form, toast]);
 
   const handleLogoFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -161,13 +161,11 @@ export function ProfileForm() {
       setIsUploadingLogo(true);
       toast({title: "Uploading Logo...", description: "Please wait."});
       try {
-        // Attempt to delete existing logo first to avoid multiple logo files if name is same (though less likely with unique names)
         const currentLogoUrlInForm = form.getValues("logoUrl");
         if (currentLogoUrlInForm && currentLogoUrlInForm.includes("firebasestorage.googleapis.com")) {
             try {
                 const oldLogoRef = ref(storage, currentLogoUrlInForm);
                 await deleteObject(oldLogoRef);
-                console.log("Previous logo deleted from storage during new upload.");
             } catch (deleteError: any) {
                 if (deleteError.code !== 'storage/object-not-found') {
                     console.warn("Could not delete previous logo during new upload:", deleteError);
@@ -176,10 +174,17 @@ export function ProfileForm() {
         }
         
         const fileExtension = file.name.split('.').pop();
-        const logoFileName = `logo_${Date.now()}.${fileExtension}`; // More unique name
-        const storageRef = ref(storage, `companyLogos/${currentCompanyId}/${logoFileName}`);
+        const logoFileName = `logo_${Date.now()}.${fileExtension}`;
+        const storageRefPath = `companyLogos/${currentCompanyId}/${logoFileName}`;
+        const storageRefInstance = ref(storage, storageRefPath);
         
-        const snapshot = await uploadBytes(storageRef, file);
+        const snapshot = await uploadBytes(storageRefInstance, file);
+
+        if (snapshot.totalBytes !== file.size) {
+            console.error(`Uploaded file size (${snapshot.totalBytes}) does not match original file size (${file.size}). Path: ${storageRefPath}`);
+            throw new Error(`File upload size mismatch. Expected ${file.size} bytes, got ${snapshot.totalBytes}. The file may not have uploaded correctly. Please check Firebase Storage and your Storage rules.`);
+        }
+        
         const downloadURL = await getDownloadURL(snapshot.ref);
         
         form.setValue("logoUrl", downloadURL, { shouldValidate: true });
@@ -187,9 +192,24 @@ export function ProfileForm() {
         toast({ title: "Logo Uploaded", description: "Logo updated successfully. Save changes to persist." });
       } catch (error: any) {
         console.error("Logo upload error:", error);
-        toast({ variant: "destructive", title: "Logo Upload Failed", description: error.message || "Could not upload logo." });
+        toast({ variant: "destructive", title: "Logo Upload Failed", description: error.message || "Could not upload logo. Check console for details." });
+        // Clear potentially bad preview if upload fails
+        if (selectedLogoFile && logoPreviewUrl && !logoPreviewUrl.startsWith('data:')) { // if preview was already a real URL
+            const currentSavedUrl = await DataService.getCompanySettings(currentCompanyId).then(s => s?.logoUrl);
+            if (currentSavedUrl) {
+                 setLogoPreviewUrl(currentSavedUrl); // revert to previously saved URL
+                 form.setValue("logoUrl", currentSavedUrl);
+            } else {
+                 setLogoPreviewUrl(null);
+                 form.setValue("logoUrl", "");
+            }
+        } else { // if preview was a data URI or null
+            setLogoPreviewUrl(null);
+            form.setValue("logoUrl", "");
+        }
       } finally {
         setIsUploadingLogo(false);
+        setSelectedLogoFile(null);
         if(event.target) event.target.value = ""; 
       }
     } else if (!currentCompanyId) {
@@ -207,11 +227,11 @@ export function ProfileForm() {
         toast({ variant: "default", title: "No Logo", description: "No logo is currently set to remove." });
         setLogoPreviewUrl(null);
         setSelectedLogoFile(null);
-        form.setValue("logoUrl", "", {shouldValidate: true}); // Ensure form value is cleared
+        form.setValue("logoUrl", "", {shouldValidate: true});
         return;
     }
 
-    setIsUploadingLogo(true); // Re-use this state for "processing"
+    setIsUploadingLogo(true); 
     toast({ title: "Removing Logo..." });
     try {
         if (currentLogoUrlValue.includes("firebasestorage.googleapis.com")) {
@@ -224,13 +244,12 @@ export function ProfileForm() {
         toast({ title: "Logo Removed", description: "Logo has been cleared. Save changes to persist." });
     } catch (error: any) {
         console.error("Error removing logo:", error);
-        // If object not found, it's already gone or was never fully saved. Still clear from form.
         if (error.code === 'storage/object-not-found') {
             toast({ title: "Logo Cleared", description: "Logo was not found in storage or already removed. Cleared from form." });
         } else {
             toast({ variant: "destructive", title: "Removal Failed", description: "Could not remove logo from storage. " + error.message });
         }
-        form.setValue("logoUrl", "", { shouldValidate: true }); // Still clear form value
+        form.setValue("logoUrl", "", { shouldValidate: true }); 
         setLogoPreviewUrl(null);
         setSelectedLogoFile(null);
     } finally {
@@ -255,7 +274,7 @@ export function ProfileForm() {
         businessType: data.businessType || "",
         companyGstin: data.companyGstin || "",
         gstRegion: data.gstRegion || "none",
-        logoUrl: data.logoUrl || "", // Ensure logoUrl is always a string
+        logoUrl: data.logoUrl || "",
         companyAddress: data.companyAddress || "",
         registeredAddress: data.registeredAddress || "",
         corporateAddress: data.corporateAddress || "",
@@ -279,8 +298,8 @@ export function ProfileForm() {
     }
   }
 
-  const isLoadingButton = authIsLoading || isFetchingSettings || isUploadingLogo || isSaving;
-  const isSaveButtonDisabled = authIsLoading || isFetchingSettings || isSaving; // isUploadingLogo doesn't disable save button
+  const isLoadingUiElements = authIsLoading || isFetchingSettings || isUploadingLogo;
+  const isSaveButtonDisabled = authIsLoading || isFetchingSettings || isSaving;
   
   if (!currentCompanyId && !authIsLoading && !isFetchingSettings) {
     return (
@@ -318,7 +337,7 @@ export function ProfileForm() {
                 <FormItem>
                   <FormLabel>Full Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Your full name" {...field} value={field.value ?? ""} disabled={isLoadingButton} />
+                    <Input placeholder="Your full name" {...field} value={field.value ?? ""} disabled={isLoadingUiElements} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -363,12 +382,12 @@ export function ProfileForm() {
                   </div>
                 )}
                 <div className="flex flex-col gap-2">
-                    <Button type="button" variant="outline" onClick={() => document.getElementById('logo-upload-input')?.click()} disabled={isLoadingButton}>
+                    <Button type="button" variant="outline" onClick={() => document.getElementById('logo-upload-input')?.click()} disabled={isLoadingUiElements}>
                         <UploadCloud className="mr-2 h-4 w-4" /> {logoPreviewUrl ? "Change Logo" : "Upload Logo"}
                     </Button>
-                    <Input id="logo-upload-input" type="file" className="hidden" onChange={handleLogoFileChange} accept="image/png, image/jpeg, image/svg+xml" disabled={isLoadingButton} />
+                    <Input id="logo-upload-input" type="file" className="hidden" onChange={handleLogoFileChange} accept="image/png, image/jpeg, image/svg+xml" disabled={isLoadingUiElements} />
                     {logoPreviewUrl && (
-                        <Button type="button" variant="ghost" size="sm" onClick={handleRemoveLogo} className="text-destructive hover:text-destructive-foreground hover:bg-destructive/10" disabled={isLoadingButton}>
+                        <Button type="button" variant="ghost" size="sm" onClick={handleRemoveLogo} className="text-destructive hover:text-destructive-foreground hover:bg-destructive/10" disabled={isLoadingUiElements}>
                             <Trash2 className="mr-2 h-4 w-4"/>Remove Logo
                         </Button>
                     )}
@@ -387,7 +406,7 @@ export function ProfileForm() {
                 <FormItem>
                   <FormLabel>Business Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Your business name" {...field} value={field.value ?? ""} disabled={isLoadingButton}/>
+                    <Input placeholder="Your business name" {...field} value={field.value ?? ""} disabled={isLoadingUiElements}/>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -399,7 +418,7 @@ export function ProfileForm() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Business Type</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value ?? ""} disabled={isLoadingButton}>
+                  <Select onValueChange={field.onChange} value={field.value ?? ""} disabled={isLoadingUiElements}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select your business type" />
@@ -422,7 +441,7 @@ export function ProfileForm() {
                 <FormItem>
                   <FormLabel>Company GSTIN (India) / VAT ID</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., 29ABCDE1234F1Z5 or your VAT ID" {...field} value={field.value ?? ""} disabled={isLoadingButton}/>
+                    <Input placeholder="e.g., 29ABCDE1234F1Z5 or your VAT ID" {...field} value={field.value ?? ""} disabled={isLoadingUiElements}/>
                   </FormControl>
                   <FormMessage />
                    <p className="text-xs text-muted-foreground">Enter your company's Goods and Services Tax Identification Number or VAT ID.</p>
@@ -435,7 +454,7 @@ export function ProfileForm() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Primary GST / VAT Region</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value ?? "none"} disabled={isLoadingButton}>
+                  <Select onValueChange={field.onChange} value={field.value ?? "none"} disabled={isLoadingUiElements}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select your primary tax region" />
@@ -459,7 +478,7 @@ export function ProfileForm() {
                 <FormItem>
                   <FormLabel>Primary Company Address (for display)</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="123 Main Street, City, State, Zip" {...field} value={field.value ?? ""} disabled={isLoadingButton} rows={3}/>
+                    <Textarea placeholder="123 Main Street, City, State, Zip" {...field} value={field.value ?? ""} disabled={isLoadingUiElements} rows={3}/>
                   </FormControl>
                   <FormMessage />
                    <p className="text-xs text-muted-foreground">The main address shown on documents like invoices.</p>
@@ -473,7 +492,7 @@ export function ProfileForm() {
                 <FormItem>
                   <FormLabel>Registered Office Address (Optional)</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Official registered address of the company" {...field} value={field.value ?? ""} disabled={isLoadingButton} rows={3}/>
+                    <Textarea placeholder="Official registered address of the company" {...field} value={field.value ?? ""} disabled={isLoadingUiElements} rows={3}/>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -486,7 +505,7 @@ export function ProfileForm() {
                 <FormItem>
                   <FormLabel>Corporate Office Address (Optional)</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Primary corporate office, if different from registered" {...field} value={field.value ?? ""} disabled={isLoadingButton} rows={3}/>
+                    <Textarea placeholder="Primary corporate office, if different from registered" {...field} value={field.value ?? ""} disabled={isLoadingUiElements} rows={3}/>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -499,7 +518,7 @@ export function ProfileForm() {
                 <FormItem>
                   <FormLabel>Company's Billing Address (Optional)</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Address where your company receives bills" {...field} value={field.value ?? ""} disabled={isLoadingButton} rows={3}/>
+                    <Textarea placeholder="Address where your company receives bills" {...field} value={field.value ?? ""} disabled={isLoadingUiElements} rows={3}/>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -517,4 +536,3 @@ export function ProfileForm() {
     </Card>
   );
 }
-
