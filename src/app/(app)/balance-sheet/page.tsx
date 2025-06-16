@@ -13,25 +13,27 @@ import { AlertCircle } from "lucide-react";
 
 interface ClassifiedAccount {
   name: string;
-  balance: number; // Positive for assets/debits, positive for liabilities/credits in their sections
+  balance: number;
 }
 
 interface BalanceSheetData {
   assets: ClassifiedAccount[];
   liabilities: ClassifiedAccount[];
+  beginningEquityItems: ClassifiedAccount[];
+  drawingItems: ClassifiedAccount[];
   totalAssets: number;
   totalLiabilities: number;
-  totalEquity: number;
+  totalBeginningEquity: number;
+  currentPeriodNetIncome: number;
+  totalDrawings: number;
+  endingEquity: number;
 }
 
-const assetKeywords = ["cash", "bank", "receivable", "inventory", "equipment", "building", "land", "prepaid", "asset", "computer", "vehicle", "furniture", "goodwill", "patent", "investment"];
-const liabilityKeywords = ["payable", "loan", "debt", "unearned", "deferred", "liability", "creditor", "accrued expense", "note payable", "mortgage"];
-// Equity accounts like "Owner's Capital", "Retained Earnings" will be implicitly calculated for now or if specific keywords are found.
-const equityKeywords = ["equity", "capital", "retained earnings", "drawings", "owner's contribution", "share capital"];
-
-
-// For P&L calculation for current period equity adjustment (if not directly using Assets - Liabilities for Total Equity)
-const incomeKeywords = ['revenue', 'sales', 'income', 'service fee', 'interest received', 'consulting income', 'project revenue', 'deposit', 'commission', 'dividend', 'gain'];
+const assetKeywords = ["cash", "bank", "receivable", "inventory", "equipment", "building", "land", "prepaid", "asset", "computer", "vehicle", "furniture", "goodwill", "patent", "investment", "marketable securities", "office supplies inventory"];
+const liabilityKeywords = ["payable", "loan", "debt", "unearned", "deferred", "liability", "creditor", "accrued expense", "note payable", "mortgage", "bonds payable", "salaries payable", "taxes payable"];
+const beginningEquityKeywords = ["equity", "capital", "retained earnings", "owner's contribution", "share capital", "common stock", "preferred stock", "paid-in capital"];
+const drawingKeywords = ["drawings", "owner's draw", "dividends paid", "distributions"];
+const incomeKeywords = ['revenue', 'sales', 'income', 'service fee', 'interest received', 'consulting income', 'project revenue', 'deposit', 'commission', 'dividend income', 'gain']; // Note: 'deposit' can be ambiguous
 const expenseKeywords = ['expense', 'cost', 'supply', 'rent', 'salary', 'utility', 'utilities', 'purchase', 'advertising', 'maintenance', 'insurance', 'interest paid', 'fee', 'software', 'development', 'services', 'consulting', 'contractor', 'design', 'travel', 'subscription', 'depreciation', 'amortization', 'office supplies', 'postage', 'printing', 'repairs', 'loss', 'cogs', 'cost of goods sold'];
 
 
@@ -58,64 +60,75 @@ export default function BalanceSheetPage() {
     
     const assets: ClassifiedAccount[] = [];
     const liabilities: ClassifiedAccount[] = [];
-    const equityAccounts: ClassifiedAccount[] = []; // For explicitly identified equity accounts
+    const beginningEquityItems: ClassifiedAccount[] = [];
+    const drawingItems: ClassifiedAccount[] = [];
     let currentPeriodNetIncome = 0;
 
     accountNetBalances.forEach((balance, accountName) => {
       const lowerAccountName = accountName.toLowerCase();
+      
       let isAsset = assetKeywords.some(keyword => lowerAccountName.includes(keyword));
       let isLiability = liabilityKeywords.some(keyword => lowerAccountName.includes(keyword));
-      let isEquity = equityKeywords.some(keyword => lowerAccountName.includes(keyword));
+      let isBeginningEquity = beginningEquityKeywords.some(keyword => lowerAccountName.includes(keyword));
+      let isDrawing = drawingKeywords.some(keyword => lowerAccountName.includes(keyword));
       let isIncome = incomeKeywords.some(keyword => lowerAccountName.includes(keyword));
       let isExpense = expenseKeywords.some(keyword => lowerAccountName.includes(keyword));
 
-      // Basic conflict resolution: if also income/expense, it's not a balance sheet account directly (unless it's an error in naming)
-      if (isAsset && (isIncome || isExpense)) isAsset = false;
-      if (isLiability && (isIncome || isExpense)) isLiability = false;
-
+      // Resolve conflicts: BS accounts shouldn't also be P&L accounts or drawing accounts (unless misclassified)
+      if (isAsset && (isIncome || isExpense || isDrawing || isBeginningEquity)) isAsset = false;
+      if (isLiability && (isIncome || isExpense || isDrawing || isBeginningEquity)) isLiability = false;
+      if (isBeginningEquity && (isIncome || isExpense || isDrawing)) isBeginningEquity = false;
+      if (isDrawing && (isIncome || isExpense)) isDrawing = false; // Drawings are distinct from P&L
 
       if (isAsset) {
         if (balance > 0) assets.push({ name: accountName, balance: balance }); // Assets usually have debit balances
       } else if (isLiability) {
         if (balance < 0) liabilities.push({ name: accountName, balance: Math.abs(balance) }); // Liabilities usually have credit balances
-      } else if (isEquity) {
-         // Equity can be tricky; capital/contributions are credit, drawings are debit
-         // For simplicity, we'll sum them up, and adjust with net income.
-         // A credit balance (balance < 0) increases equity. A debit balance (balance > 0) decreases equity.
-        equityAccounts.push({ name: accountName, balance: -balance });
+      } else if (isBeginningEquity) {
+         // Represents capital, retained earnings (beginning). Credit balances increase equity.
+        if (balance < 0) beginningEquityItems.push({ name: accountName, balance: Math.abs(balance) });
+      } else if (isDrawing) {
+        // Drawings are debits, reduce equity. Store as positive value for subtraction.
+        if (balance > 0) drawingItems.push({ name: accountName, balance: balance });
       } else if (isIncome) {
-        currentPeriodNetIncome -= balance; // Income is credit (negative balance), so subtract to make it positive contribution
+        currentPeriodNetIncome -= balance; // Income is credit (negative balance in map), so subtract to make it positive contribution to NI
       } else if (isExpense) {
-        currentPeriodNetIncome -= balance; // Expense is debit (positive balance), so subtract to make it negative contribution
+        currentPeriodNetIncome -= balance; // Expense is debit (positive balance in map), so subtract to make it a negative impact on NI (i.e. positive expense amount reduces NI)
       }
     });
 
     const totalAssets = assets.reduce((sum, acc) => sum + acc.balance, 0);
     const totalLiabilities = liabilities.reduce((sum, acc) => sum + acc.balance, 0);
+    const totalBeginningEquity = beginningEquityItems.reduce((sum, acc) => sum + acc.balance, 0);
+    const totalDrawings = drawingItems.reduce((sum, acc) => sum + acc.balance, 0);
+
+    const endingEquity = totalBeginningEquity + currentPeriodNetIncome - totalDrawings;
     
-    // Calculate initial equity from explicitly identified equity accounts
-    const initialEquity = equityAccounts.reduce((sum, acc) => sum + acc.balance, 0);
-    // Add current period's net income to this initial equity
-    const calculatedTotalEquity = initialEquity + currentPeriodNetIncome;
-
-    // As a fallback or primary method if explicit equity accounts + NI is not robust enough without proper closing:
-    // const totalEquity = totalAssets - totalLiabilities; // Using accounting equation
-
     return {
       assets: assets.sort((a,b) => a.name.localeCompare(b.name)),
       liabilities: liabilities.sort((a,b) => a.name.localeCompare(b.name)),
+      beginningEquityItems: beginningEquityItems.sort((a,b) => a.name.localeCompare(b.name)),
+      drawingItems: drawingItems.sort((a,b) => a.name.localeCompare(b.name)),
       totalAssets,
       totalLiabilities,
-      totalEquity: calculatedTotalEquity, // Using calculated equity
+      totalBeginningEquity,
+      currentPeriodNetIncome,
+      totalDrawings,
+      endingEquity,
     };
   }, []);
 
+  const initialBalanceSheetData: BalanceSheetData = {
+    assets: [], liabilities: [], beginningEquityItems: [], drawingItems: [],
+    totalAssets: 0, totalLiabilities: 0, totalBeginningEquity: 0,
+    currentPeriodNetIncome: 0, totalDrawings: 0, endingEquity: 0,
+  };
 
   useEffect(() => {
     async function loadData() {
       if (!currentUser || !currentCompanyId) {
         setIsLoading(false);
-        setBalanceSheetData(null);
+        setBalanceSheetData(initialBalanceSheetData);
         setError("No company selected. Please select a company to view the balance sheet.");
         return;
       }
@@ -124,7 +137,7 @@ export default function BalanceSheetPage() {
       try {
         const entries = await getJournalEntries(currentCompanyId);
         if (entries.length === 0) {
-            setBalanceSheetData({ assets: [], liabilities: [], totalAssets: 0, totalLiabilities: 0, totalEquity: 0 });
+            setBalanceSheetData(initialBalanceSheetData);
         } else {
             const data = calculateBalanceSheet(entries);
             setBalanceSheetData(data);
@@ -132,7 +145,7 @@ export default function BalanceSheetPage() {
       } catch (e: any) {
         console.error("Failed to load or process balance sheet data:", e);
         setError(e.message || "An error occurred while fetching data.");
-        setBalanceSheetData(null);
+        setBalanceSheetData(initialBalanceSheetData);
       } finally {
         setIsLoading(false);
       }
@@ -162,10 +175,10 @@ export default function BalanceSheetPage() {
     );
   }
 
-  const renderSection = (title: string, items: ClassifiedAccount[], total: number) => (
+  const renderSection = (title: string, items: ClassifiedAccount[], total: number, isSubSection: boolean = false) => (
     <>
-      <TableRow className="bg-muted/30">
-        <TableHead colSpan={2} className="font-semibold text-lg">{title}</TableHead>
+      <TableRow className={!isSubSection ? "bg-muted/30" : ""}>
+        <TableHead colSpan={2} className={`font-semibold ${!isSubSection ? "text-lg" : "text-md pl-4"}`}>{title}</TableHead>
       </TableRow>
       {items.length > 0 ? items.map(item => (
         <TableRow key={item.name}>
@@ -175,10 +188,12 @@ export default function BalanceSheetPage() {
       )) : (
          <TableRow><TableCell colSpan={2} className="text-muted-foreground pl-8">No {title.toLowerCase()} recorded.</TableCell></TableRow>
       )}
-      <TableRow className="font-semibold border-t">
-        <TableCell>Total {title}</TableCell>
-        <TableCell className="text-right">{formatCurrency(total)}</TableCell>
-      </TableRow>
+      {!isSubSection && (
+        <TableRow className="font-semibold border-t">
+          <TableCell>Total {title}</TableCell>
+          <TableCell className="text-right">{formatCurrency(total)}</TableCell>
+        </TableRow>
+      )}
     </>
   );
   
@@ -186,7 +201,7 @@ export default function BalanceSheetPage() {
     <div className="space-y-6">
       <PageTitle
         title={`Balance Sheet ${currentCompanyId ? `(${currentCompanyId})` : ''}`}
-        description="A snapshot of your company's assets, liabilities, and equity."
+        description="A snapshot of your company's assets, liabilities, and equity, showing changes in equity."
       />
       <Card className="shadow-xl">
         <CardHeader>
@@ -202,6 +217,9 @@ export default function BalanceSheetPage() {
                 <Skeleton className="h-8 w-1/4 mb-4" />
                 {[...Array(2)].map((_,i) => <Skeleton key={`liab-skel-${i}`} className="h-8 w-full mb-1" />)}
                 <Skeleton className="h-10 w-full mt-2 mb-4" />
+                <Skeleton className="h-8 w-1/4 mb-4" />
+                {[...Array(3)].map((_,i) => <Skeleton key={`eq-skel-${i}`} className="h-8 w-full mb-1" />)}
+                <Skeleton className="h-10 w-full mt-2 mb-4" />
              </div>
           ) : error ? (
             <Alert variant="destructive">
@@ -209,7 +227,7 @@ export default function BalanceSheetPage() {
               <AlertTitle>Error Loading Data</AlertTitle>
               <AlertDescription>{error}</AlertDescription>
             </Alert>
-          ) : !balanceSheetData || (balanceSheetData.assets.length === 0 && balanceSheetData.liabilities.length === 0 && !isLoading) ? (
+          ) : !balanceSheetData || (balanceSheetData.assets.length === 0 && balanceSheetData.liabilities.length === 0 && balanceSheetData.totalBeginningEquity === 0 && balanceSheetData.currentPeriodNetIncome === 0 && !isLoading) ? (
              <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>No Data</AlertTitle>
@@ -226,42 +244,73 @@ export default function BalanceSheetPage() {
               <TableBody>
                 {renderSection("Assets", balanceSheetData.assets, balanceSheetData.totalAssets)}
                 
-                {/* Spacer Row */}
                 <TableRow><TableCell colSpan={2} className="py-2"></TableCell></TableRow> 
                 
                 {renderSection("Liabilities", balanceSheetData.liabilities, balanceSheetData.totalLiabilities)}
 
-                {/* Spacer Row */}
                 <TableRow><TableCell colSpan={2} className="py-2"></TableCell></TableRow> 
 
+                {/* Equity Section */}
                 <TableRow className="bg-muted/30">
                     <TableHead colSpan={2} className="font-semibold text-lg">Equity</TableHead>
                 </TableRow>
-                <TableRow>
-                    <TableCell className="pl-8">Owner's Equity (Calculated)</TableCell>
-                    <TableCell className="text-right">{formatCurrency(balanceSheetData.totalEquity)}</TableCell>
+
+                {/* Beginning Equity Items */}
+                {balanceSheetData.beginningEquityItems.length > 0 ? (
+                  balanceSheetData.beginningEquityItems.map(item => (
+                    <TableRow key={`beq-${item.name}`}>
+                      <TableCell className="pl-8">{item.name} (Beginning)</TableCell>
+                      <TableCell className="text-right">{formatCurrency(item.balance)}</TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow><TableCell className="pl-8 text-muted-foreground">No beginning capital/equity accounts identified.</TableCell><TableCell></TableCell></TableRow>
+                )}
+                 <TableRow>
+                    <TableCell className="pl-8 font-medium">Total Beginning Equity</TableCell>
+                    <TableCell className="text-right font-medium">{formatCurrency(balanceSheetData.totalBeginningEquity)}</TableCell>
                 </TableRow>
+
+                <TableRow>
+                    <TableCell className="pl-8">Add: Net Income / (Loss) for the Period</TableCell>
+                    <TableCell className="text-right">{formatCurrency(balanceSheetData.currentPeriodNetIncome)}</TableCell>
+                </TableRow>
+                
+                {/* Drawing Items */}
+                {balanceSheetData.drawingItems.length > 0 ? (
+                  balanceSheetData.drawingItems.map(item => (
+                    <TableRow key={`draw-${item.name}`}>
+                      <TableCell className="pl-8">Less: {item.name}</TableCell>
+                      <TableCell className="text-right">({formatCurrency(item.balance)})</TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                   <TableRow><TableCell className="pl-8 text-muted-foreground">No drawings recorded.</TableCell><TableCell></TableCell></TableRow>
+                )}
+                 <TableRow>
+                    <TableCell className="pl-8 font-medium">Total Drawings</TableCell>
+                    <TableCell className="text-right font-medium">({formatCurrency(balanceSheetData.totalDrawings)})</TableCell>
+                </TableRow>
+
                 <TableRow className="font-semibold border-t">
-                    <TableCell>Total Equity</TableCell>
-                    <TableCell className="text-right">{formatCurrency(balanceSheetData.totalEquity)}</TableCell>
+                    <TableCell>Ending Equity</TableCell>
+                    <TableCell className="text-right">{formatCurrency(balanceSheetData.endingEquity)}</TableCell>
                 </TableRow>
               </TableBody>
               <TableFooter>
                 <TableRow className="font-bold text-lg bg-muted border-t-2 border-primary">
-                  <TableCell>Total Liabilities & Equity</TableCell>
-                  <TableCell className="text-right">{formatCurrency(balanceSheetData.totalLiabilities + balanceSheetData.totalEquity)}</TableCell>
+                  <TableCell>Total Liabilities & Ending Equity</TableCell>
+                  <TableCell className="text-right">{formatCurrency(balanceSheetData.totalLiabilities + balanceSheetData.endingEquity)}</TableCell>
                 </TableRow>
-                {(Math.abs(balanceSheetData.totalAssets - (balanceSheetData.totalLiabilities + balanceSheetData.totalEquity)) > 0.01) && (
+                {(Math.abs(balanceSheetData.totalAssets - (balanceSheetData.totalLiabilities + balanceSheetData.endingEquity)) > 0.01) && (
                      <TableRow>
                         <TableCell colSpan={2}>
                             <Alert variant="destructive" className="mt-2">
                                 <AlertCircle className="h-4 w-4"/>
-                                <AlertTitle>Imbalance! Assets must equal Liabilities + Equity.</AlertTitle>
+                                <AlertTitle>Imbalance! Assets ({formatCurrency(balanceSheetData.totalAssets)}) must equal Liabilities + Equity ({formatCurrency(balanceSheetData.totalLiabilities + balanceSheetData.endingEquity)}).</AlertTitle>
                                 <AlertDescription>
-                                    Assets: {formatCurrency(balanceSheetData.totalAssets)} vs 
-                                    Liabilities + Equity: {formatCurrency(balanceSheetData.totalLiabilities + balanceSheetData.totalEquity)}. 
-                                    Difference: {formatCurrency(balanceSheetData.totalAssets - (balanceSheetData.totalLiabilities + balanceSheetData.totalEquity))}.
-                                    Please review account classifications or journal entries.
+                                    Difference: {formatCurrency(balanceSheetData.totalAssets - (balanceSheetData.totalLiabilities + balanceSheetData.endingEquity))}.
+                                    This may be due to misclassified accounts, incomplete transactions, or the simplified nature of equity calculation without formal closing entries. Please review account classifications and journal entries.
                                 </AlertDescription>
                             </Alert>
                         </TableCell>
@@ -275,3 +324,5 @@ export default function BalanceSheetPage() {
     </div>
   );
 }
+
+    
