@@ -10,8 +10,8 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import { manageInvoiceTool } from '@/ai/tools/manage-invoice-tool';
-import { queryJournalTool } from '@/ai/tools/query-journal-tool'; // Import the new tool
+import { manageInvoiceTool, type ManageInvoiceInput } from '@/ai/tools/manage-invoice-tool';
+import { queryJournalTool, type QueryJournalInput } from '@/ai/tools/query-journal-tool';
 
 const ChatWithAiAssistantInputSchema = z.object({
   message: z.string().describe('The user message to the AI assistant.'),
@@ -41,30 +41,29 @@ const prompt = ai.definePrompt({
   prompt: `You are a helpful AI assistant specializing in accounting and financial management for small businesses.
 Your primary goal is to assist the user. Use tools when necessary to gather information or perform actions.
 When a tool is used, analyze its output. If the tool succeeded, summarize the result for the user.
-If the tool indicated an error (e.g., missing information like a Company ID), inform the user about the error and what is needed.
-Do not repeatedly call a tool if the required inputs are missing from the user's context or if the tool reported an error due to missing inputs; instead, ask the user for the missing information.
-After any tool use, your next step is to provide a clear, textual response to the user summarizing the action or findings. Only ask clarifying questions if essential information is missing.
+If the tool indicated an error (e.g., missing information like a Company ID that the *system* should provide), inform the user about the general nature of the error and that the system couldn't complete the action.
+Do not repeatedly call a tool if it reported an error due to missing system-provided inputs; instead, inform the user.
+After any tool use, your next step is to provide a clear, textual response to the user summarizing the action or findings. Only ask clarifying questions if essential information for the *task itself* (e.g. invoice details) is missing from the user's request.
 
-Available Context Variables (available if provided by the user's session):
-- Company ID: {{#if companyId}}{{companyId}}{{else}}Not Set{{/if}}
-- User ID: {{#if creatorUserId}}{{creatorUserId}}{{else}}Not Set{{/if}}
+The system will automatically provide necessary context like Company ID and User ID to the tools. You do not need to extract these for the tool call itself. Focus on the user's intent and the data needed for the financial task.
+
+Available Context Variables (for your information, not for tool input):
+- Company ID: {{#if companyId}}{{companyId}}{{else}}Not Set (System will handle for tools if available){{/if}}
+- User ID: {{#if creatorUserId}}{{creatorUserId}}{{else}}Not Set (System will handle for tools if available){{/if}}
 
 Available Tools:
 - manageInvoiceTool: Use this tool to create or update invoices.
   - When a user asks to create a new invoice, or update an existing one (e.g., "generate an invoice for client X for 10 hours of consulting at $50/hr", or "update invoice INV-001 to add a new line item"), use this tool.
-  - Extract all necessary details from the user's request like customer name, line items (description, quantity, unit price, GST rate), dates, payment terms, etc.
+  - Extract all necessary details from the user's request for the 'invoiceDetails' or 'textDescription' parameters of the tool, like customer name, line items (description, quantity, unit price, GST rate), dates, payment terms, etc.
   - If a document is uploaded and the user asks to create an invoice from it, first analyze the document text/image content and then use the extracted information with the 'manageInvoiceTool'.
   - For creating an invoice, set action to 'create'.
   - For updating an invoice, set action to 'update' and ensure you provide the invoiceId if the user mentions it or if it's in the conversation context.
-  - MANDATORY INPUTS FOR TOOL:
-    - 'companyId': You MUST extract this from the '{{companyId}}' context variable. If '{{companyId}}' is 'Not Set' or empty, DO NOT call the tool. Instead, inform the user that a Company ID is required.
-    - 'creatorUserId': You MUST extract this from the '{{creatorUserId}}' context variable. If '{{creatorUserId}}' is 'Not Set' or empty, DO NOT call the tool. Instead, inform the user that they need to be identified.
+  - The system will provide 'companyId' and 'creatorUserId' to this tool.
 
 - queryJournalTool: Use this tool to answer questions about past financial transactions, search for specific entries, or get summaries.
   - When a user asks "What were my expenses last month?", "Find transactions related to 'office supplies'", "Show me income entries from January", "How much did I spend on rent in Q1?", or any question requiring access to historical journal data, use this tool.
-  - Extract relevant query parameters from the user's request like dateFrom, dateTo, accountName, keywords, and a reasonable limit.
-  - MANDATORY INPUTS FOR TOOL:
-    - 'companyId': You MUST extract this from the '{{companyId}}' context variable. If '{{companyId}}' is 'Not Set' or empty, DO NOT call the tool. Instead, inform the user that a Company ID is required.
+  - Extract relevant query parameters from the user's request like dateFrom, dateTo, accountName, keywords, and a reasonable limit for the tool's input.
+  - The system will provide 'companyId' to this tool.
   - After getting the result from the tool, formulate a natural language response for the user based on the tool's output (querySummary, matchCount, displayedEntriesDescription).
 
 Here's the conversation history:
@@ -98,7 +97,7 @@ const chatWithAiAssistantFlow = ai.defineFlow(
       isUser: msg.role === 'user',
       isAssistant: msg.role === 'assistant',
       isTool: msg.role === 'tool',
-      tool_name: msg.role === 'tool' ? (JSON.parse(msg.content)?.toolName || 'UnknownTool') : undefined, // Attempt to get tool name for history
+      tool_name: msg.role === 'tool' ? (JSON.parse(msg.content)?.toolName || 'UnknownTool') : undefined,
     }));
 
     const promptData = {
@@ -117,56 +116,57 @@ const chatWithAiAssistantFlow = ai.defineFlow(
           console.log(`AI Assistant: Attempting to call tool: ${part.toolRequest.name}`);
           let toolOutput: any;
           const toolNameForHistory = part.toolRequest.name;
+          
+          // Consolidate tool input, ensuring system-provided IDs take precedence
+          const toolCallInputFromLlm = { ...part.toolRequest.input };
+          const toolInput: any = {
+            ...toolCallInputFromLlm, // Spread what LLM provided (e.g., invoiceDetails, textDescription)
+            companyId: input.companyId,     // Explicitly set/override from flow input
+            creatorUserId: input.creatorUserId, // Explicitly set/override from flow input (relevant for manageInvoiceTool)
+          };
+          // For queryJournalTool, creatorUserId is not part of its schema, so it will be ignored if passed.
+          // We can be more specific if needed:
+          // const toolInput: any = {...toolCallInputFromLlm};
+          // if (part.toolRequest.name === 'manageInvoiceTool') {
+          //   toolInput.companyId = input.companyId;
+          //   toolInput.creatorUserId = input.creatorUserId;
+          // } else if (part.toolRequest.name === 'queryJournalTool') {
+          //   toolInput.companyId = input.companyId;
+          // }
+
+
           try {
-            const toolInput = { ...part.toolRequest.input };
-
-            // Safeguard: Ensure AI includes companyId and creatorUserId, or handle error if tool expects them but AI didn't provide
             if (part.toolRequest.name === 'manageInvoiceTool') {
-              if (!toolInput.companyId && input.companyId) { // AI should extract this via {{companyId}}
-                console.warn("ManageInvoiceTool: AI did not pass companyId, attempting to use from flow input.");
-                toolInput.companyId = input.companyId;
-              }
-              if (!toolInput.creatorUserId && input.creatorUserId) { // AI should extract this via {{creatorUserId}}
-                console.warn("ManageInvoiceTool: AI did not pass creatorUserId, attempting to use from flow input.");
-                toolInput.creatorUserId = input.creatorUserId;
-              }
-
               if (!toolInput.companyId) {
-                toolOutput = { success: false, message: "Tool Error: Company ID was not provided for the invoice operation. The AI should request this." };
+                toolOutput = { success: false, message: "Tool Error: Company ID was not provided by the system for the invoice operation. The AI should be informed." };
               } else if (!toolInput.creatorUserId) {
-                toolOutput = { success: false, message: "Tool Error: User ID was not provided for the invoice operation. The AI should request this." };
+                toolOutput = { success: false, message: "Tool Error: User ID was not provided by the system for the invoice operation. The AI should be informed." };
               } else {
-                toolOutput = await manageInvoiceTool(toolInput);
+                toolOutput = await manageInvoiceTool(toolInput as ManageInvoiceInput);
               }
             } else if (part.toolRequest.name === 'queryJournalTool') {
-               if (!toolInput.companyId && input.companyId) { // AI should extract this via {{companyId}}
-                  console.warn("QueryJournalTool: AI did not pass companyId, attempting to use from flow input.");
-                  toolInput.companyId = input.companyId;
-               }
                if (!toolInput.companyId) {
-                toolOutput = { querySummary: "Tool Error: Company ID was not provided to query journal entries. The AI should request this.", matchCount: 0 };
+                toolOutput = { querySummary: "Tool Error: Company ID was not provided by the system to query journal entries. The AI should be informed.", matchCount: 0 };
               } else {
-                toolOutput = await queryJournalTool(toolInput);
+                toolOutput = await queryJournalTool(toolInput as QueryJournalInput);
               }
-            }
-             else {
+            } else {
               throw new Error(`Unknown tool requested: ${part.toolRequest.name}`);
             }
 
             currentHistory.push({ role: 'tool', content: JSON.stringify(toolOutput), isUser: false, isAssistant: false, isTool: true, tool_name: toolNameForHistory });
 
             const followUpPromptData = {
-              ...promptData, // This includes original input (message, companyId, etc.)
-              conversationHistory: currentHistory, // This has the tool response
+              ...promptData,
+              conversationHistory: currentHistory,
             };
-            const followUpResponse = await prompt(followUpPromptData); // Ask LLM to respond based on tool output
+            const followUpResponse = await prompt(followUpPromptData);
             
             if (followUpResponse.parts && Array.isArray(followUpResponse.parts)) {
               for (const followUpPart of followUpResponse.parts) {
                 if (followUpPart.text) {
                   finalContent += followUpPart.text;
                 }
-                // We explicitly do NOT handle followUpPart.toolRequest here to prevent loops beyond one tool call.
               }
             } else if (followUpResponse.text) { 
                 finalContent += followUpResponse.text;
