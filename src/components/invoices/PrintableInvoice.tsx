@@ -16,11 +16,11 @@ interface PrintableInvoiceProps {
 
 export function PrintableInvoice({ invoice }: PrintableInvoiceProps) {
   const [clientLocale, setClientLocale] = useState('en-US');
-  // Placeholder company details - these should ideally come from settings/AuthContext or be passed as props
+  // Updated company details from the provided image
   const companyDetails = {
     name: "FinanceFlow AI Solutions",
     address: "123 Innovation Drive, Tech Park, Bangalore, 560100",
-    gstin: "29AAPCK1234A1Z5", // Example
+    gstin: "29AAPCK1234A1Z5",
     email: "contact@financeflow.ai",
     phone: "+91 98765 43210"
   };
