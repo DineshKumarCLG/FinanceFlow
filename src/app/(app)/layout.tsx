@@ -29,8 +29,12 @@ function SidebarContentLayout() {
   return (
     <>
       <SidebarHeader className="p-4">
-        {/* Use full logo, suppress AppLogo's text, and style the image */}
-        <AppLogo showText={false} iconClassName="w-full h-10 object-contain" />
+        {/* Make AppLogo component take full width, and style the image inside it */}
+        <AppLogo 
+          showText={false} 
+          className="w-full" 
+          iconClassName="w-full h-10 object-contain" 
+        />
       </SidebarHeader>
       <SidebarContent className="p-2 pr-0"> {/* Adjust padding for scrollbar */}
         <SidebarNav items={NAV_ITEMS_MAIN} />
