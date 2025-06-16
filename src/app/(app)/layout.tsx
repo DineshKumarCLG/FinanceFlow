@@ -29,10 +29,8 @@ function SidebarContentLayout() {
   return (
     <>
       <SidebarHeader className="p-4">
-        <div className="flex items-center justify-between">
-          {/* Using "icon" variant, enlarged, to ensure no text from logo image itself */}
-          <AppLogo variant="icon" iconClassName="h-9 w-auto" />
-        </div>
+        {/* Use full logo, suppress AppLogo's text, and style the image */}
+        <AppLogo showText={false} iconClassName="w-full h-10 object-contain" />
       </SidebarHeader>
       <SidebarContent className="p-2 pr-0"> {/* Adjust padding for scrollbar */}
         <SidebarNav items={NAV_ITEMS_MAIN} />
