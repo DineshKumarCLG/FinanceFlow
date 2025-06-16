@@ -30,9 +30,8 @@ function SidebarContentLayout() {
     <>
       <SidebarHeader className="p-4">
         <div className="flex items-center justify-between">
-          {/* Using the logo variant for the sidebar, text hidden, logo image larger */}
-          <AppLogo variant="logo" showText={false} iconClassName="h-9 w-auto" />
-          {/* SidebarTrigger is now part of the Header, controlled by md:hidden there */}
+          {/* Using "icon" variant, enlarged, to ensure no text from logo image itself */}
+          <AppLogo variant="icon" iconClassName="h-9 w-auto" />
         </div>
       </SidebarHeader>
       <SidebarContent className="p-2 pr-0"> {/* Adjust padding for scrollbar */}
