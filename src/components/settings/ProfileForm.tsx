@@ -14,6 +14,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -21,7 +22,7 @@ import { useState, useEffect } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import * as DataService from "@/lib/data-service"; // Changed import
+import * as DataService from "@/lib/data-service"; 
 
 const profileFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -32,6 +33,10 @@ const profileFormSchema = z.object({
     message: "Invalid GSTIN format (e.g., 29ABCDE1234F1Z5)",
   }).or(z.literal('')),
   gstRegion: z.enum(["india", "international_other", "none"]).optional(),
+  companyAddress: z.string().optional().or(z.literal('')), // Primary address for general use
+  registeredAddress: z.string().optional().or(z.literal('')),
+  corporateAddress: z.string().optional().or(z.literal('')),
+  billingAddress: z.string().optional().or(z.literal('')), // Company's own billing address
 });
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
@@ -68,6 +73,10 @@ export function ProfileForm() {
       businessType: "",
       companyGstin: "",
       gstRegion: "none",
+      companyAddress: "",
+      registeredAddress: "",
+      corporateAddress: "",
+      billingAddress: "",
     },
     mode: "onChange",
   });
@@ -77,7 +86,7 @@ export function ProfileForm() {
       if (user && currentCompanyId) {
         setIsFetchingSettings(true);
         try {
-          const companySettings = await DataService.getCompanySettings(currentCompanyId); // Use DataService namespace
+          const companySettings = await DataService.getCompanySettings(currentCompanyId); 
           form.reset({
             name: user.displayName || "",
             email: user.email || "",
@@ -85,6 +94,10 @@ export function ProfileForm() {
             businessType: companySettings?.businessType || "",
             companyGstin: companySettings?.companyGstin || "",
             gstRegion: companySettings?.gstRegion || "none",
+            companyAddress: companySettings?.companyAddress || "",
+            registeredAddress: companySettings?.registeredAddress || "",
+            corporateAddress: companySettings?.corporateAddress || "",
+            billingAddress: companySettings?.billingAddress || "",
           });
         } catch (error) {
           console.error("Failed to load company settings:", error);
@@ -96,6 +109,10 @@ export function ProfileForm() {
             businessType: "",
             companyGstin: "",
             gstRegion: "none",
+            companyAddress: "",
+            registeredAddress: "",
+            corporateAddress: "",
+            billingAddress: "",
           });
         } finally {
           setIsFetchingSettings(false);
@@ -108,6 +125,10 @@ export function ProfileForm() {
           businessType: "",
           companyGstin: "",
           gstRegion: "none",
+          companyAddress: "",
+          registeredAddress: "",
+          corporateAddress: "",
+          billingAddress: "",
         });
       }
     }
@@ -125,13 +146,17 @@ export function ProfileForm() {
         await updateUserProfileName(data.name);
       }
       
-      const companySettingsToSave: Partial<DataService.CompanySettings> = { // Use DataService namespace for type
+      const companySettingsToSave: Partial<DataService.CompanySettings> = { 
         businessName: data.businessName || undefined,
         businessType: data.businessType || undefined,
         companyGstin: data.companyGstin || undefined,
         gstRegion: data.gstRegion || undefined,
+        companyAddress: data.companyAddress || undefined,
+        registeredAddress: data.registeredAddress || undefined,
+        corporateAddress: data.corporateAddress || undefined,
+        billingAddress: data.billingAddress || undefined,
       };
-      await DataService.saveCompanySettings(currentCompanyId, companySettingsToSave); // Use DataService namespace
+      await DataService.saveCompanySettings(currentCompanyId, companySettingsToSave); 
       
       toast({
         title: "Settings Updated",
@@ -174,7 +199,7 @@ export function ProfileForm() {
     <Card>
       <CardHeader>
         <CardTitle>User Profile & Company Settings {currentCompanyId ? `(${currentCompanyId})` : ''}</CardTitle>
-        <CardDescription>Manage your personal information and company-specific details like GST.</CardDescription>
+        <CardDescription>Manage your personal information and company-specific details like GST and addresses.</CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -284,6 +309,59 @@ export function ProfileForm() {
                 </FormItem>
               )}
             />
+            <FormField
+              control={form.control}
+              name="companyAddress"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Primary Company Address (for display)</FormLabel>
+                  <FormControl>
+                    <Textarea placeholder="123 Main Street, City, State, Zip" {...field} value={field.value ?? ""} disabled={isLoading} rows={3}/>
+                  </FormControl>
+                  <FormMessage />
+                   <p className="text-xs text-muted-foreground">The main address shown on documents like invoices.</p>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="registeredAddress"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Registered Office Address (Optional)</FormLabel>
+                  <FormControl>
+                    <Textarea placeholder="Official registered address of the company" {...field} value={field.value ?? ""} disabled={isLoading} rows={3}/>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="corporateAddress"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Corporate Office Address (Optional)</FormLabel>
+                  <FormControl>
+                    <Textarea placeholder="Primary corporate office, if different from registered" {...field} value={field.value ?? ""} disabled={isLoading} rows={3}/>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="billingAddress"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Company's Billing Address (Optional)</FormLabel>
+                  <FormControl>
+                    <Textarea placeholder="Address where your company receives bills" {...field} value={field.value ?? ""} disabled={isLoading} rows={3}/>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </CardContent>
           <CardFooter>
             <Button type="submit" disabled={isLoading}>
@@ -296,3 +374,4 @@ export function ProfileForm() {
     </Card>
   );
 }
+

@@ -97,7 +97,10 @@ export interface CompanySettings {
   businessType?: string;
   companyGstin?: string;
   gstRegion?: 'india' | 'international_other' | 'none';
-  companyAddress?: string;
+  companyAddress?: string; // Primary address for display (e.g., on invoices)
+  registeredAddress?: string;
+  corporateAddress?: string;
+  billingAddress?: string; // Company's own billing address
   companyEmail?: string;
   companyPhone?: string;
   logoUrl?: string;
@@ -570,11 +573,6 @@ export async function deleteInvoice(companyId: string, invoiceId: string): Promi
       if (invoiceData.companyId !== companyId) {
         throw new Error("Invoice does not belong to the specified company or access denied.");
       }
-      // Optional: Check if invoiceData.creatorUserId === currentUser.uid for stricter permission
-      // if (invoiceData.creatorUserId !== currentUser.uid) {
-      //   throw new Error("You do not have permission to delete this invoice.");
-      // }
-
       await deleteDoc(invoiceRef);
 
       const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
@@ -725,6 +723,9 @@ export async function getCompanySettings(companyId: string): Promise<CompanySett
         companyGstin: data.companyGstin,
         gstRegion: data.gstRegion,
         companyAddress: data.companyAddress,
+        registeredAddress: data.registeredAddress,
+        corporateAddress: data.corporateAddress,
+        billingAddress: data.billingAddress,
         companyEmail: data.companyEmail,
         companyPhone: data.companyPhone,
         logoUrl: data.logoUrl,
@@ -759,7 +760,7 @@ export async function saveCompanySettings(
   const updatePayload: { [key: string]: any } = {};
   for (const key in settingsData) {
     const typedKey = key as keyof typeof settingsData;
-    if (settingsData[typedKey] !== undefined) {
+    if (settingsData[typedKey] !== undefined) { // Check explicitly for undefined
       updatePayload[typedKey] = settingsData[typedKey];
     }
   }
