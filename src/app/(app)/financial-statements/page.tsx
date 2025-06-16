@@ -13,23 +13,21 @@ export default function FinancialStatementsPage() {
       description: "View your company's assets, liabilities, and equity at a specific point in time. Understand your financial position.",
       href: "/balance-sheet",
       icon: Landmark,
-      imageUrl: "/images/balance_sheet_illustration.png", // Corrected path relative to public
+      imageUrl: "/assets/images/balance_sheet_illustration.png",
     },
     {
       title: "Trial Balance",
       description: "Review a summary of all ledger accounts and their debit or credit balances. Ensure your books are balanced.",
       href: "/trial-balance",
       icon: ListChecks,
-      imageHint: "checklist report",
-      imageUrl: "https://placehold.co/600x338/E8F5E9/4CAF50.png", // Monochromatic placeholder
+      imageUrl: "/assets/images/trial_balance_illustration.png",
     },
     {
       title: "Profit & Loss Statement",
       description: "Analyze your company's revenues and expenses over a period. Track profitability. (Available on Dashboard)",
       href: "/dashboard?tab=reports#reports",
       icon: PieChart,
-      imageHint: "chart graph",
-      imageUrl: "https://placehold.co/600x338/E8F5E9/4CAF50.png", // Monochromatic placeholder
+      imageUrl: "/assets/images/profit_loss_illustration.png",
     },
   ];
 
@@ -59,19 +57,12 @@ export default function FinancialStatementsPage() {
                     layout="fill"
                     objectFit="cover"
                     className="rounded-md"
-                    // Add data-ai-hint only if imageUrl is a placeholder and imageHint exists
-                    {...(statement.imageHint && statement.imageUrl.includes('placehold.co') ? { 'data-ai-hint': statement.imageHint } : {})}
                   />
                 ) : (
-                  // Fallback for safety, though all items should have imageUrl
-                  <Image
-                    src="https://placehold.co/600x338/E8F5E9/4CAF50.png?text=Image+Not+Available"
-                    alt={`${statement.title} placeholder`}
-                    layout="fill"
-                    objectFit="cover"
-                    className="rounded-md"
-                    data-ai-hint={statement.imageHint || "financial document generic"}
-                  />
+                  // Fallback for safety, if an imageUrl was somehow missing
+                  <div className="w-full h-full flex items-center justify-center bg-muted-foreground/10 text-muted-foreground">
+                    Image not available
+                  </div>
                 )}
               </div>
             </CardContent>
