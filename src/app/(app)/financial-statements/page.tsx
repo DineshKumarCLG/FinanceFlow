@@ -1,6 +1,6 @@
 
 import Link from 'next/link';
-import Image from 'next/image'; // Import next/image
+import Image from 'next/image';
 import { PageTitle } from "@/components/shared/PageTitle";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,14 +14,13 @@ export default function FinancialStatementsPage() {
       href: "/balance-sheet",
       icon: Landmark,
       imageUrl: "/images/balance_sheet_illustration.png", // Specific image for Balance Sheet
-      // data-ai-hint is not needed here as we have a specific image.
     },
     {
       title: "Trial Balance",
       description: "Review a summary of all ledger accounts and their debit or credit balances. Ensure your books are balanced.",
       href: "/trial-balance",
       icon: ListChecks,
-      imageHint: "checklist report", // Placeholder hint
+      imageHint: "checklist report",
       placeholderUrl: "https://placehold.co/600x338/E8F5E9/4CAF50.png",
     },
     {
@@ -29,7 +28,7 @@ export default function FinancialStatementsPage() {
       description: "Analyze your company's revenues and expenses over a period. Track profitability. (Available on Dashboard)",
       href: "/dashboard?tab=reports#reports",
       icon: PieChart,
-      imageHint: "chart graph", // Placeholder hint
+      imageHint: "chart graph",
       placeholderUrl: "https://placehold.co/600x338/E8F5E9/4CAF50.png",
     },
   ];
@@ -63,7 +62,7 @@ export default function FinancialStatementsPage() {
                   />
                 ) : (
                   <Image
-                    src={statement.placeholderUrl || "https://placehold.co/600x338.png"} // Fallback just in case
+                    src={statement.placeholderUrl || "https://placehold.co/600x338.png"}
                     alt={`${statement.title} placeholder`}
                     layout="fill"
                     objectFit="cover"
