@@ -1,5 +1,6 @@
+
 import type { LucideIcon } from "lucide-react";
-import { LayoutDashboard, BookOpenText, BookCopy, MessageCircle, Settings, PlusCircle, UploadCloud, ListChecks, Landmark } from "lucide-react";
+import { LayoutDashboard, BookOpenText, BookCopy, MessageCircle, Settings, PlusCircle, UploadCloud, ListChecks, Landmark, BarChart3 } from "lucide-react";
 
 export interface NavItem {
   title: string;
@@ -62,3 +63,4 @@ export const NAV_ITEMS_BOTTOM: NavItem[] = [
     icon: Settings,
   },
 ];
+
