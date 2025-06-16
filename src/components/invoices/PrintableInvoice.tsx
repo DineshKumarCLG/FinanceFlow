@@ -1,42 +1,52 @@
 
 "use client";
 
-import type { Invoice, InvoiceLineItem } from "@/lib/data-service";
-import { AppLogo } from "@/components/layout/AppLogo";
+import type { Invoice, InvoiceLineItem, CompanySettings } from "@/lib/data-service";
 import Image from "next/image";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect } from "react";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
-import { cn } from "@/lib/utils";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 interface PrintableInvoiceProps {
   invoice: Invoice;
+  companyDetails: CompanySettings | null; // Changed from yourCompanyDetails
 }
 
-// Your Company's Details (Hardcoded for now, ideally from settings)
-const yourCompanyDetails = {
-  name: "FinanceFlow AI Solutions",
-  address: "123 Innovation Drive, Tech Park,\nBangalore, Karnataka, 560100, India", // Multi-line example
-  gstin: "29AAPCK1234A1Z5",
-  email: "contact@financeflow.ai",
-  phone: "+91 98765 43210",
-  logoUrl: "https://placehold.co/200x60.png?text=YourCompanyLogo&font=roboto", // Larger placeholder
-  bankDetails: "Bank: Example Bank\nAccount Name: FinanceFlow AI Solutions\nAccount No: 1234567890\nIFSC: EXBK0001234",
-  authorizedSignatory: "FinanceFlow AI Solutions", // Or a specific name
+// Default company details to use if specific ones aren't loaded
+const fallbackCompanyDetails: Required<Pick<CompanySettings, 'businessName' | 'companyGstin'>> & Partial<CompanySettings> = {
+  businessName: "Your Company Name",
+  address: "123 Business Street, City, Country", // Added address here
+  companyGstin: "YOUR_GSTIN_HERE",
+  email: "your.email@example.com", // Added email
+  phone: "+1234567890", // Added phone
+  logoUrl: "https://placehold.co/200x60.png?text=YourLogo&font=roboto",
+  bankDetails: "Bank: Default Bank\nAccount Name: Your Company\nAccount No: 0000000000\nIFSC: DEFB0000000",
+  authorizedSignatory: "Authorized Signatory",
 };
 
 
-export function PrintableInvoice({ invoice }: PrintableInvoiceProps) {
+export function PrintableInvoice({ invoice, companyDetails }: PrintableInvoiceProps) {
   const [clientLocale, setClientLocale] = useState('en-US');
-  const [currency, setCurrency] = useState('INR'); // Default currency
+  const [currency, setCurrency] = useState('INR'); 
 
   useEffect(() => {
     if (typeof navigator !== 'undefined') {
       setClientLocale(navigator.language || 'en-US');
-      // Potentially set currency based on locale or company settings in future
     }
   }, []);
+
+  const currentCompanyDetails = {
+    name: companyDetails?.businessName || fallbackCompanyDetails.businessName,
+    address: companyDetails?.companyAddress || fallbackCompanyDetails.address, // Assuming companyAddress might be a field
+    gstin: companyDetails?.companyGstin || fallbackCompanyDetails.companyGstin,
+    email: companyDetails?.companyEmail || fallbackCompanyDetails.email, // Assuming companyEmail might be a field
+    phone: companyDetails?.companyPhone || fallbackCompanyDetails.phone, // Assuming companyPhone might be a field
+    logoUrl: companyDetails?.logoUrl || fallbackCompanyDetails.logoUrl,
+    bankDetails: companyDetails?.bankDetails || fallbackCompanyDetails.bankDetails,
+    authorizedSignatory: companyDetails?.authorizedSignatory || fallbackCompanyDetails.authorizedSignatory,
+  };
+
 
   const formatCurrency = (value: number | undefined, locale = clientLocale, curr = currency) => {
     if (value === undefined || value === null) return "-";
@@ -46,27 +56,26 @@ export function PrintableInvoice({ invoice }: PrintableInvoiceProps) {
   const formatDate = (dateString: string | undefined, locale = clientLocale) => {
     if (!dateString) return "-";
     try {
-      // Ensure dateString is treated as local by appending a common time if not present
       const date = new Date(dateString.includes('T') ? dateString : dateString + 'T00:00:00');
       return date.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
     } catch (e) {
-      return dateString; // Fallback to original string if parsing fails
+      return dateString;
     }
   };
 
   const getStatusBadgeVariant = (status: Invoice['status'] = 'draft') => {
     switch (status) {
-      case 'paid': return 'default'; // Usually green, but Shadcn default is primary
+      case 'paid': return 'default';
       case 'sent': return 'secondary';
       case 'overdue': return 'destructive';
       case 'draft': return 'outline';
-      case 'void': return 'outline'; // Consider a specific color for void
+      case 'void': return 'outline';
       default: return 'outline';
     }
   };
 
   const calculateLineItemGstAmount = (item: InvoiceLineItem): number => {
-    if (item.gstRate && item.amount) { // item.amount is taxable_value
+    if (item.gstRate && item.amount) {
       return parseFloat((item.amount * (item.gstRate / 100)).toFixed(2));
     }
     return 0;
@@ -78,22 +87,20 @@ export function PrintableInvoice({ invoice }: PrintableInvoiceProps) {
     return parseFloat((taxableAmount + gstAmount).toFixed(2));
   };
 
-  // Use totals from the invoice object as they are calculated on save/update
   const { subTotal, totalGstAmount, totalAmount } = invoice;
 
   return (
     <div className="bg-white p-6 sm:p-10 text-sm font-sans printable-card text-gray-800 printable-text">
-      {/* Invoice Header with Your Company Details and Invoice Info */}
       <header className="grid grid-cols-2 gap-4 mb-8 items-start">
         <div>
-          {yourCompanyDetails.logoUrl && (
-            <Image src={yourCompanyDetails.logoUrl} alt={`${yourCompanyDetails.name} Logo`} width={180} height={50} className="mb-3 h-auto" data-ai-hint="company brandmark" />
+          {currentCompanyDetails.logoUrl && (
+            <Image src={currentCompanyDetails.logoUrl} alt={`${currentCompanyDetails.name} Logo`} width={180} height={50} className="mb-3 h-auto" data-ai-hint="company brandmark" />
           )}
-          <h2 className="text-xl font-bold text-gray-900">{yourCompanyDetails.name}</h2>
-          <p className="text-xs text-gray-600 whitespace-pre-line">{yourCompanyDetails.address}</p>
-          {yourCompanyDetails.gstin && <p className="text-xs text-gray-600">GSTIN/VAT: {yourCompanyDetails.gstin}</p>}
-          {yourCompanyDetails.email && <p className="text-xs text-gray-600">Email: {yourCompanyDetails.email}</p>}
-          {yourCompanyDetails.phone && <p className="text-xs text-gray-600">Phone: {yourCompanyDetails.phone}</p>}
+          <h2 className="text-xl font-bold text-gray-900">{currentCompanyDetails.name}</h2>
+          {currentCompanyDetails.address && <p className="text-xs text-gray-600 whitespace-pre-line">{currentCompanyDetails.address}</p>}
+          {currentCompanyDetails.gstin && <p className="text-xs text-gray-600">GSTIN/VAT: {currentCompanyDetails.gstin}</p>}
+          {currentCompanyDetails.email && <p className="text-xs text-gray-600">Email: {currentCompanyDetails.email}</p>}
+          {currentCompanyDetails.phone && <p className="text-xs text-gray-600">Phone: {currentCompanyDetails.phone}</p>}
         </div>
         <div className="text-right">
           <h1 className="text-3xl font-bold text-gray-900 uppercase mb-2">Invoice</h1>
@@ -110,11 +117,10 @@ export function PrintableInvoice({ invoice }: PrintableInvoiceProps) {
 
       <Separator className="my-6 bg-gray-300" />
 
-      {/* Customer Details Section */}
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         <div>
           <h3 className="text-xs font-semibold uppercase text-gray-500 mb-1">Bill To:</h3>
-          <p className="font-semibold text-gray-800">{invoice.customerName}</p>
+          <p className="font-semibold text-gray-800">{invoice.customerName || "N/A"}</p>
           {invoice.billingAddress && <p className="text-xs text-gray-600 whitespace-pre-line">{invoice.billingAddress}</p>}
           {invoice.customerEmail && <p className="text-xs text-gray-600">Email: {invoice.customerEmail}</p>}
           {invoice.customerGstin && <p className="text-xs text-gray-600">GSTIN/VAT: {invoice.customerGstin}</p>}
@@ -122,13 +128,12 @@ export function PrintableInvoice({ invoice }: PrintableInvoiceProps) {
         {invoice.shippingAddress && (
           <div>
             <h3 className="text-xs font-semibold uppercase text-gray-500 mb-1">Ship To:</h3>
-            <p className="font-semibold text-gray-800">{invoice.customerName}</p> {/* Assuming shipping to same customer name */}
+            <p className="font-semibold text-gray-800">{invoice.customerName || "N/A"}</p>
             <p className="text-xs text-gray-600 whitespace-pre-line">{invoice.shippingAddress}</p>
           </div>
         )}
       </section>
 
-      {/* Items Table */}
       <section className="mb-8">
         <div className="border border-gray-300 rounded-md overflow-hidden">
           <Table className="min-w-full">
@@ -155,7 +160,7 @@ export function PrintableInvoice({ invoice }: PrintableInvoiceProps) {
                       <TableCell className="p-2 text-gray-700 align-top">{index + 1}</TableCell>
                       <TableCell className="p-2 text-gray-700 align-top">{item.description}</TableCell>
                       <TableCell className="p-2 text-gray-700 text-center align-top">{item.hsnSacCode || '-'}</TableCell>
-                      <TableCell className="p-2 text-gray-700 text-right align-top">{item.quantity.toLocaleString(clientLocale)}</TableCell>
+                      <TableCell className="p-2 text-gray-700 text-right align-top">{(item.quantity || 0).toLocaleString(clientLocale)}</TableCell>
                       <TableCell className="p-2 text-gray-700 text-right align-top">{formatCurrency(item.unitPrice)}</TableCell>
                       <TableCell className="p-2 text-gray-700 text-right align-top">{formatCurrency(item.amount)}</TableCell>
                       <TableCell className="p-2 text-gray-700 text-center align-top">{item.gstRate ? `${item.gstRate}%` : '-'}</TableCell>
@@ -182,14 +187,12 @@ export function PrintableInvoice({ invoice }: PrintableInvoiceProps) {
         </div>
       </section>
       
-      {/* Totals Section */}
       <section className="flex justify-end mb-8">
         <div className="w-full sm:w-2/3 md:w-1/2 lg:w-2/5 space-y-1 text-sm">
           <div className="flex justify-between text-gray-700">
             <span>Subtotal (Taxable Value):</span>
             <span className="font-medium">{formatCurrency(subTotal)}</span>
           </div>
-          {/* Future: Add CGST/SGST/IGST breakdown if applicable */}
           <div className="flex justify-between text-gray-700">
             <span>Total Tax (GST):</span>
             <span className="font-medium">{formatCurrency(totalGstAmount)}</span>
@@ -199,15 +202,9 @@ export function PrintableInvoice({ invoice }: PrintableInvoiceProps) {
             <span>Grand Total:</span>
             <span>{formatCurrency(totalAmount)}</span>
           </div>
-          {/* Amount in words can be complex, adding placeholder if needed later
-          <div className="text-xs text-gray-600 mt-1">
-            Amount in Words: {amountToWords(totalAmount)}
-          </div> 
-          */}
         </div>
       </section>
 
-      {/* Terms, Notes, Bank Details */}
       <section className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 text-xs">
         <div>
           {(invoice.paymentTerms || invoice.notes) && <Separator className="mb-2 bg-gray-200 md:hidden"/>}
@@ -227,26 +224,26 @@ export function PrintableInvoice({ invoice }: PrintableInvoiceProps) {
         <div>
           <Separator className="mb-2 bg-gray-200 md:hidden"/>
           <h4 className="font-semibold text-gray-700 mb-0.5">Bank Details for Payment:</h4>
-          <p className="text-gray-600 whitespace-pre-line">{yourCompanyDetails.bankDetails}</p>
+          <p className="text-gray-600 whitespace-pre-line">{currentCompanyDetails.bankDetails}</p>
         </div>
       </section>
 
-
-      {/* Footer & Authorized Signatory */}
       <footer className="mt-12 pt-6 border-t border-gray-300 text-xs text-gray-600">
         <div className="grid grid-cols-2">
           <div className="text-left">
             <p>This is a computer-generated invoice and does not require a physical signature if sent digitally.</p>
-            <p>For {yourCompanyDetails.name}</p>
+            <p>For {currentCompanyDetails.name}</p>
             <div className="mt-10">
                <Separator className="w-48 bg-gray-400"/>
-              <p className="mt-1">({yourCompanyDetails.authorizedSignatory})</p>
+              <p className="mt-1">({currentCompanyDetails.authorizedSignatory})</p>
               <p>Authorized Signatory</p>
             </div>
           </div>
            <div className="text-right">
              <p>Thank you for your business!</p>
-             <p>If you have any questions, please contact us at: <br/>{yourCompanyDetails.email} or {yourCompanyDetails.phone}</p>
+             {currentCompanyDetails.email && currentCompanyDetails.phone &&
+                <p>If you have any questions, please contact us at: <br/>{currentCompanyDetails.email} or {currentCompanyDetails.phone}</p>
+             }
            </div>
         </div>
       </footer>

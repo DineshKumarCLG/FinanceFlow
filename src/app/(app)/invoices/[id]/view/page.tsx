@@ -4,13 +4,13 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import type { Invoice } from "@/lib/data-service";
-import { getInvoiceById } from "@/lib/data-service";
+import type { Invoice, CompanySettings } from "@/lib/data-service"; // Added CompanySettings
+import { getInvoiceById, getCompanySettings } from "@/lib/data-service"; // Added getCompanySettings
 import { PageTitle } from "@/components/shared/PageTitle";
 import { PrintableInvoice } from "@/components/invoices/PrintableInvoice";
 import { Button } from "@/components/ui/button";
 import { Printer, Download, Loader2, AlertCircle, ArrowLeft } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card"; // Removed CardHeader as it's not used
+import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import Link from "next/link";
 import jsPDF from 'jspdf';
@@ -23,37 +23,57 @@ export default function InvoiceViewPage() {
   const invoiceId = typeof params.id === "string" ? params.id : "";
   const { currentCompanyId } = useAuth();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null); // State for company settings
+  const [isLoadingInvoice, setIsLoadingInvoice] = useState(true);
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const printableAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    if (invoiceId && currentCompanyId) {
-      setIsLoading(true);
-      setError(null);
-      getInvoiceById(currentCompanyId, invoiceId)
-        .then((data) => {
-          if (data) {
-            setInvoice(data);
+    async function fetchData() {
+      if (invoiceId && currentCompanyId) {
+        setIsLoadingInvoice(true);
+        setIsLoadingSettings(true);
+        setError(null);
+        try {
+          const invoiceData = await getInvoiceById(currentCompanyId, invoiceId);
+          if (invoiceData) {
+            setInvoice(invoiceData);
           } else {
             setError("Invoice not found or you do not have permission to view it.");
           }
-        })
-        .catch((e) => {
+        } catch (e: any) {
           console.error("Failed to fetch invoice:", e);
           setError(e.message || "An unexpected error occurred while fetching the invoice.");
-        })
-        .finally(() => setIsLoading(false));
-    } else if (!currentCompanyId) {
-        setError("Company ID not available. Cannot fetch invoice.");
-        setIsLoading(false);
-    } else if (!invoiceId) {
-        setError("Invoice ID not specified.");
-        setIsLoading(false);
+        } finally {
+          setIsLoadingInvoice(false);
+        }
+
+        try {
+          const settings = await getCompanySettings(currentCompanyId);
+          setCompanySettings(settings);
+        } catch (e: any) {
+          console.error("Failed to fetch company settings:", e);
+          // Not setting main error for this, invoice can still be shown with default company details
+          toast({ variant: "destructive", title: "Settings Error", description: "Could not load company details for the invoice header." });
+        } finally {
+          setIsLoadingSettings(false);
+        }
+
+      } else if (!currentCompanyId) {
+          setError("Company ID not available. Cannot fetch invoice.");
+          setIsLoadingInvoice(false);
+          setIsLoadingSettings(false);
+      } else if (!invoiceId) {
+          setError("Invoice ID not specified.");
+          setIsLoadingInvoice(false);
+          setIsLoadingSettings(false);
+      }
     }
-  }, [invoiceId, currentCompanyId]);
+    fetchData();
+  }, [invoiceId, currentCompanyId, toast]);
 
   const handlePrint = () => {
     window.print();
@@ -69,30 +89,26 @@ export default function InvoiceViewPage() {
 
     try {
         const canvas = await html2canvas(printableAreaRef.current, {
-            scale: 2, // Increase scale for better quality
-            useCORS: true, // If you have external images
-            logging: false, // Disable logging for cleaner console
+            scale: 2,
+            useCORS: true,
+            logging: false,
         });
         const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF({
             orientation: 'portrait',
-            unit: 'pt', // points
-            format: 'a4' // A4 paper size
+            unit: 'pt',
+            format: 'a4'
         });
 
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
         const imgWidth = canvas.width;
         const imgHeight = canvas.height;
-
-        // Calculate the aspect ratio
         const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
         const scaledWidth = imgWidth * ratio;
         const scaledHeight = imgHeight * ratio;
-
-        // Center the image on the PDF page (optional)
         const x = (pdfWidth - scaledWidth) / 2;
-        const y = 0; // (pdfHeight - scaledHeight) / 2; // Align to top for invoices
+        const y = 0; 
 
         pdf.addImage(imgData, 'PNG', x, y, scaledWidth, scaledHeight);
         pdf.save(`Invoice-${invoice.invoiceNumber}.pdf`);
@@ -105,11 +121,12 @@ export default function InvoiceViewPage() {
     }
 };
 
+  const isLoading = isLoadingInvoice || isLoadingSettings;
 
   return (
     <div className="space-y-6">
       <PageTitle
-        title={isLoading ? "Loading Invoice..." : invoice ? `Invoice ${invoice.invoiceNumber}` : "Invoice Detail"}
+        title={isLoadingInvoice ? "Loading Invoice..." : invoice ? `Invoice ${invoice.invoiceNumber}` : "Invoice Detail"}
         description={invoice ? `Customer: ${invoice.customerName}` : ""}
       >
         <div className="flex items-center gap-2 no-print">
@@ -119,7 +136,7 @@ export default function InvoiceViewPage() {
               Back to Invoices
             </Link>
           </Button>
-          {invoice && !isLoading && (
+          {invoice && !isLoadingInvoice && (
             <>
               <Button onClick={handlePrint} disabled={isDownloadingPdf}>
                 <Printer className="mr-2 h-4 w-4" /> Print Invoice
@@ -141,7 +158,7 @@ export default function InvoiceViewPage() {
         </Card>
       )}
 
-      {error && !isLoading && (
+      {error && !isLoadingInvoice && ( // Only show main error if invoice loading failed
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Error Loading Invoice</AlertTitle>
@@ -149,18 +166,16 @@ export default function InvoiceViewPage() {
         </Alert>
       )}
 
-      {!isLoading && !error && invoice && (
-        // The ref is attached to the direct parent of PrintableInvoice
-        // Ensure PrintableInvoice itself does not have margins that could be cut off by html2canvas
+      {!isLoadingInvoice && !error && invoice && (
         <div ref={printableAreaRef} className="printable-invoice-container bg-white"> 
           <Card className="printable-invoice-area printable-card shadow-lg">
-            <CardContent className="p-0 md:p-0"> {/* Minimal padding for canvas capture */}
-              <PrintableInvoice invoice={invoice} />
+            <CardContent className="p-0 md:p-0">
+              <PrintableInvoice invoice={invoice} companyDetails={companySettings} />
             </CardContent>
           </Card>
         </div>
       )}
-       {!isLoading && !error && !invoice && (
+       {!isLoadingInvoice && !error && !invoice && (
          <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Invoice Not Found</AlertTitle>
@@ -170,4 +185,3 @@ export default function InvoiceViewPage() {
     </div>
   );
 }
-
