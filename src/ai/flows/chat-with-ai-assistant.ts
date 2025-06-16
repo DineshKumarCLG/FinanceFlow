@@ -41,8 +41,8 @@ const prompt = ai.definePrompt({
   prompt: `You are a helpful AI assistant specializing in accounting and financial management for small businesses.
 Your primary goal is to assist the user. Use tools when necessary to gather information or perform actions.
 When a tool is used, analyze its output. If the tool succeeded, summarize the result for the user.
-If the tool indicated an error (e.g., missing information like a Company ID that the *system* should provide), inform the user about the general nature of the error and that the system couldn't complete the action.
-Do not repeatedly call a tool if it reported an error due to missing system-provided inputs; instead, inform the user.
+If the tool indicated an error (e.g., missing information like a Company ID that the *system* should provide, or a permissions issue), inform the user about the general nature of the error and that the system couldn't complete the action.
+Do not repeatedly call a tool if it reported an error due to missing system-provided inputs or permissions; instead, inform the user.
 After any tool use, your next step is to provide a clear, textual response to the user summarizing the action or findings. Only ask clarifying questions if essential information for the *task itself* (e.g. invoice details) is missing from the user's request.
 
 The system will automatically provide necessary context like Company ID and User ID to the tools. You do not need to extract these for the tool call itself. Focus on the user's intent and the data needed for the financial task.
@@ -117,36 +117,31 @@ const chatWithAiAssistantFlow = ai.defineFlow(
           let toolOutput: any;
           const toolNameForHistory = part.toolRequest.name;
           
-          // Consolidate tool input, ensuring system-provided IDs take precedence
           const toolCallInputFromLlm = { ...part.toolRequest.input };
-          const toolInput: any = {
-            ...toolCallInputFromLlm, // Spread what LLM provided (e.g., invoiceDetails, textDescription)
-            companyId: input.companyId,     // Explicitly set/override from flow input
-            creatorUserId: input.creatorUserId, // Explicitly set/override from flow input (relevant for manageInvoiceTool)
-          };
-          // For queryJournalTool, creatorUserId is not part of its schema, so it will be ignored if passed.
-          // We can be more specific if needed:
-          // const toolInput: any = {...toolCallInputFromLlm};
-          // if (part.toolRequest.name === 'manageInvoiceTool') {
-          //   toolInput.companyId = input.companyId;
-          //   toolInput.creatorUserId = input.creatorUserId;
-          // } else if (part.toolRequest.name === 'queryJournalTool') {
-          //   toolInput.companyId = input.companyId;
-          // }
+          const toolInput: any = {...toolCallInputFromLlm};
+          
+          // Explicitly set system-provided IDs, overriding anything LLM might have put in toolCallInputFromLlm for these specific keys
+          if (part.toolRequest.name === 'manageInvoiceTool') {
+            toolInput.companyId = input.companyId;
+            toolInput.creatorUserId = input.creatorUserId;
+          } else if (part.toolRequest.name === 'queryJournalTool') {
+            toolInput.companyId = input.companyId;
+          }
 
 
           try {
+            // Pre-tool call validation for system-provided IDs from the flow's input
             if (part.toolRequest.name === 'manageInvoiceTool') {
-              if (!toolInput.companyId) {
-                toolOutput = { success: false, message: "Tool Error: Company ID was not provided by the system for the invoice operation. The AI should be informed." };
-              } else if (!toolInput.creatorUserId) {
-                toolOutput = { success: false, message: "Tool Error: User ID was not provided by the system for the invoice operation. The AI should be informed." };
+              if (!input.companyId) {
+                toolOutput = { success: false, message: "Tool Error: Company ID was not provided by the system for the invoice operation. I cannot proceed without it." };
+              } else if (!input.creatorUserId) {
+                toolOutput = { success: false, message: "Tool Error: User ID was not provided by the system for the invoice operation. I cannot proceed without it." };
               } else {
                 toolOutput = await manageInvoiceTool(toolInput as ManageInvoiceInput);
               }
             } else if (part.toolRequest.name === 'queryJournalTool') {
-               if (!toolInput.companyId) {
-                toolOutput = { querySummary: "Tool Error: Company ID was not provided by the system to query journal entries. The AI should be informed.", matchCount: 0 };
+               if (!input.companyId) {
+                toolOutput = { querySummary: "Tool Error: Company ID was not provided by the system to query journal entries. I cannot proceed without it.", matchCount: 0 };
               } else {
                 toolOutput = await queryJournalTool(toolInput as QueryJournalInput);
               }
@@ -185,7 +180,19 @@ const chatWithAiAssistantFlow = ai.defineFlow(
     if (!finalContent.trim()) {
       const lastHistoryItem = currentHistory.length > 0 ? currentHistory[currentHistory.length - 1] : null;
       if (lastHistoryItem && lastHistoryItem.isTool) {
-        finalContent = "I've used my tools to process your request. Is there anything else I can help with, or would you like a summary?";
+        // Check if the tool output (which is stringified JSON) indicates an error
+        let toolOutputContent = {};
+        try {
+          toolOutputContent = JSON.parse(lastHistoryItem.content);
+        } catch (e) { /* ignore parse error */ }
+
+        if ((toolOutputContent as any).success === false) {
+            finalContent = `I encountered an issue trying to perform that action. The system reported: ${(toolOutputContent as any).message || 'An unspecified error occurred with the tool.'}`;
+        } else if ((toolOutputContent as any).querySummary && (toolOutputContent as any).matchCount === 0 && (toolOutputContent as any).querySummary.startsWith("Tool Error:")) {
+            finalContent = `I encountered an issue trying to perform that action. The system reported: ${(toolOutputContent as any).querySummary}`;
+        } else {
+            finalContent = "I've used my tools to process your request. Is there anything else I can help with, or would you like a summary?";
+        }
       } else if (llmResponse.finishReason === 'blocked' || llmResponse.finishReason === 'error') {
         finalContent = "I encountered an issue generating a full response. This might be due to safety settings or an internal error. Please try rephrasing your request.";
       } else {
