@@ -1,10 +1,10 @@
+
 import type { Metadata } from 'next';
 // import { GeistSans } from 'geist/font/sans'; // Removed GeistSans
 // import { GeistMono } from 'geist/font/mono'; // Keep commented out or remove if not used elsewhere
 import './globals.css';
-import { AuthProvider } from '@/contexts/AuthContext';
 import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from '@/components/ui/tooltip';
+import { Providers } from '@/components/shared/Providers'; // Import the new Providers component
 
 export const metadata: Metadata = {
   title: 'FinanceFlow AI',
@@ -29,12 +29,10 @@ export default function RootLayout({
       {/* Use .variable directly from the imported GeistSans and GeistMono objects */}
       {/* Removed geistSans.variable and geistMono.variable */}
       <body className={`antialiased`}>
-        <AuthProvider>
-          <TooltipProvider>
-            {children}
-          </TooltipProvider>
+        <Providers> {/* Use the Providers component here */}
+          {children}
           <Toaster />
-        </AuthProvider>
+        </Providers>
       </body>
     </html>
   );
