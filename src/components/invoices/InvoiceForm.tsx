@@ -2,7 +2,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm, useFieldArray, Controller } from "react-hook-form";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Loader2, Wand2, Save, FileText, AlertCircle, CalendarIcon as Calendar, Edit, PlusCircle, Trash2 } from "lucide-react";
 import { generateInvoiceDetails, type GenerateInvoiceDetailsOutput } from '@/ai/flows/generate-invoice-details';
 import { useToast } from "@/hooks/use-toast";
@@ -25,40 +25,68 @@ import { addInvoice, updateInvoice, type NewInvoiceData, type UpdateInvoiceData,
 import { useAuth } from "@/contexts/AuthContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"; 
 import { useRouter } from 'next/navigation';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const lineItemFormSchema = z.object({
-  description: z.string().min(1, "Item description is required"),
-  quantity: z.coerce.number().min(0.01, "Quantity must be > 0").optional().default(1),
-  unitPrice: z.coerce.number().min(0, "Unit price cannot be negative").optional().default(0),
-  amount: z.coerce.number().min(0, "Amount cannot be negative").optional(), // Made optional, will calculate
+  description: z.string().min(1, "Item description is required."),
+  quantity: z.coerce.number().min(0.000001, "Quantity must be > 0.").default(1),
+  unitPrice: z.coerce.number().min(0, "Unit price cannot be negative.").default(0),
+  amount: z.coerce.number().min(0, "Amount cannot be negative.").optional(), // Taxable amount: quantity * unitPrice
   hsnSacCode: z.string().optional(),
-  gstRate: z.coerce.number().optional(),
+  gstRate: z.coerce.number().min(0).max(100).optional(),
 });
 
 const invoiceFormSchema = z.object({
   invoiceDescription: z.string().optional(), 
   invoiceNumber: z.string().min(1, { message: "Invoice number is required." }),
+  
   customerName: z.string().min(1, { message: "Customer name is required." }),
-  // totalAmount field is removed as it will be derived from line items or itemsSummary.
+  customerEmail: z.string().email({ message: "Invalid email address."}).optional().or(z.literal('')),
+  billingAddress: z.string().optional(),
+  shippingAddress: z.string().optional(),
+  customerGstin: z.string().optional().refine(val => !val || /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i.test(val), {
+    message: "Invalid GSTIN format.",
+  }),
+
   invoiceDate: z.date({ required_error: "Invoice date is required."}),
   dueDate: z.date().optional(),
-  itemsSummary: z.string().optional(),
-  lineItems: z.array(lineItemFormSchema).optional(),
-  status: z.enum(['draft', 'sent', 'paid', 'overdue', 'void']).default('draft'), // Added status
+  paymentTerms: z.string().optional(),
+  
+  itemsSummary: z.string().optional(), // Fallback if no line items
+  lineItems: z.array(lineItemFormSchema).optional().default([]),
+  
+  status: z.enum(['draft', 'sent', 'paid', 'overdue', 'void']).default('draft'),
   notes: z.string().optional(),
 });
 
 type InvoiceFormValues = z.infer<typeof invoiceFormSchema>;
 
 interface InvoiceFormProps {
-  mode: 'create' | 'edit';
+  mode?: 'create' | 'edit'; // Optional, defaults to 'create'
   initialInvoiceData?: Invoice | null; // For edit mode
 }
 
-export function InvoiceForm({ mode, initialInvoiceData }: InvoiceFormProps) {
+const defaultFormValues: InvoiceFormValues = {
+  invoiceDescription: "",
+  invoiceNumber: "",
+  customerName: "",
+  customerEmail: "",
+  billingAddress: "",
+  shippingAddress: "",
+  customerGstin: "",
+  invoiceDate: new Date(),
+  dueDate: undefined,
+  paymentTerms: "",
+  itemsSummary: "",
+  lineItems: [],
+  status: 'draft',
+  notes: "",
+};
+
+export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceFormProps) {
   const { currentCompanyId } = useAuth();
   const [isParsing, setIsParsing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -75,61 +103,78 @@ export function InvoiceForm({ mode, initialInvoiceData }: InvoiceFormProps) {
 
   const form = useForm<InvoiceFormValues>({
     resolver: zodResolver(invoiceFormSchema),
-    defaultValues: {
-      invoiceDescription: "",
-      invoiceNumber: "",
-      customerName: "",
-      invoiceDate: new Date(),
-      itemsSummary: "",
-      lineItems: [],
-      status: 'draft',
-      notes: "",
-    },
+    defaultValues: initialInvoiceData 
+      ? {
+          ...defaultFormValues,
+          ...initialInvoiceData,
+          invoiceDate: initialInvoiceData.invoiceDate ? parseISO(initialInvoiceData.invoiceDate) : new Date(),
+          dueDate: initialInvoiceData.dueDate ? parseISO(initialInvoiceData.dueDate) : undefined,
+          lineItems: initialInvoiceData.lineItems?.map(item => ({
+            ...item,
+            quantity: item.quantity || 1,
+            unitPrice: item.unitPrice || 0,
+            // 'amount' in form is for display/calculation; will be quantity*unitPrice on submit
+          })) || [],
+        }
+      : defaultFormValues,
   });
-
-  const { fields, append, remove, update } = useFieldArray({
+  
+  const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "lineItems",
   });
 
-  // Populate form if in edit mode
   useEffect(() => {
     if (mode === 'edit' && initialInvoiceData) {
-      form.reset({
+      const resetData: Partial<InvoiceFormValues> = {
         invoiceDescription: initialInvoiceData.itemsSummary || initialInvoiceData.lineItems?.map(li => `${li.description} (Qty: ${li.quantity}, Rate: ${li.unitPrice})`).join('\n') || "",
         invoiceNumber: initialInvoiceData.invoiceNumber,
         customerName: initialInvoiceData.customerName,
-        invoiceDate: new Date(initialInvoiceData.invoiceDate + 'T00:00:00'), // Ensure proper date parsing
-        dueDate: initialInvoiceData.dueDate ? new Date(initialInvoiceData.dueDate + 'T00:00:00') : undefined,
+        customerEmail: initialInvoiceData.customerEmail || "",
+        billingAddress: initialInvoiceData.billingAddress || "",
+        shippingAddress: initialInvoiceData.shippingAddress || "",
+        customerGstin: initialInvoiceData.customerGstin || "",
+        invoiceDate: initialInvoiceData.invoiceDate ? parseISO(initialInvoiceData.invoiceDate) : new Date(),
+        dueDate: initialInvoiceData.dueDate ? parseISO(initialInvoiceData.dueDate) : undefined,
+        paymentTerms: initialInvoiceData.paymentTerms || "",
         itemsSummary: initialInvoiceData.itemsSummary,
         lineItems: initialInvoiceData.lineItems?.map(item => ({
             description: item.description,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            amount: item.amount, // Keep original amount for display, will re-calc on save
-            hsnSacCode: item.hsnSacCode,
+            quantity: item.quantity || 1,
+            unitPrice: item.unitPrice || 0,
+            amount: item.amount, // This is taxable_value_per_line
+            hsnSacCode: item.hsnSacCode || "",
             gstRate: item.gstRate,
         })) || [],
-        status: initialInvoiceData.status,
-        notes: initialInvoiceData.notes,
-      });
-    } else {
-      form.reset(); // Reset for create mode
+        status: initialInvoiceData.status || 'draft',
+        notes: initialInvoiceData.notes || "",
+      };
+      form.reset(resetData);
+    } else if (mode === 'create') {
+       form.reset(defaultFormValues);
     }
   }, [mode, initialInvoiceData, form]);
 
 
-  // Calculate total amount for display based on line items
   const watchedLineItems = form.watch("lineItems");
-  const calculatedTotalAmount = useMemo(() => {
-    if (!watchedLineItems || watchedLineItems.length === 0) return 0;
-    return watchedLineItems.reduce((sum, item) => {
-      const itemAmount = (item.quantity || 1) * (item.unitPrice || 0);
-      const itemGst = item.gstRate ? itemAmount * (item.gstRate / 100) : 0;
-      return sum + itemAmount + itemGst;
-    }, 0);
+  const totals = useMemo(() => {
+    let subTotal = 0;
+    let totalGst = 0;
+    if (watchedLineItems) {
+      watchedLineItems.forEach(item => {
+        const taxableAmount = (item.quantity || 1) * (item.unitPrice || 0);
+        subTotal += taxableAmount;
+        if (item.gstRate) {
+          totalGst += taxableAmount * (item.gstRate / 100);
+        }
+      });
+    }
+    return {
+      subTotal: parseFloat(subTotal.toFixed(2)),
+      totalGst: parseFloat(totalGst.toFixed(2)),
+      grandTotal: parseFloat((subTotal + totalGst).toFixed(2)),
+    };
   }, [watchedLineItems]);
-
 
   const handleAiParse = async () => {
     const description = form.getValues("invoiceDescription");
@@ -148,14 +193,21 @@ export function InvoiceForm({ mode, initialInvoiceData }: InvoiceFormProps) {
       const result: GenerateInvoiceDetailsOutput = await generateInvoiceDetails({ description });
       
       if (result.customerName) form.setValue("customerName", result.customerName, { shouldValidate: true });
-      
+      if (result.customerEmail) form.setValue("customerEmail", result.customerEmail, { shouldValidate: true });
+      if (result.billingAddress) form.setValue("billingAddress", result.billingAddress, { shouldValidate: true });
+      if (result.shippingAddress) form.setValue("shippingAddress", result.shippingAddress, { shouldValidate: true });
+      if (result.invoiceNumber && mode === 'create') form.setValue("invoiceNumber", result.invoiceNumber, { shouldValidate: true }); // Only set inv number for create mode
+      if (result.paymentTerms) form.setValue("paymentTerms", result.paymentTerms, { shouldValidate: true });
+      if (result.notes) form.setValue("notes", result.notes, { shouldValidate: true });
+
+
       if (result.lineItems && result.lineItems.length > 0) {
         const aiLineItems = result.lineItems.map(li => ({
           description: li.description,
           quantity: li.quantity || 1,
           unitPrice: li.unitPrice || 0,
-          amount: li.amount || ((li.quantity || 1) * (li.unitPrice || 0)), // Ensure amount is calculated
-          hsnSacCode: li.hsnSacCode,
+          amount: parseFloat(((li.quantity || 1) * (li.unitPrice || 0)).toFixed(2)),
+          hsnSacCode: li.hsnSacCode || "",
           gstRate: li.gstRate,
         }));
         form.setValue("lineItems", aiLineItems , { shouldValidate: true });
@@ -165,24 +217,27 @@ export function InvoiceForm({ mode, initialInvoiceData }: InvoiceFormProps) {
         form.setValue("lineItems", []);
       }
       
+      const todayForForm = new Date();
+      todayForForm.setHours(0,0,0,0); // Normalize to start of day
+
       if (result.invoiceDate) {
         try {
-            const parsedDate = new Date(result.invoiceDate + "T00:00:00"); 
+            const parsedDate = parseISO(result.invoiceDate);
             if (!isNaN(parsedDate.getTime())) {
                  form.setValue("invoiceDate", parsedDate, { shouldValidate: true });
             } else {
-                form.setValue("invoiceDate", new Date(), { shouldValidate: true }); 
+                form.setValue("invoiceDate", todayForForm, { shouldValidate: true }); 
             }
         } catch (e) {
-            form.setValue("invoiceDate", new Date(), { shouldValidate: true });
+            form.setValue("invoiceDate", todayForForm, { shouldValidate: true });
         }
       } else {
-        form.setValue("invoiceDate", new Date(), { shouldValidate: true });
+        form.setValue("invoiceDate", todayForForm, { shouldValidate: true });
       }
 
       if (result.dueDate) {
          try {
-            const parsedDueDate = new Date(result.dueDate + "T00:00:00");
+            const parsedDueDate = parseISO(result.dueDate);
             if (!isNaN(parsedDueDate.getTime())) {
                 form.setValue("dueDate", parsedDueDate, { shouldValidate: true });
             } else {
@@ -211,63 +266,65 @@ export function InvoiceForm({ mode, initialInvoiceData }: InvoiceFormProps) {
     }
     setIsSaving(true);
 
-    let subTotal = 0;
-    let totalGst = 0;
-    let finalTotalAmount = 0;
-
     const processedLineItems = values.lineItems?.map(item => {
-      const itemAmount = (item.quantity || 1) * (item.unitPrice || 0);
-      const itemGstAmount = item.gstRate ? itemAmount * (item.gstRate / 100) : 0;
-      subTotal += itemAmount;
-      totalGst += itemGstAmount;
-      return { ...item, amount: itemAmount, gstAmount: itemGstAmount }; // Ensure amount and gstAmount are part of the item
+      const taxableAmount = parseFloat(((item.quantity || 1) * (item.unitPrice || 0)).toFixed(2));
+      return { 
+        description: item.description,
+        quantity: item.quantity || 1,
+        unitPrice: item.unitPrice || 0,
+        amount: taxableAmount, // This is the taxable amount for the line
+        hsnSacCode: item.hsnSacCode || undefined,
+        gstRate: item.gstRate,
+      };
+    }) || [];
+
+    let currentSubTotal = 0;
+    let currentTotalGstAmount = 0;
+    processedLineItems.forEach(item => {
+      currentSubTotal += item.amount;
+      if (item.gstRate) {
+        currentTotalGstAmount += item.amount * (item.gstRate / 100);
+      }
     });
-
-    finalTotalAmount = subTotal + totalGst;
+    currentSubTotal = parseFloat(currentSubTotal.toFixed(2));
+    currentTotalGstAmount = parseFloat(currentTotalGstAmount.toFixed(2));
+    const currentTotalAmount = parseFloat((currentSubTotal + currentTotalGstAmount).toFixed(2));
     
-    if (!processedLineItems || processedLineItems.length === 0) {
-        // If no line items, use itemsSummary. Total amount is harder to determine without line item breakdown.
-        // We'll take itemsSummary and the AI might have provided a totalAmount, or user needs to input it.
-        // For simplicity, if AI gave totalAmount and no line items, we use that.
-        // This part might need more robust logic if AI doesn't give totalAmount or if summary is complex.
-        // The original totalAmount field was removed from schema, so this needs careful handling.
-        // Let's assume if there are no line items, the AI's totalAmount (if parsed) or a manual input is needed.
-        // For now, if no line items, totalAmount relies on the sum of line items, which will be 0.
-        // This implies line items are somewhat mandatory for accurate totals through this form.
-        // Or, we re-introduce a totalAmount field for manual entry when no line items.
-        // For this iteration, we'll prioritize line item calculation.
-        if (values.itemsSummary && finalTotalAmount === 0) {
-            toast({variant: "destructive", title: "Missing Amount", description: "Please add line items or ensure a total amount is calculable."});
-            setIsSaving(false);
-            return;
-        }
+    if (processedLineItems.length === 0 && !values.itemsSummary) {
+        toast({variant: "destructive", title: "Missing Items", description: "Please add line items or provide an items summary."});
+        setIsSaving(false);
+        return;
     }
-
 
     try {
       const invoiceData: NewInvoiceData | UpdateInvoiceData = {
         invoiceNumber: values.invoiceNumber,
         customerName: values.customerName,
+        customerEmail: values.customerEmail || undefined,
+        billingAddress: values.billingAddress || undefined,
+        shippingAddress: values.shippingAddress || undefined,
+        customerGstin: values.customerGstin || undefined,
         invoiceDate: format(values.invoiceDate, "yyyy-MM-dd"),
         dueDate: values.dueDate ? format(values.dueDate, "yyyy-MM-dd") : undefined,
-        lineItems: processedLineItems,
-        itemsSummary: (processedLineItems && processedLineItems.length > 0) ? undefined : values.itemsSummary,
-        subTotal: subTotal, 
-        totalGstAmount: totalGst, 
-        totalAmount: finalTotalAmount,
+        paymentTerms: values.paymentTerms || undefined,
+        lineItems: processedLineItems.length > 0 ? processedLineItems : undefined,
+        itemsSummary: processedLineItems.length === 0 ? (values.itemsSummary || undefined) : undefined,
+        subTotal: currentSubTotal, 
+        totalGstAmount: currentTotalGstAmount, 
+        totalAmount: currentTotalAmount,
         status: values.status || 'draft',
-        notes: values.notes || "", 
+        notes: values.notes || undefined, 
       };
 
       if (mode === 'create') {
         await addInvoice(currentCompanyId, invoiceData as NewInvoiceData);
-        toast({ title: "Invoice Saved!", description: `Invoice #${values.invoiceNumber} has been saved as a draft.` });
+        toast({ title: "Invoice Saved!", description: `Invoice #${values.invoiceNumber} has been saved.` });
       } else if (mode === 'edit' && initialInvoiceData?.id) {
         await updateInvoice(currentCompanyId, initialInvoiceData.id, invoiceData as UpdateInvoiceData);
         toast({ title: "Invoice Updated!", description: `Invoice #${values.invoiceNumber} has been updated.` });
       }
       
-      form.reset();
+      form.reset(defaultFormValues); // Reset to default after successful save
       router.push('/invoices'); 
     } catch (e: any) {
       toast({ variant: "destructive", title: "Saving Error", description: e.message || "Could not save the invoice." });
@@ -300,39 +357,43 @@ export function InvoiceForm({ mode, initialInvoiceData }: InvoiceFormProps) {
   return (
     <Card className="w-full shadow-xl">
       <CardHeader>
-        <CardTitle className="text-2xl">{mode === 'create' ? 'New Invoice' : 'Edit Invoice'} ({currentCompanyId})</CardTitle>
+        <CardTitle className="text-2xl">{mode === 'create' ? 'New Invoice' : `Edit Invoice ${initialInvoiceData?.invoiceNumber || ''}`} ({currentCompanyId})</CardTitle>
         <CardDescription>
           {mode === 'create' 
-            ? "Describe the invoice for AI to parse, or fill in the details manually. AI can attempt to extract line items."
-            : "Edit the invoice details below. You can also update the description and use AI to re-parse items."
+            ? "Describe the invoice for AI to parse, or fill in the details manually."
+            : "Edit the invoice details below."
           }
         </CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <CardContent className="space-y-6">
-            <FormField
-              control={form.control}
-              name="invoiceDescription"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Describe Invoice for AI (Optional - will overwrite existing items if used)</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="e.g., 'Invoice Tech Solutions Inc. for 20 hours of software development at 75 USD/hr and 2 server licenses at 100 USD each, due in 15 days. Project: Alpha Site Rebuild.'"
-                      className="min-h-[80px] resize-none"
-                      {...field}
-                      disabled={isLoading}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <Button type="button" onClick={handleAiParse} disabled={isLoading || !form.getValues("invoiceDescription")} variant="outline" className="w-full sm:w-auto">
-              {isParsing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
-              Parse with AI & Populate Fields
-            </Button>
+            {mode === 'create' && (
+              <>
+                <FormField
+                  control={form.control}
+                  name="invoiceDescription"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Describe Invoice for AI (Optional - AI will attempt to populate fields below)</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="e.g., 'Invoice Tech Solutions Inc. for 20 hours of software development at 75 USD/hr and 2 server licenses at 100 USD each, due in 15 days. Project: Alpha Site Rebuild. Email: contact@techsolutions.com. Bill to: 123 Main St, Anytown. Ship to: 789 Tech Park, Future City.'"
+                          className="min-h-[80px] resize-none"
+                          {...field}
+                          disabled={isLoading}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <Button type="button" onClick={handleAiParse} disabled={isLoading || !form.getValues("invoiceDescription")} variant="outline" className="w-full sm:w-auto">
+                  {isParsing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
+                  Parse with AI & Populate Fields
+                </Button>
+              </>
+            )}
 
             {aiError && (
               <Alert variant="destructive">
@@ -342,25 +403,15 @@ export function InvoiceForm({ mode, initialInvoiceData }: InvoiceFormProps) {
               </Alert>
             )}
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t mt-4">
+            <h3 className="text-lg font-semibold pt-4 border-t mt-4">Invoice Details</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="invoiceNumber"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Invoice Number</FormLabel>
-                    <FormControl><Input placeholder="INV-001" {...field} disabled={isLoading} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="customerName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Customer Name</FormLabel>
-                    <FormControl><Input placeholder="Client Company Name" {...field} disabled={isLoading} /></FormControl>
+                    <FormControl><Input placeholder="e.g., INV-2024-001" {...field} disabled={isLoading} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -431,21 +482,104 @@ export function InvoiceForm({ mode, initialInvoiceData }: InvoiceFormProps) {
                   </FormItem>
                 )}
               />
+                 <Controller
+                    control={form.control}
+                    name="status"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Status</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={isLoading}>
+                            <FormControl>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select status" />
+                            </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                                <SelectItem value="draft">Draft</SelectItem>
+                                <SelectItem value="sent">Sent</SelectItem>
+                                <SelectItem value="paid">Paid</SelectItem>
+                                <SelectItem value="overdue">Overdue</SelectItem>
+                                <SelectItem value="void">Void</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                />
+            </div>
+
+            <h3 className="text-lg font-semibold pt-4 border-t mt-4">Customer Details</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                    control={form.control}
+                    name="customerName"
+                    render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Customer Name</FormLabel>
+                        <FormControl><Input placeholder="Client Company Name" {...field} disabled={isLoading} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
+                <FormField
+                    control={form.control}
+                    name="customerEmail"
+                    render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Customer Email (Optional)</FormLabel>
+                        <FormControl><Input type="email" placeholder="client@example.com" {...field} disabled={isLoading} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
+                <FormField
+                    control={form.control}
+                    name="customerGstin"
+                    render={({ field }) => (
+                    <FormItem className="md:col-span-2">
+                        <FormLabel>Customer GSTIN (Optional)</FormLabel>
+                        <FormControl><Input placeholder="Customer's GSTIN" {...field} disabled={isLoading} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
+                <FormField
+                    control={form.control}
+                    name="billingAddress"
+                    render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Billing Address (Optional)</FormLabel>
+                        <FormControl><Textarea placeholder="123 Main St, Anytown, USA" {...field} disabled={isLoading} rows={3} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
+                <FormField
+                    control={form.control}
+                    name="shippingAddress"
+                    render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Shipping Address (Optional)</FormLabel>
+                        <FormControl><Textarea placeholder="456 Oak Ave, Otherville, USA (If different)" {...field} disabled={isLoading} rows={3} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
             </div>
             
             {/* Line Items Section */}
-            <div className="space-y-4 pt-4 border-t mt-4">
-              <FormLabel>Line Items</FormLabel>
+            <h3 className="text-lg font-semibold pt-4 border-t mt-4">Items & Services</h3>
+            <div className="space-y-3">
               {fields.map((item, index) => (
-                <Card key={item.id} className="p-3 bg-muted/30 relative">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-2 items-end">
+                <Card key={item.id} className="p-4 bg-muted/30 relative">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-start">
                     <FormField
                       control={form.control}
                       name={`lineItems.${index}.description`}
                       render={({ field }) => (
-                        <FormItem className="lg:col-span-2">
+                        <FormItem className="sm:col-span-2 lg:col-span-4"> {/* Full width for description */}
                           <FormLabel className="text-xs">Description</FormLabel>
-                          <FormControl><Input placeholder="Item description" {...field} disabled={isLoading} /></FormControl>
+                          <FormControl><Input placeholder="Item or service description" {...field} disabled={isLoading} /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -456,7 +590,7 @@ export function InvoiceForm({ mode, initialInvoiceData }: InvoiceFormProps) {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel className="text-xs">Quantity</FormLabel>
-                          <FormControl><Input type="number" placeholder="1" {...field} disabled={isLoading} onChange={(e) => field.onChange(parseFloat(e.target.value))} /></FormControl>
+                          <FormControl><Input type="number" placeholder="1" {...field} step="any" disabled={isLoading} onChange={(e) => field.onChange(parseFloat(e.target.value))} /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -466,48 +600,47 @@ export function InvoiceForm({ mode, initialInvoiceData }: InvoiceFormProps) {
                       name={`lineItems.${index}.unitPrice`}
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-xs">Unit Price</FormLabel>
-                          <FormControl><Input type="number" placeholder="0.00" {...field} disabled={isLoading} onChange={(e) => field.onChange(parseFloat(e.target.value))} /></FormControl>
+                          <FormLabel className="text-xs">Unit Price (Pre-tax)</FormLabel>
+                          <FormControl><Input type="number" placeholder="0.00" {...field} step="any" disabled={isLoading} onChange={(e) => field.onChange(parseFloat(e.target.value))} /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-                    <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="text-destructive hover:bg-destructive/10 absolute top-1 right-1 h-6 w-6" disabled={isLoading}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
                      <FormField
                         control={form.control}
                         name={`lineItems.${index}.hsnSacCode`}
                         render={({ field }) => (
                             <FormItem>
-                            <FormLabel className="text-xs">HSN/SAC (Opt.)</FormLabel>
+                            <FormLabel className="text-xs">HSN/SAC</FormLabel>
                             <FormControl><Input placeholder="HSN/SAC" {...field} disabled={isLoading} /></FormControl>
                             <FormMessage />
                             </FormItem>
                         )}
                         />
-                        <FormField
+                    <FormField
                         control={form.control}
                         name={`lineItems.${index}.gstRate`}
                         render={({ field }) => (
                             <FormItem>
-                            <FormLabel className="text-xs">GST Rate % (Opt.)</FormLabel>
-                            <FormControl><Input type="number" placeholder="e.g., 18" {...field} disabled={isLoading} onChange={(e) => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))} /></FormControl>
+                            <FormLabel className="text-xs">GST Rate %</FormLabel>
+                            <FormControl><Input type="number" placeholder="e.g., 18" {...field} step="any" disabled={isLoading} onChange={(e) => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))} /></FormControl>
                             <FormMessage />
                             </FormItem>
                         )}
-                        />
-                   </div>
+                    />
+                  </div>
+                  <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="text-destructive hover:bg-destructive/10 absolute top-2 right-2 h-7 w-7" disabled={isLoading} title="Remove Item">
+                      <Trash2 className="h-4 w-4" />
+                  </Button>
                 </Card>
               ))}
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => append({ description: "", quantity: 1, unitPrice: 0, amount: 0 })}
+                onClick={() => append({ description: "", quantity: 1, unitPrice: 0, amount: 0, hsnSacCode: "", gstRate: undefined })}
                 disabled={isLoading}
+                className="mt-2"
               >
                 <PlusCircle className="mr-2 h-4 w-4" /> Add Line Item
               </Button>
@@ -517,9 +650,9 @@ export function InvoiceForm({ mode, initialInvoiceData }: InvoiceFormProps) {
                     name="itemsSummary"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Items/Services Summary (if no line items above)</FormLabel>
+                        <FormLabel>Items/Services Summary (Use if not adding detailed line items)</FormLabel>
                         <FormControl>
-                          <Textarea placeholder="e.g., Software development services, 5 Widgets" {...field} disabled={isLoading} className="min-h-[60px]"/>
+                          <Textarea placeholder="e.g., Consulting services for Q3, Sale of 10 widgets" {...field} disabled={isLoading} className="min-h-[60px]"/>
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -529,28 +662,29 @@ export function InvoiceForm({ mode, initialInvoiceData }: InvoiceFormProps) {
             </div>
 
 
-            {/* Total Amount Display */}
-            <div className="pt-4 border-t mt-4">
-                <FormLabel>Calculated Total Invoice Amount</FormLabel>
-                <Input 
-                    type="text" 
-                    value={calculatedTotalAmount.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' })} 
-                    readOnly 
-                    disabled 
-                    className="mt-1 bg-muted/50 font-semibold"
-                />
+            {/* Totals Display */}
+            <div className="pt-6 border-t mt-6 space-y-2">
+                <h3 className="text-md font-semibold">Invoice Totals</h3>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                    <span className="text-muted-foreground">Subtotal (Pre-tax):</span>
+                    <span className="text-right font-medium">{totals.subTotal.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' })}</span>
+                    
+                    <span className="text-muted-foreground">Total GST:</span>
+                    <span className="text-right font-medium">{totals.totalGst.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' })}</span>
+                    
+                    <span className="text-foreground font-bold text-base pt-1 border-t mt-1">Grand Total:</span>
+                    <span className="text-right font-bold text-base pt-1 border-t mt-1">{totals.grandTotal.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' })}</span>
+                </div>
             </div>
             
-            <FormField
+            <h3 className="text-lg font-semibold pt-4 border-t mt-4">Terms & Notes</h3>
+             <FormField
               control={form.control}
-              name="status"
+              name="paymentTerms"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Status</FormLabel>
-                  <FormControl>
-                     <Input placeholder="draft" {...field} disabled={isLoading} />
-                     {/* Consider using a Select component here for better UX if more statuses are actively managed by user */}
-                  </FormControl>
+                  <FormLabel>Payment Terms (Optional)</FormLabel>
+                  <FormControl><Textarea placeholder="e.g., Net 30 days, Due upon receipt" {...field} disabled={isLoading} rows={2}/></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -560,9 +694,9 @@ export function InvoiceForm({ mode, initialInvoiceData }: InvoiceFormProps) {
               name="notes"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Notes (Optional)</FormLabel>
+                  <FormLabel>Additional Notes (Optional)</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Any additional notes for the customer..." {...field} disabled={isLoading} />
+                    <Textarea placeholder="Any additional notes for the customer, bank details, etc." {...field} disabled={isLoading} rows={3}/>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -570,9 +704,9 @@ export function InvoiceForm({ mode, initialInvoiceData }: InvoiceFormProps) {
             />
           </CardContent>
           <CardFooter>
-            <Button type="submit" disabled={isLoading || !currentCompanyId}>
+            <Button type="submit" className="w-full sm:w-auto" disabled={isLoading || !currentCompanyId}>
               {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-              {mode === 'create' ? 'Save Invoice as Draft' : 'Update Invoice'}
+              {mode === 'create' ? 'Save Invoice' : 'Update Invoice'}
             </Button>
           </CardFooter>
         </form>
@@ -580,21 +714,3 @@ export function InvoiceForm({ mode, initialInvoiceData }: InvoiceFormProps) {
     </Card>
   );
 }
-
-// Helper hook, if needed elsewhere. For now, direct useMemo is fine.
-// function useCalculatedTotal(lineItems: InvoiceLineItem[] = [], clientLocale: string = 'en-US') {
-//   return useMemo(() => {
-//     if (!lineItems || lineItems.length === 0) return 0;
-//     const total = lineItems.reduce((sum, item) => {
-//       const itemAmount = (item.quantity || 1) * (item.unitPrice || 0);
-//       const itemGst = item.gstRate ? itemAmount * (item.gstRate / 100) : 0;
-//       return sum + itemAmount + itemGst;
-//     }, 0);
-//     return total;
-//   }, [lineItems, clientLocale]);
-// }
-
-// Placeholder for useCalculatedTotal in case it's beneficial
-import { useMemo } from "react";
-
-

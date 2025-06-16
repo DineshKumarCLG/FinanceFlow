@@ -55,11 +55,11 @@ export interface Notification {
 export interface InvoiceLineItem {
   description: string;
   quantity: number;
-  unitPrice: number;
-  amount: number; // quantity * unitPrice
+  unitPrice: number; // Price before tax for one unit
+  amount: number; // Taxable amount for this line item (quantity * unitPrice)
   hsnSacCode?: string;
-  gstRate?: number; // Percentage for this item
-  gstAmount?: number; // Calculated GST for this item
+  gstRate?: number; // GST rate applicable to this item (e.g., 18 for 18%)
+  // gstAmount is typically calculated: amount * (gstRate / 100)
 }
 
 export interface Invoice {
@@ -67,22 +67,28 @@ export interface Invoice {
   invoiceNumber: string;
   invoiceDate: string; // YYYY-MM-DD
   dueDate?: string; // YYYY-MM-DD
+  
   customerName: string;
   customerGstin?: string;
   customerEmail?: string;
-  billingAddress?: string;
-  shippingAddress?: string;
+  billingAddress?: string; // Can be multi-line
+  shippingAddress?: string; // Can be multi-line, if different from billing
+
   lineItems?: InvoiceLineItem[];
   itemsSummary?: string; // Fallback if lineItems are not structured
-  subTotal: number; // Sum of line item amounts before tax
-  totalGstAmount: number;
+
+  subTotal: number; // Sum of all lineItem.amount (taxable values)
+  totalGstAmount: number; // Sum of GST calculated for each line item
   totalAmount: number; // subTotal + totalGstAmount
+  
+  paymentTerms?: string;
   notes?: string;
   status: 'draft' | 'sent' | 'paid' | 'overdue' | 'void';
+  
   companyId: string;
   creatorUserId: string;
   createdAt: Timestamp | { seconds: number, nanoseconds: number };
-  updatedAt?: Timestamp | { seconds: number, nanoseconds: number };
+  updatedAt: Timestamp | { seconds: number, nanoseconds: number };
 }
 
 
@@ -398,36 +404,57 @@ export async function addInvoice(
   }
 
   const invoicePayload: Omit<Invoice, 'id' | 'createdAt' | 'updatedAt'> & { createdAt: Timestamp, updatedAt: Timestamp } = {
-    ...newInvoiceData,
+    invoiceNumber: newInvoiceData.invoiceNumber,
+    invoiceDate: newInvoiceData.invoiceDate,
+    dueDate: newInvoiceData.dueDate,
+    customerName: newInvoiceData.customerName,
+    customerGstin: newInvoiceData.customerGstin,
+    customerEmail: newInvoiceData.customerEmail,
+    billingAddress: newInvoiceData.billingAddress,
+    shippingAddress: newInvoiceData.shippingAddress,
     lineItems: newInvoiceData.lineItems || [],
+    itemsSummary: newInvoiceData.itemsSummary,
+    subTotal: newInvoiceData.subTotal,
+    totalGstAmount: newInvoiceData.totalGstAmount,
+    totalAmount: newInvoiceData.totalAmount,
+    paymentTerms: newInvoiceData.paymentTerms,
+    notes: newInvoiceData.notes,
+    status: newInvoiceData.status || 'draft',
     companyId: companyId,
     creatorUserId: currentUser.uid,
     createdAt: serverTimestamp() as Timestamp,
     updatedAt: serverTimestamp() as Timestamp,
   };
   
-  // Remove dueDate from payload if it's undefined, to prevent Firestore error
-  if (invoicePayload.dueDate === undefined) {
-    delete (invoicePayload as any).dueDate;
-  }
-  if (invoicePayload.itemsSummary === undefined) {
-    delete (invoicePayload as any).itemsSummary;
-  }
-  if (invoicePayload.lineItems === undefined) {
-    delete (invoicePayload as any).lineItems;
-  }
+  // Remove undefined fields from payload to prevent Firestore errors
+  Object.keys(invoicePayload).forEach(key => {
+    if ((invoicePayload as any)[key] === undefined) {
+      delete (invoicePayload as any)[key];
+    }
+  });
 
 
   try {
     const docRef = await addDoc(collection(db, INVOICE_COLLECTION), invoicePayload);
+    // For optimistic response, combine original data with server-generated/normalized fields
     const savedInvoice: Invoice = {
       id: docRef.id,
-      ...newInvoiceData, // Use original data for optimistic response fields
-      lineItems: newInvoiceData.lineItems || [],
+      ...newInvoiceData, // Spread original data
+      lineItems: newInvoiceData.lineItems || [], // Ensure lineItems is array
       companyId: companyId,
       creatorUserId: currentUser.uid,
       createdAt: Timestamp.now(), // Use client-side timestamp for immediate return
       updatedAt: Timestamp.now(),
+      // Ensure all fields from Invoice interface are present, even if undefined from newInvoiceData
+      dueDate: newInvoiceData.dueDate,
+      customerGstin: newInvoiceData.customerGstin,
+      customerEmail: newInvoiceData.customerEmail,
+      billingAddress: newInvoiceData.billingAddress,
+      shippingAddress: newInvoiceData.shippingAddress,
+      itemsSummary: newInvoiceData.itemsSummary,
+      paymentTerms: newInvoiceData.paymentTerms,
+      notes: newInvoiceData.notes,
+      status: newInvoiceData.status || 'draft',
     };
     
     const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
@@ -477,7 +504,6 @@ export async function updateInvoice(
   });
   
   try {
-    // First, verify the invoice belongs to the company (optional, but good practice if rules aren't strict enough)
     const docSnap = await getDoc(invoiceRef);
     if (!docSnap.exists() || docSnap.data().companyId !== companyId) {
         throw new Error("Invoice not found or access denied.");
@@ -485,7 +511,6 @@ export async function updateInvoice(
 
     await updateDoc(invoiceRef, updatePayload);
     
-    // For optimistic response, merge existing data with updates
     const updatedInvoiceData = { ...docSnap.data(), ...invoiceDataToUpdate, id: invoiceId, updatedAt: Timestamp.now() } as Invoice;
 
     const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
@@ -527,9 +552,27 @@ export async function getInvoices(companyId: string): Promise<Invoice[]> {
       const data = docSnap.data();
       invoices.push({
         id: docSnap.id,
-        ...data,
-        lineItems: data.lineItems || [], // Ensure lineItems is at least an empty array
-      } as Invoice); // Type assertion, ensure data matches Invoice structure
+        invoiceNumber: data.invoiceNumber,
+        invoiceDate: data.invoiceDate,
+        dueDate: data.dueDate,
+        customerName: data.customerName,
+        customerGstin: data.customerGstin,
+        customerEmail: data.customerEmail,
+        billingAddress: data.billingAddress,
+        shippingAddress: data.shippingAddress,
+        lineItems: data.lineItems || [],
+        itemsSummary: data.itemsSummary,
+        subTotal: data.subTotal,
+        totalGstAmount: data.totalGstAmount,
+        totalAmount: data.totalAmount,
+        paymentTerms: data.paymentTerms,
+        notes: data.notes,
+        status: data.status || 'draft',
+        companyId: data.companyId,
+        creatorUserId: data.creatorUserId,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+      } as Invoice); 
     });
     return invoices;
   } catch (error) {
@@ -556,16 +599,33 @@ export async function getInvoiceById(companyId: string, invoiceId: string): Prom
 
     if (docSnap.exists()) {
       const data = docSnap.data();
-      // Basic check to ensure the fetched invoice belongs to the current company
       if (data.companyId === companyId) {
         return { 
           id: docSnap.id, 
-          ...data,
-          lineItems: data.lineItems || [], // Ensure lineItems is at least an empty array
+          invoiceNumber: data.invoiceNumber,
+          invoiceDate: data.invoiceDate,
+          dueDate: data.dueDate,
+          customerName: data.customerName,
+          customerGstin: data.customerGstin,
+          customerEmail: data.customerEmail,
+          billingAddress: data.billingAddress,
+          shippingAddress: data.shippingAddress,
+          lineItems: data.lineItems || [],
+          itemsSummary: data.itemsSummary,
+          subTotal: data.subTotal,
+          totalGstAmount: data.totalGstAmount,
+          totalAmount: data.totalAmount,
+          paymentTerms: data.paymentTerms,
+          notes: data.notes,
+          status: data.status || 'draft',
+          companyId: data.companyId,
+          creatorUserId: data.creatorUserId,
+          createdAt: data.createdAt,
+          updatedAt: data.updatedAt,
         } as Invoice;
       } else {
         console.warn(`DataService: Invoice ${invoiceId} does not belong to company ${companyId}.`);
-        return null; // Or throw an error for unauthorized access
+        return null;
       }
     } else {
       console.log(`DataService: No invoice found with ID ${invoiceId} for company ${companyId}.`);
