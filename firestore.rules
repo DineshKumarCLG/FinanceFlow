@@ -1,0 +1,45 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny all access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Journal Entries:
+    // Allow authenticated users to read and write journal entries.
+    // For company-specific access, you'd typically check if the
+    // request.auth.uid is part of the company or if a custom claim matches.
+    // For simplicity, we'll allow any authenticated user for now.
+    match /journalEntries/{entryId} {
+      allow read, write: if request.auth != null;
+      // More granular rules for production might look like:
+      // allow create: if request.auth != null && request.resource.data.creatorUserId == request.auth.uid && request.resource.data.companyId != null;
+      // allow read, update, delete: if request.auth != null && resource.data.creatorUserId == request.auth.uid;
+      // Or, if you have a user_companies collection:
+      // allow read, write: if request.auth != null && exists(/databases/$(database)/documents/user_companies/$(request.auth.uid)_$(resource.data.companyId));
+    }
+
+    // Notifications:
+    // Allow authenticated users to read and write notifications.
+    match /notifications/{notificationId} {
+      allow read, write: if request.auth != null;
+      // Similar granular rules could apply here.
+    }
+
+    // Invoices:
+    // Allow authenticated users to read and write invoices.
+    match /invoices/{invoiceId} {
+      allow read, write: if request.auth != null;
+      // Similar granular rules could apply here.
+    }
+
+    // You might need rules for user profiles if you store them, e.g.,
+    // match /users/{userId} {
+    //   allow read: if request.auth != null;
+    //   allow write: if request.auth != null && request.auth.uid == userId;
+    // }
+  }
+}
