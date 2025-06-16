@@ -16,7 +16,7 @@ interface PrintableInvoiceProps {
 
 export function PrintableInvoice({ invoice }: PrintableInvoiceProps) {
   const [clientLocale, setClientLocale] = useState('en-US');
-  // Updated company details from the provided image
+  // Updated company details
   const companyDetails = {
     name: "FinanceFlow AI Solutions",
     address: "123 Innovation Drive, Tech Park, Bangalore, 560100",
