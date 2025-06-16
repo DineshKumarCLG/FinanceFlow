@@ -13,7 +13,7 @@ import {
   writeBatch,
   doc,
   deleteDoc,
-  getDoc, // Added for getInvoiceById
+  getDoc,
   // updateDoc, // Potentially needed for update invoice
 } from 'firebase/firestore';
 
@@ -58,8 +58,8 @@ export interface InvoiceLineItem {
   unitPrice: number;
   amount: number; // quantity * unitPrice
   hsnSacCode?: string;
-  gstRate?: number; // Percentage
-  gstAmount?: number;
+  gstRate?: number; // Percentage for this item
+  gstAmount?: number; // Calculated GST for this item
 }
 
 export interface Invoice {
@@ -72,8 +72,8 @@ export interface Invoice {
   customerEmail?: string;
   billingAddress?: string;
   shippingAddress?: string;
-  // lineItems: InvoiceLineItem[]; // For future enhancement
-  itemsSummary?: string; // For initial AI extraction if line items are not structured
+  lineItems?: InvoiceLineItem[];
+  itemsSummary?: string; // Fallback if lineItems are not structured
   subTotal: number; // Sum of line item amounts before tax
   totalGstAmount: number;
   totalAmount: number; // subTotal + totalGstAmount
@@ -394,7 +394,7 @@ export async function addInvoice(
     throw new Error("Company ID is required to add an invoice.");
   }
 
-  const { dueDate, ...restOfNewInvoiceData } = newInvoiceData;
+  const { dueDate, lineItems, itemsSummary, ...restOfNewInvoiceData } = newInvoiceData;
 
   const invoicePayload: any = {
     ...restOfNewInvoiceData,
@@ -407,12 +407,20 @@ export async function addInvoice(
   if (dueDate !== undefined) {
     invoicePayload.dueDate = dueDate;
   }
+  if (lineItems !== undefined) {
+    invoicePayload.lineItems = lineItems;
+  }
+  if (itemsSummary !== undefined) {
+    invoicePayload.itemsSummary = itemsSummary;
+  }
+
 
   try {
     const docRef = await addDoc(collection(db, INVOICE_COLLECTION), invoicePayload);
     const savedInvoice: Invoice = {
       id: docRef.id,
       ...invoicePayload,
+      lineItems: lineItems || [], // Ensure lineItems is at least an empty array if undefined
       createdAt: Timestamp.now(), // Use client-side timestamp for immediate return
       updatedAt: Timestamp.now(),
     };
@@ -455,6 +463,7 @@ export async function getInvoices(companyId: string): Promise<Invoice[]> {
       invoices.push({
         id: docSnap.id,
         ...data,
+        lineItems: data.lineItems || [], // Ensure lineItems is at least an empty array
       } as Invoice); // Type assertion, ensure data matches Invoice structure
     });
     return invoices;
@@ -484,7 +493,11 @@ export async function getInvoiceById(companyId: string, invoiceId: string): Prom
       const data = docSnap.data();
       // Basic check to ensure the fetched invoice belongs to the current company
       if (data.companyId === companyId) {
-        return { id: docSnap.id, ...data } as Invoice;
+        return { 
+          id: docSnap.id, 
+          ...data,
+          lineItems: data.lineItems || [], // Ensure lineItems is at least an empty array
+        } as Invoice;
       } else {
         console.warn(`DataService: Invoice ${invoiceId} does not belong to company ${companyId}.`);
         return null; // Or throw an error for unauthorized access

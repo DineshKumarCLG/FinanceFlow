@@ -21,24 +21,32 @@ import { Loader2, Wand2, Save, FileText, AlertCircle, CalendarIcon as Calendar }
 import { generateInvoiceDetails, type GenerateInvoiceDetailsOutput } from '@/ai/flows/generate-invoice-details';
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { addInvoice, type NewInvoiceData } from "@/lib/data-service";
+import { addInvoice, type NewInvoiceData, type InvoiceLineItem } from "@/lib/data-service";
 import { useAuth } from "@/contexts/AuthContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { Calendar as CalendarComponent } from "@/components/ui/calendar"; // Renamed to avoid conflict
+import { Calendar as CalendarComponent } from "@/components/ui/calendar"; 
 import { useRouter } from 'next/navigation';
 
+const lineItemFormSchema = z.object({
+  description: z.string().min(1, "Item description is required"),
+  quantity: z.coerce.number().min(0.01, "Quantity must be > 0").optional().default(1),
+  unitPrice: z.coerce.number().min(0, "Unit price cannot be negative").optional().default(0),
+  amount: z.coerce.number().min(0, "Amount cannot be negative"),
+  hsnSacCode: z.string().optional(),
+  gstRate: z.coerce.number().optional(),
+});
 
 const invoiceFormSchema = z.object({
-  invoiceDescription: z.string().optional(), // For AI parsing
+  invoiceDescription: z.string().optional(), 
   invoiceNumber: z.string().min(1, { message: "Invoice number is required." }),
   customerName: z.string().min(1, { message: "Customer name is required." }),
   totalAmount: z.coerce.number().min(0.01, { message: "Total amount must be greater than 0." }),
   invoiceDate: z.date({ required_error: "Invoice date is required."}),
   dueDate: z.date().optional(),
   itemsSummary: z.string().optional(),
-  // Future: customerGstin, customerEmail, billingAddress, shippingAddress, notes
+  lineItems: z.array(lineItemFormSchema).optional(),
 });
 
 type InvoiceFormValues = z.infer<typeof invoiceFormSchema>;
@@ -67,6 +75,7 @@ export function InvoiceForm() {
       totalAmount: 0,
       invoiceDate: new Date(),
       itemsSummary: "",
+      lineItems: [],
     },
   });
 
@@ -88,15 +97,24 @@ export function InvoiceForm() {
       
       if (result.customerName) form.setValue("customerName", result.customerName, { shouldValidate: true });
       if (result.totalAmount) form.setValue("totalAmount", result.totalAmount, { shouldValidate: true });
-      if (result.itemsSummary) form.setValue("itemsSummary", result.itemsSummary);
+      
+      if (result.lineItems && result.lineItems.length > 0) {
+        form.setValue("lineItems", result.lineItems as InvoiceLineItem[] , { shouldValidate: true });
+        // If line items are extracted, itemsSummary might become redundant or a high-level title
+        // For now, we'll clear itemsSummary if line items are present to avoid confusion
+        form.setValue("itemsSummary", ""); 
+      } else if (result.itemsSummary) {
+        form.setValue("itemsSummary", result.itemsSummary);
+        form.setValue("lineItems", []); // Ensure lineItems is cleared if only summary is present
+      }
       
       if (result.invoiceDate) {
         try {
-            const parsedDate = new Date(result.invoiceDate + "T00:00:00"); // Ensure local timezone interpretation
+            const parsedDate = new Date(result.invoiceDate + "T00:00:00"); 
             if (!isNaN(parsedDate.getTime())) {
                  form.setValue("invoiceDate", parsedDate, { shouldValidate: true });
             } else {
-                form.setValue("invoiceDate", new Date(), { shouldValidate: true }); // Default to today if parsing failed
+                form.setValue("invoiceDate", new Date(), { shouldValidate: true }); 
             }
         } catch (e) {
             form.setValue("invoiceDate", new Date(), { shouldValidate: true });
@@ -135,19 +153,43 @@ export function InvoiceForm() {
       return;
     }
     setIsSaving(true);
+
+    let subTotal = 0;
+    let totalGst = 0;
+    let finalTotalAmount = 0;
+
+    const processedLineItems = values.lineItems?.map(item => {
+      const itemAmount = (item.quantity || 1) * (item.unitPrice || 0);
+      const itemGstAmount = item.gstRate ? itemAmount * (item.gstRate / 100) : 0;
+      subTotal += itemAmount;
+      totalGst += itemGstAmount;
+      return { ...item, amount: itemAmount, gstAmount: itemGstAmount };
+    });
+
+    if (processedLineItems && processedLineItems.length > 0) {
+      finalTotalAmount = subTotal + totalGst;
+    } else {
+      // If no line items, use the top-level totalAmount, assume it's inclusive of tax for now
+      // Or, if itemsSummary is used, subTotal might be derived from totalAmount if GST isn't specified
+      subTotal = values.totalAmount; // Simplification: treat totalAmount as subTotal if no lines
+      totalGst = 0; // Cannot determine GST without more info or line items
+      finalTotalAmount = values.totalAmount;
+    }
+
+
     try {
       const newInvoice: NewInvoiceData = {
         invoiceNumber: values.invoiceNumber,
         customerName: values.customerName,
         invoiceDate: format(values.invoiceDate, "yyyy-MM-dd"),
         dueDate: values.dueDate ? format(values.dueDate, "yyyy-MM-dd") : undefined,
-        itemsSummary: values.itemsSummary,
-        // For now, subTotal and totalGstAmount are simplified. This will need proper calculation with line items.
-        subTotal: values.totalAmount, // Assuming totalAmount is pre-tax for now
-        totalGstAmount: 0, // Placeholder
-        totalAmount: values.totalAmount,
+        lineItems: processedLineItems,
+        itemsSummary: (processedLineItems && processedLineItems.length > 0) ? undefined : values.itemsSummary,
+        subTotal: subTotal, 
+        totalGstAmount: totalGst, 
+        totalAmount: finalTotalAmount,
         status: 'draft',
-        notes: "", // Placeholder
+        notes: "", 
       };
       await addInvoice(currentCompanyId, newInvoice);
       toast({ title: "Invoice Saved!", description: `Invoice #${values.invoiceNumber} has been saved as a draft.` });
@@ -185,7 +227,7 @@ export function InvoiceForm() {
     <Card className="w-full shadow-xl">
       <CardHeader>
         <CardTitle className="text-2xl">New Invoice ({currentCompanyId})</CardTitle>
-        <CardDescription>Describe the invoice for AI to parse, or fill in the details manually.</CardDescription>
+        <CardDescription>Describe the invoice for AI to parse, or fill in the details manually. AI can now attempt to extract line items.</CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -198,7 +240,7 @@ export function InvoiceForm() {
                   <FormLabel>Describe Invoice for AI (Optional)</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="e.g., 'Invoice Tech Solutions Inc. for 20 hours of software development at 75 USD/hr, due in 15 days. Project: Alpha Site Rebuild.'"
+                      placeholder="e.g., 'Invoice Tech Solutions Inc. for 20 hours of software development at 75 USD/hr and 2 server licenses at 100 USD each, due in 15 days. Project: Alpha Site Rebuild.'"
                       className="min-h-[80px] resize-none"
                       {...field}
                       disabled={isLoading}
@@ -315,25 +357,49 @@ export function InvoiceForm() {
                 name="totalAmount"
                 render={({ field }) => (
                   <FormItem className="md:col-span-2">
-                    <FormLabel>Total Amount (Pre-Tax)</FormLabel>
-                    <FormControl><Input type="number" placeholder="0.00" {...field} disabled={isLoading} /></FormControl>
+                    <FormLabel>Total Amount (Calculated if line items present, otherwise pre-tax)</FormLabel>
+                    <FormControl><Input type="number" placeholder="0.00" {...field} disabled={isLoading || (form.getValues("lineItems") && form.getValues("lineItems")!.length > 0) } /></FormControl>
                     <FormMessage />
+                    { (form.getValues("lineItems") && form.getValues("lineItems")!.length > 0) && <p className="text-xs text-muted-foreground">Calculated from line items.</p>}
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="itemsSummary"
-                render={({ field }) => (
-                  <FormItem className="md:col-span-2">
-                    <FormLabel>Items/Services Summary (from AI or manual)</FormLabel>
-                    <FormControl>
-                      <Textarea placeholder="e.g., Software development services, 5 Widgets" {...field} disabled={isLoading} className="min-h-[60px]"/>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              
+              {/* Display Line Items if AI extracted them (read-only for now) */}
+              {form.watch("lineItems") && form.watch("lineItems")!.length > 0 && (
+                <div className="md:col-span-2 space-y-2">
+                  <FormLabel>Line Items (Extracted by AI)</FormLabel>
+                  <Card className="p-2 bg-muted/50">
+                    <CardContent className="p-0 space-y-1 text-xs">
+                      {form.watch("lineItems")!.map((item, index) => (
+                        <div key={index} className="p-1.5 border-b last:border-b-0">
+                          <p><strong>{item.description}</strong></p>
+                          <p>Qty: {item.quantity || 1}, Rate: {item.unitPrice || item.amount}, Amount: {item.amount}</p>
+                          {item.hsnSacCode && <p>HSN/SAC: {item.hsnSacCode}</p>}
+                          {item.gstRate && <p>GST: {item.gstRate}%</p>}
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* Fallback to Items Summary if no line items or AI couldn't extract them */}
+              {!(form.watch("lineItems") && form.watch("lineItems")!.length > 0) && (
+                 <FormField
+                    control={form.control}
+                    name="itemsSummary"
+                    render={({ field }) => (
+                      <FormItem className="md:col-span-2">
+                        <FormLabel>Items/Services Summary (if no line items)</FormLabel>
+                        <FormControl>
+                          <Textarea placeholder="e.g., Software development services, 5 Widgets" {...field} disabled={isLoading} className="min-h-[60px]"/>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+              )}
             </div>
           </CardContent>
           <CardFooter>
