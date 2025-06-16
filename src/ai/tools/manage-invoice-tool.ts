@@ -6,7 +6,7 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod';
 import { generateInvoiceDetails, type GenerateInvoiceDetailsOutput, type GenerateInvoiceDetailsInput } from '@/ai/flows/generate-invoice-details';
 import { addInvoice, updateInvoice, type NewInvoiceData, type UpdateInvoiceData, type InvoiceLineItem as DataServiceLineItem, getInvoiceById } from '@/lib/data-service';
 import { format, parseISO } from 'date-fns';
@@ -38,7 +38,7 @@ const InvoiceDetailsForToolSchema = z.object({
 const ManageInvoiceInputSchema = z.object({
   action: z.enum(['create', 'update']).describe("Whether to create a new invoice or update an existing one."),
   companyId: z.string().describe("The ID of the company for which the invoice is being managed."),
-  creatorUserId: z.string().describe("The ID of the user performing the action."), // Added creatorUserId
+  creatorUserId: z.string().describe("The ID of the user performing the action."),
   invoiceId: z.string().optional().describe("The ID of the invoice to update (required if action is 'update')."),
   textDescription: z.string().optional().describe("Full natural language description of the invoice provided by the user. The tool will parse this if direct details are not sufficient."),
   invoiceDetails: InvoiceDetailsForToolSchema.optional().describe("Pre-structured details for the invoice. If textDescription is also provided, this can be used as a base and textDescription can augment it."),
@@ -63,14 +63,21 @@ const mapAiOutputToInvoiceData = (
   const lineItems: DataServiceLineItem[] = (aiOutput.lineItems || []).map(item => {
      const quantity = item.quantity || 1;
      const unitPrice = item.unitPrice || 0;
-     return {
+     
+     const lineItemForDb: DataServiceLineItem = {
         description: item.description,
         quantity: quantity,
         unitPrice: unitPrice,
         amount: parseFloat((quantity * unitPrice).toFixed(2)), // Ensure this is calculated
-        hsnSacCode: item.hsnSacCode,
-        gstRate: item.gstRate,
      };
+
+     if (item.hsnSacCode !== undefined && item.hsnSacCode !== null && item.hsnSacCode.trim() !== "") {
+        lineItemForDb.hsnSacCode = item.hsnSacCode;
+     }
+     if (item.gstRate !== undefined && item.gstRate !== null) {
+        lineItemForDb.gstRate = Number(item.gstRate);
+     }
+     return lineItemForDb;
   });
 
   let subTotal = 0;
@@ -103,28 +110,30 @@ const mapAiOutputToInvoiceData = (
      try {
         parseISO(finalDueDate);
      } catch (e) {
-        finalDueDate = undefined;
+        finalDueDate = undefined; // Set to undefined if invalid
      }
+  } else if (finalDueDate === null || finalDueDate === "") {
+     finalDueDate = undefined; // Ensure null or empty string from AI becomes undefined
   }
 
 
   return {
-    invoiceNumber: aiOutput.invoiceNumber || currentInvoiceNumber || `INV-${Date.now()}`, // Generate a basic one if missing
+    invoiceNumber: aiOutput.invoiceNumber || currentInvoiceNumber || `INV-${Date.now()}`, 
     customerName: aiOutput.customerName || 'N/A',
-    customerEmail: aiOutput.customerEmail,
-    billingAddress: aiOutput.billingAddress,
-    shippingAddress: aiOutput.shippingAddress,
-    customerGstin: aiOutput.customerGstin,
+    customerEmail: aiOutput.customerEmail || undefined,
+    billingAddress: aiOutput.billingAddress || undefined,
+    shippingAddress: aiOutput.shippingAddress || undefined,
+    customerGstin: aiOutput.customerGstin || undefined,
     invoiceDate: finalInvoiceDate,
-    dueDate: finalDueDate,
-    paymentTerms: aiOutput.paymentTerms,
+    dueDate: finalDueDate, // Will be undefined if invalid or not provided
+    paymentTerms: aiOutput.paymentTerms || undefined,
     lineItems: lineItems.length > 0 ? lineItems : undefined,
     itemsSummary: lineItems.length === 0 ? (aiOutput.itemsSummary || undefined) : undefined,
     subTotal,
     totalGstAmount,
     totalAmount,
     status: aiOutput.status || 'draft',
-    notes: aiOutput.notes,
+    notes: aiOutput.notes || undefined,
   };
 };
 
@@ -142,7 +151,7 @@ export const manageInvoiceTool = ai.defineTool(
     if (!input.companyId) {
       return { success: false, message: "Error: Company ID is required to manage an invoice." };
     }
-    if (!input.creatorUserId) { // Check for creatorUserId
+    if (!input.creatorUserId) {
       return { success: false, message: "Error: User ID is required to manage an invoice." };
     }
 
@@ -153,12 +162,14 @@ export const manageInvoiceTool = ai.defineTool(
         structuredDetails = await generateInvoiceDetails(genInput);
 
         if (input.invoiceDetails) {
+          // Merge: explicit invoiceDetails can override or supplement AI parsed details.
+          // For lineItems, if explicit details are provided, they take precedence.
           structuredDetails = {
-            ...structuredDetails, 
-            ...input.invoiceDetails, 
+            ...structuredDetails, // Start with AI parsed
+            ...input.invoiceDetails, // Override with explicit details
             lineItems: input.invoiceDetails.lineItems && input.invoiceDetails.lineItems.length > 0
-                       ? input.invoiceDetails.lineItems
-                       : structuredDetails.lineItems,
+                       ? input.invoiceDetails.lineItems // If explicit line items exist, use them
+                       : structuredDetails.lineItems, // Otherwise, use AI parsed line items
           };
         }
       } catch (e: any) {
@@ -166,11 +177,11 @@ export const manageInvoiceTool = ai.defineTool(
         return { success: false, message: `Failed to parse invoice description: ${e.message}` };
       }
     } else if (input.invoiceDetails) {
-      structuredDetails = input.invoiceDetails as GenerateInvoiceDetailsOutput;
+      structuredDetails = input.invoiceDetails as GenerateInvoiceDetailsOutput; // Cast as it fits the shape
+       // Ensure invoiceDate has a default if not provided explicitly (and no text description was given)
        if (!structuredDetails.invoiceDate) {
           structuredDetails.invoiceDate = format(new Date(), "yyyy-MM-dd");
        }
-
     } else {
       return { success: false, message: "Either textDescription or structured invoiceDetails must be provided." };
     }
@@ -179,11 +190,11 @@ export const manageInvoiceTool = ai.defineTool(
         return { success: false, message: "Insufficient details provided to create an invoice. Customer name and items are typically required."};
     }
 
+
     // 2. Perform action
     try {
       if (input.action === 'create') {
         const newInvoiceData = mapAiOutputToInvoiceData(structuredDetails);
-        // Pass companyId and creatorUserId to addInvoice
         const savedInvoice = await addInvoice(input.companyId, input.creatorUserId, newInvoiceData);
         return {
           success: true,
@@ -199,7 +210,6 @@ export const manageInvoiceTool = ai.defineTool(
         let existingInvoiceNumber = existingInvoice?.invoiceNumber;
 
         const updatedInvoiceData = mapAiOutputToInvoiceData(structuredDetails, existingInvoiceNumber);
-        // Pass companyId, invoiceId, creatorUserId (though updateInvoice might not use creatorUserId for auth, but for consistency)
         const savedInvoice = await updateInvoice(input.companyId, input.invoiceId, input.creatorUserId, updatedInvoiceData);
         return {
           success: true,
@@ -211,7 +221,13 @@ export const manageInvoiceTool = ai.defineTool(
       return { success: false, message: "Invalid action specified." };
     } catch (e: any) {
       console.error(`Error during invoice ${input.action}:`, e);
+      // Try to provide a more specific error message if it's a known Firebase error for undefined values
+      if (e.message && e.message.toLowerCase().includes("unsupported field value") && e.message.toLowerCase().includes("undefined")) {
+        return { success: false, message: `Failed to ${input.action} invoice: One or more fields had an invalid (undefined) value. This can happen if the AI couldn't extract all necessary details or if some optional fields were not correctly handled. Please check the invoice details or try rephrasing your request.` };
+      }
       return { success: false, message: `Failed to ${input.action} invoice: ${e.message}` };
     }
   }
 );
+
+    
