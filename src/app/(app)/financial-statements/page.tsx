@@ -13,7 +13,7 @@ export default function FinancialStatementsPage() {
       description: "View your company's assets, liabilities, and equity at a specific point in time. Understand your financial position.",
       href: "/balance-sheet",
       icon: Landmark,
-      imageUrl: "/images/balance_sheet_illustration.png", // Specific image for Balance Sheet
+      imageUrl: "/images/balance_sheet_illustration.png", // Corrected path relative to public
     },
     {
       title: "Trial Balance",
@@ -21,7 +21,7 @@ export default function FinancialStatementsPage() {
       href: "/trial-balance",
       icon: ListChecks,
       imageHint: "checklist report",
-      placeholderUrl: "https://placehold.co/600x338/E8F5E9/4CAF50.png",
+      imageUrl: "https://placehold.co/600x338/E8F5E9/4CAF50.png", // Monochromatic placeholder
     },
     {
       title: "Profit & Loss Statement",
@@ -29,7 +29,7 @@ export default function FinancialStatementsPage() {
       href: "/dashboard?tab=reports#reports",
       icon: PieChart,
       imageHint: "chart graph",
-      placeholderUrl: "https://placehold.co/600x338/E8F5E9/4CAF50.png",
+      imageUrl: "https://placehold.co/600x338/E8F5E9/4CAF50.png", // Monochromatic placeholder
     },
   ];
 
@@ -59,15 +59,18 @@ export default function FinancialStatementsPage() {
                     layout="fill"
                     objectFit="cover"
                     className="rounded-md"
+                    // Add data-ai-hint only if imageUrl is a placeholder and imageHint exists
+                    {...(statement.imageHint && statement.imageUrl.includes('placehold.co') ? { 'data-ai-hint': statement.imageHint } : {})}
                   />
                 ) : (
+                  // Fallback for safety, though all items should have imageUrl
                   <Image
-                    src={statement.placeholderUrl || "https://placehold.co/600x338.png"}
+                    src="https://placehold.co/600x338/E8F5E9/4CAF50.png?text=Image+Not+Available"
                     alt={`${statement.title} placeholder`}
                     layout="fill"
                     objectFit="cover"
                     className="rounded-md"
-                    data-ai-hint={statement.imageHint}
+                    data-ai-hint={statement.imageHint || "financial document generic"}
                   />
                 )}
               </div>
