@@ -55,7 +55,7 @@ const prompt = ai.definePrompt({
 
   Here's the conversation history:
   {{#each conversationHistory}}
-    {{#if (eq role "user")}}User: {{else if (eq role "assistant")}}Assistant: {{else if (eq role "tool")}}Tool Response ({{tool_name}}): {{/if}}{{{content}}}
+    {{#if isUser}}User: {{else if isAssistant}}Assistant: {{else if isTool}}Tool Response: {{/if}}{{{content}}}
   {{/each}}
 
   {{#if uploadedFiles}}
@@ -81,10 +81,9 @@ const chatWithAiAssistantFlow = ai.defineFlow(
     const currentHistory = (input.conversationHistory || []).map(msg => ({
       role: msg.role,
       content: msg.content,
-      // Add a helper for Handlebars conditional, though direct `eq` helper is better
-      // role_is_user: msg.role === 'user', 
-      // role_is_assistant: msg.role === 'assistant',
-      // role_is_tool: msg.role === 'tool',
+      isUser: msg.role === 'user',
+      isAssistant: msg.role === 'assistant',
+      isTool: msg.role === 'tool',
     }));
 
     // Prepare data for the prompt, including companyId
@@ -126,7 +125,7 @@ const chatWithAiAssistantFlow = ai.defineFlow(
           }
 
           // Add tool response back to history and re-prompt (or construct response)
-          currentHistory.push({ role: 'tool', content: JSON.stringify(toolOutput) });
+          currentHistory.push({ role: 'tool', content: JSON.stringify(toolOutput), isUser: false, isAssistant: false, isTool: true });
 
           // Re-prompt the LLM with the tool's output
           const followUpPromptData = {
@@ -163,3 +162,4 @@ const chatWithAiAssistantFlow = ai.defineFlow(
     return { response: finalContent };
   }
 );
+
