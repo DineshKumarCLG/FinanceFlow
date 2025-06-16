@@ -68,13 +68,15 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
     let processedInvoiceDate = output.invoiceDate;
     const today = new Date().toISOString().split('T')[0];
 
-    // Date post-processing similar to parseAccountingEntry
+    // This regex is used to check if any date-like pattern is mentioned in the input.
+    // If not, and the AI returns a placeholder or unusual date, we default to today.
     const dateMentionRegex = new RegExp(
       '\\b(?:invoice dated |dated |on )?(\\d{1,2}(?:st|nd|rd|th)?(?: of)? (?:january|february|march|april|may|june|july|august|september|october|november|december)|' +
       'jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.? (?:\\d{1,2}(?:st|nd|rd|th)?)?|' +
       '\\d{4}-\\d{2}-\\d{2}|' +
-      '\\d{1,2}/\\d{1,2}/\\d{2,4}' +
-      ')\\b', 'i'
+      '\\d{1,2}/\\d{1,2}/\\d{2,4}' + // Corrected: Removed the erroneous closing parenthesis from the end of this line
+      '\\b', // The word boundary should be the end of the pattern string here.
+      'i'
     );
     const noInvoiceDateExplicitlyMentioned = !dateMentionRegex.test(input.description.toLowerCase());
 
@@ -123,3 +125,4 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
     return finalOutput;
   }
 );
+
