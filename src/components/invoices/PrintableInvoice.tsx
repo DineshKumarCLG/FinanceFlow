@@ -246,7 +246,13 @@ export function PrintableInvoice({ invoice, companyDetails }: PrintableInvoicePr
              }
            </div>
         </div>
+        <div className="mt-8 text-center">
+          <p className="inline-block px-3 py-1 bg-primary text-primary-foreground text-xs rounded-md shadow">
+            Powered by FinanceFlow AI
+          </p>
+        </div>
       </footer>
     </div>
   );
 }
+
