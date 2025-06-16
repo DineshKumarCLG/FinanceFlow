@@ -33,7 +33,7 @@ function SidebarContentLayout() {
         <AppLogo 
           showText={false} 
           className="w-full" 
-          iconClassName="w-full h-10 object-contain" 
+          iconClassName="w-full h-auto object-contain" 
         />
       </SidebarHeader>
       <SidebarContent className="p-2 pr-0"> {/* Adjust padding for scrollbar */}
