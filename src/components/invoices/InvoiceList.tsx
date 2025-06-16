@@ -119,8 +119,8 @@ export function InvoiceList({ invoices = [], companyId }: InvoiceListProps) {
                         <Button variant="ghost" size="icon" className="h-7 w-7" title="View Invoice" asChild>
                            <Link href={`/invoices/${invoice.id}/view`}> <Eye className="h-4 w-4" /> </Link>
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit Invoice (Not implemented)" asChild>
-                          <span className="cursor-not-allowed"><Edit3 className="h-4 w-4 opacity-50" /></span>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit Invoice" asChild>
+                           <Link href={`/invoices/${invoice.id}/edit`}> <Edit3 className="h-4 w-4" /> </Link>
                         </Button>
                         {/* Delete functionality can be added later
                         <Button
@@ -146,4 +146,3 @@ export function InvoiceList({ invoices = [], companyId }: InvoiceListProps) {
     </Card>
   );
 }
-

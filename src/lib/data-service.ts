@@ -14,7 +14,7 @@ import {
   doc,
   deleteDoc,
   getDoc,
-  // updateDoc, // Potentially needed for update invoice
+  updateDoc, 
 } from 'firebase/firestore';
 
 export interface JournalEntry {
@@ -45,7 +45,7 @@ export interface JournalEntry {
 export interface Notification {
   id: string;
   message: string;
-  type: 'new_entry' | 'user_joined' | 'document_upload' | 'invoice_created';
+  type: 'new_entry' | 'user_joined' | 'document_upload' | 'invoice_created' | 'invoice_updated';
   timestamp: Timestamp | { seconds: number, nanoseconds: number };
   userId?: string;
   relatedId?: string;
@@ -381,6 +381,9 @@ export async function deleteJournalEntry(companyId: string, entryId: string): Pr
 
 // Base type for adding new Invoices, excluding server-generated fields
 export type NewInvoiceData = Omit<Invoice, 'id' | 'companyId' | 'creatorUserId' | 'createdAt' | 'updatedAt'>;
+// Type for updating existing invoices, excluding server-generated/immutable fields
+export type UpdateInvoiceData = Partial<Omit<Invoice, 'id' | 'companyId' | 'creatorUserId' | 'createdAt'>>;
+
 
 export async function addInvoice(
   companyId: string,
@@ -394,24 +397,24 @@ export async function addInvoice(
     throw new Error("Company ID is required to add an invoice.");
   }
 
-  const { dueDate, lineItems, itemsSummary, ...restOfNewInvoiceData } = newInvoiceData;
-
-  const invoicePayload: any = {
-    ...restOfNewInvoiceData,
+  const invoicePayload: Omit<Invoice, 'id' | 'createdAt' | 'updatedAt'> & { createdAt: Timestamp, updatedAt: Timestamp } = {
+    ...newInvoiceData,
+    lineItems: newInvoiceData.lineItems || [],
     companyId: companyId,
     creatorUserId: currentUser.uid,
     createdAt: serverTimestamp() as Timestamp,
     updatedAt: serverTimestamp() as Timestamp,
   };
-
-  if (dueDate !== undefined) {
-    invoicePayload.dueDate = dueDate;
+  
+  // Remove dueDate from payload if it's undefined, to prevent Firestore error
+  if (invoicePayload.dueDate === undefined) {
+    delete (invoicePayload as any).dueDate;
   }
-  if (lineItems !== undefined) {
-    invoicePayload.lineItems = lineItems;
+  if (invoicePayload.itemsSummary === undefined) {
+    delete (invoicePayload as any).itemsSummary;
   }
-  if (itemsSummary !== undefined) {
-    invoicePayload.itemsSummary = itemsSummary;
+  if (invoicePayload.lineItems === undefined) {
+    delete (invoicePayload as any).lineItems;
   }
 
 
@@ -419,8 +422,10 @@ export async function addInvoice(
     const docRef = await addDoc(collection(db, INVOICE_COLLECTION), invoicePayload);
     const savedInvoice: Invoice = {
       id: docRef.id,
-      ...invoicePayload,
-      lineItems: lineItems || [], // Ensure lineItems is at least an empty array if undefined
+      ...newInvoiceData, // Use original data for optimistic response fields
+      lineItems: newInvoiceData.lineItems || [],
+      companyId: companyId,
+      creatorUserId: currentUser.uid,
       createdAt: Timestamp.now(), // Use client-side timestamp for immediate return
       updatedAt: Timestamp.now(),
     };
@@ -440,6 +445,66 @@ export async function addInvoice(
     throw error;
   }
 }
+
+export async function updateInvoice(
+  companyId: string,
+  invoiceId: string,
+  invoiceDataToUpdate: UpdateInvoiceData
+): Promise<Invoice> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error("User not authenticated. Cannot update invoice.");
+  }
+  if (!companyId) {
+    throw new Error("Company ID is required to update an invoice.");
+  }
+  if (!invoiceId) {
+    throw new Error("Invoice ID is required to update an invoice.");
+  }
+
+  const invoiceRef = doc(db, INVOICE_COLLECTION, invoiceId);
+  
+  const updatePayload: any = {
+    ...invoiceDataToUpdate,
+    updatedAt: serverTimestamp() as Timestamp,
+  };
+
+  // Remove undefined fields from payload to prevent Firestore errors
+  Object.keys(updatePayload).forEach(key => {
+    if (updatePayload[key] === undefined) {
+      delete updatePayload[key];
+    }
+  });
+  
+  try {
+    // First, verify the invoice belongs to the company (optional, but good practice if rules aren't strict enough)
+    const docSnap = await getDoc(invoiceRef);
+    if (!docSnap.exists() || docSnap.data().companyId !== companyId) {
+        throw new Error("Invoice not found or access denied.");
+    }
+
+    await updateDoc(invoiceRef, updatePayload);
+    
+    // For optimistic response, merge existing data with updates
+    const updatedInvoiceData = { ...docSnap.data(), ...invoiceDataToUpdate, id: invoiceId, updatedAt: Timestamp.now() } as Invoice;
+
+    const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
+    addNotification(
+      `${userName} updated invoice #${updatedInvoiceData.invoiceNumber}.`,
+      'invoice_updated',
+      companyId,
+      currentUser.uid,
+      invoiceId
+    ).catch(err => console.error("DataService: Failed to add notification for invoice update:", err));
+    
+    return updatedInvoiceData;
+
+  } catch (error) {
+    console.error(`DataService: Error updating invoice ${invoiceId} for company '${companyId}' (User: ${currentUser.uid}):`, error);
+    throw error;
+  }
+}
+
 
 export async function getInvoices(companyId: string): Promise<Invoice[]> {
   const currentUser = auth.currentUser;

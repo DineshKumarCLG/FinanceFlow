@@ -2,7 +2,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,11 +17,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useState, useEffect } from "react";
-import { Loader2, Wand2, Save, FileText, AlertCircle, CalendarIcon as Calendar } from "lucide-react";
+import { Loader2, Wand2, Save, FileText, AlertCircle, CalendarIcon as Calendar, Edit, PlusCircle, Trash2 } from "lucide-react";
 import { generateInvoiceDetails, type GenerateInvoiceDetailsOutput } from '@/ai/flows/generate-invoice-details';
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { addInvoice, type NewInvoiceData, type InvoiceLineItem } from "@/lib/data-service";
+import { addInvoice, updateInvoice, type NewInvoiceData, type UpdateInvoiceData, type InvoiceLineItem, type Invoice } from "@/lib/data-service";
 import { useAuth } from "@/contexts/AuthContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -33,7 +33,7 @@ const lineItemFormSchema = z.object({
   description: z.string().min(1, "Item description is required"),
   quantity: z.coerce.number().min(0.01, "Quantity must be > 0").optional().default(1),
   unitPrice: z.coerce.number().min(0, "Unit price cannot be negative").optional().default(0),
-  amount: z.coerce.number().min(0, "Amount cannot be negative"),
+  amount: z.coerce.number().min(0, "Amount cannot be negative").optional(), // Made optional, will calculate
   hsnSacCode: z.string().optional(),
   gstRate: z.coerce.number().optional(),
 });
@@ -42,16 +42,23 @@ const invoiceFormSchema = z.object({
   invoiceDescription: z.string().optional(), 
   invoiceNumber: z.string().min(1, { message: "Invoice number is required." }),
   customerName: z.string().min(1, { message: "Customer name is required." }),
-  totalAmount: z.coerce.number().min(0.01, { message: "Total amount must be greater than 0." }),
+  // totalAmount field is removed as it will be derived from line items or itemsSummary.
   invoiceDate: z.date({ required_error: "Invoice date is required."}),
   dueDate: z.date().optional(),
   itemsSummary: z.string().optional(),
   lineItems: z.array(lineItemFormSchema).optional(),
+  status: z.enum(['draft', 'sent', 'paid', 'overdue', 'void']).default('draft'), // Added status
+  notes: z.string().optional(),
 });
 
 type InvoiceFormValues = z.infer<typeof invoiceFormSchema>;
 
-export function InvoiceForm() {
+interface InvoiceFormProps {
+  mode: 'create' | 'edit';
+  initialInvoiceData?: Invoice | null; // For edit mode
+}
+
+export function InvoiceForm({ mode, initialInvoiceData }: InvoiceFormProps) {
   const { currentCompanyId } = useAuth();
   const [isParsing, setIsParsing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -72,12 +79,57 @@ export function InvoiceForm() {
       invoiceDescription: "",
       invoiceNumber: "",
       customerName: "",
-      totalAmount: 0,
       invoiceDate: new Date(),
       itemsSummary: "",
       lineItems: [],
+      status: 'draft',
+      notes: "",
     },
   });
+
+  const { fields, append, remove, update } = useFieldArray({
+    control: form.control,
+    name: "lineItems",
+  });
+
+  // Populate form if in edit mode
+  useEffect(() => {
+    if (mode === 'edit' && initialInvoiceData) {
+      form.reset({
+        invoiceDescription: initialInvoiceData.itemsSummary || initialInvoiceData.lineItems?.map(li => `${li.description} (Qty: ${li.quantity}, Rate: ${li.unitPrice})`).join('\n') || "",
+        invoiceNumber: initialInvoiceData.invoiceNumber,
+        customerName: initialInvoiceData.customerName,
+        invoiceDate: new Date(initialInvoiceData.invoiceDate + 'T00:00:00'), // Ensure proper date parsing
+        dueDate: initialInvoiceData.dueDate ? new Date(initialInvoiceData.dueDate + 'T00:00:00') : undefined,
+        itemsSummary: initialInvoiceData.itemsSummary,
+        lineItems: initialInvoiceData.lineItems?.map(item => ({
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            amount: item.amount, // Keep original amount for display, will re-calc on save
+            hsnSacCode: item.hsnSacCode,
+            gstRate: item.gstRate,
+        })) || [],
+        status: initialInvoiceData.status,
+        notes: initialInvoiceData.notes,
+      });
+    } else {
+      form.reset(); // Reset for create mode
+    }
+  }, [mode, initialInvoiceData, form]);
+
+
+  // Calculate total amount for display based on line items
+  const watchedLineItems = form.watch("lineItems");
+  const calculatedTotalAmount = useMemo(() => {
+    if (!watchedLineItems || watchedLineItems.length === 0) return 0;
+    return watchedLineItems.reduce((sum, item) => {
+      const itemAmount = (item.quantity || 1) * (item.unitPrice || 0);
+      const itemGst = item.gstRate ? itemAmount * (item.gstRate / 100) : 0;
+      return sum + itemAmount + itemGst;
+    }, 0);
+  }, [watchedLineItems]);
+
 
   const handleAiParse = async () => {
     const description = form.getValues("invoiceDescription");
@@ -96,16 +148,21 @@ export function InvoiceForm() {
       const result: GenerateInvoiceDetailsOutput = await generateInvoiceDetails({ description });
       
       if (result.customerName) form.setValue("customerName", result.customerName, { shouldValidate: true });
-      if (result.totalAmount) form.setValue("totalAmount", result.totalAmount, { shouldValidate: true });
       
       if (result.lineItems && result.lineItems.length > 0) {
-        form.setValue("lineItems", result.lineItems as InvoiceLineItem[] , { shouldValidate: true });
-        // If line items are extracted, itemsSummary might become redundant or a high-level title
-        // For now, we'll clear itemsSummary if line items are present to avoid confusion
+        const aiLineItems = result.lineItems.map(li => ({
+          description: li.description,
+          quantity: li.quantity || 1,
+          unitPrice: li.unitPrice || 0,
+          amount: li.amount || ((li.quantity || 1) * (li.unitPrice || 0)), // Ensure amount is calculated
+          hsnSacCode: li.hsnSacCode,
+          gstRate: li.gstRate,
+        }));
+        form.setValue("lineItems", aiLineItems , { shouldValidate: true });
         form.setValue("itemsSummary", ""); 
       } else if (result.itemsSummary) {
         form.setValue("itemsSummary", result.itemsSummary);
-        form.setValue("lineItems", []); // Ensure lineItems is cleared if only summary is present
+        form.setValue("lineItems", []);
       }
       
       if (result.invoiceDate) {
@@ -163,22 +220,32 @@ export function InvoiceForm() {
       const itemGstAmount = item.gstRate ? itemAmount * (item.gstRate / 100) : 0;
       subTotal += itemAmount;
       totalGst += itemGstAmount;
-      return { ...item, amount: itemAmount, gstAmount: itemGstAmount };
+      return { ...item, amount: itemAmount, gstAmount: itemGstAmount }; // Ensure amount and gstAmount are part of the item
     });
 
-    if (processedLineItems && processedLineItems.length > 0) {
-      finalTotalAmount = subTotal + totalGst;
-    } else {
-      // If no line items, use the top-level totalAmount, assume it's inclusive of tax for now
-      // Or, if itemsSummary is used, subTotal might be derived from totalAmount if GST isn't specified
-      subTotal = values.totalAmount; // Simplification: treat totalAmount as subTotal if no lines
-      totalGst = 0; // Cannot determine GST without more info or line items
-      finalTotalAmount = values.totalAmount;
+    finalTotalAmount = subTotal + totalGst;
+    
+    if (!processedLineItems || processedLineItems.length === 0) {
+        // If no line items, use itemsSummary. Total amount is harder to determine without line item breakdown.
+        // We'll take itemsSummary and the AI might have provided a totalAmount, or user needs to input it.
+        // For simplicity, if AI gave totalAmount and no line items, we use that.
+        // This part might need more robust logic if AI doesn't give totalAmount or if summary is complex.
+        // The original totalAmount field was removed from schema, so this needs careful handling.
+        // Let's assume if there are no line items, the AI's totalAmount (if parsed) or a manual input is needed.
+        // For now, if no line items, totalAmount relies on the sum of line items, which will be 0.
+        // This implies line items are somewhat mandatory for accurate totals through this form.
+        // Or, we re-introduce a totalAmount field for manual entry when no line items.
+        // For this iteration, we'll prioritize line item calculation.
+        if (values.itemsSummary && finalTotalAmount === 0) {
+            toast({variant: "destructive", title: "Missing Amount", description: "Please add line items or ensure a total amount is calculable."});
+            setIsSaving(false);
+            return;
+        }
     }
 
 
     try {
-      const newInvoice: NewInvoiceData = {
+      const invoiceData: NewInvoiceData | UpdateInvoiceData = {
         invoiceNumber: values.invoiceNumber,
         customerName: values.customerName,
         invoiceDate: format(values.invoiceDate, "yyyy-MM-dd"),
@@ -188,11 +255,18 @@ export function InvoiceForm() {
         subTotal: subTotal, 
         totalGstAmount: totalGst, 
         totalAmount: finalTotalAmount,
-        status: 'draft',
-        notes: "", 
+        status: values.status || 'draft',
+        notes: values.notes || "", 
       };
-      await addInvoice(currentCompanyId, newInvoice);
-      toast({ title: "Invoice Saved!", description: `Invoice #${values.invoiceNumber} has been saved as a draft.` });
+
+      if (mode === 'create') {
+        await addInvoice(currentCompanyId, invoiceData as NewInvoiceData);
+        toast({ title: "Invoice Saved!", description: `Invoice #${values.invoiceNumber} has been saved as a draft.` });
+      } else if (mode === 'edit' && initialInvoiceData?.id) {
+        await updateInvoice(currentCompanyId, initialInvoiceData.id, invoiceData as UpdateInvoiceData);
+        toast({ title: "Invoice Updated!", description: `Invoice #${values.invoiceNumber} has been updated.` });
+      }
+      
       form.reset();
       router.push('/invoices'); 
     } catch (e: any) {
@@ -208,14 +282,14 @@ export function InvoiceForm() {
     return (
       <Card className="w-full shadow-xl">
         <CardHeader>
-          <CardTitle className="text-2xl">Create Invoice</CardTitle>
+          <CardTitle className="text-2xl">{mode === 'create' ? 'Create Invoice' : 'Edit Invoice'}</CardTitle>
         </CardHeader>
         <CardContent>
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Company ID Missing</AlertTitle>
             <AlertDescription>
-              Please select or enter a Company ID on the main login page to create invoices.
+              Please select or enter a Company ID on the main login page to manage invoices.
             </AlertDescription>
           </Alert>
         </CardContent>
@@ -226,8 +300,13 @@ export function InvoiceForm() {
   return (
     <Card className="w-full shadow-xl">
       <CardHeader>
-        <CardTitle className="text-2xl">New Invoice ({currentCompanyId})</CardTitle>
-        <CardDescription>Describe the invoice for AI to parse, or fill in the details manually. AI can now attempt to extract line items.</CardDescription>
+        <CardTitle className="text-2xl">{mode === 'create' ? 'New Invoice' : 'Edit Invoice'} ({currentCompanyId})</CardTitle>
+        <CardDescription>
+          {mode === 'create' 
+            ? "Describe the invoice for AI to parse, or fill in the details manually. AI can attempt to extract line items."
+            : "Edit the invoice details below. You can also update the description and use AI to re-parse items."
+          }
+        </CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -237,7 +316,7 @@ export function InvoiceForm() {
               name="invoiceDescription"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Describe Invoice for AI (Optional)</FormLabel>
+                  <FormLabel>Describe Invoice for AI (Optional - will overwrite existing items if used)</FormLabel>
                   <FormControl>
                     <Textarea
                       placeholder="e.g., 'Invoice Tech Solutions Inc. for 20 hours of software development at 75 USD/hr and 2 server licenses at 100 USD each, due in 15 days. Project: Alpha Site Rebuild.'"
@@ -252,7 +331,7 @@ export function InvoiceForm() {
             />
             <Button type="button" onClick={handleAiParse} disabled={isLoading || !form.getValues("invoiceDescription")} variant="outline" className="w-full sm:w-auto">
               {isParsing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
-              Generate Details with AI
+              Parse with AI & Populate Fields
             </Button>
 
             {aiError && (
@@ -352,46 +431,93 @@ export function InvoiceForm() {
                   </FormItem>
                 )}
               />
-               <FormField
-                control={form.control}
-                name="totalAmount"
-                render={({ field }) => (
-                  <FormItem className="md:col-span-2">
-                    <FormLabel>Total Amount (Calculated if line items present, otherwise pre-tax)</FormLabel>
-                    <FormControl><Input type="number" placeholder="0.00" {...field} disabled={isLoading || (form.getValues("lineItems") && form.getValues("lineItems")!.length > 0) } /></FormControl>
-                    <FormMessage />
-                    { (form.getValues("lineItems") && form.getValues("lineItems")!.length > 0) && <p className="text-xs text-muted-foreground">Calculated from line items.</p>}
-                  </FormItem>
-                )}
-              />
-              
-              {/* Display Line Items if AI extracted them (read-only for now) */}
-              {form.watch("lineItems") && form.watch("lineItems")!.length > 0 && (
-                <div className="md:col-span-2 space-y-2">
-                  <FormLabel>Line Items (Extracted by AI)</FormLabel>
-                  <Card className="p-2 bg-muted/50">
-                    <CardContent className="p-0 space-y-1 text-xs">
-                      {form.watch("lineItems")!.map((item, index) => (
-                        <div key={index} className="p-1.5 border-b last:border-b-0">
-                          <p><strong>{item.description}</strong></p>
-                          <p>Qty: {item.quantity || 1}, Rate: {item.unitPrice || item.amount}, Amount: {item.amount}</p>
-                          {item.hsnSacCode && <p>HSN/SAC: {item.hsnSacCode}</p>}
-                          {item.gstRate && <p>GST: {item.gstRate}%</p>}
-                        </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-
-              {/* Fallback to Items Summary if no line items or AI couldn't extract them */}
-              {!(form.watch("lineItems") && form.watch("lineItems")!.length > 0) && (
-                 <FormField
+            </div>
+            
+            {/* Line Items Section */}
+            <div className="space-y-4 pt-4 border-t mt-4">
+              <FormLabel>Line Items</FormLabel>
+              {fields.map((item, index) => (
+                <Card key={item.id} className="p-3 bg-muted/30 relative">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-2 items-end">
+                    <FormField
+                      control={form.control}
+                      name={`lineItems.${index}.description`}
+                      render={({ field }) => (
+                        <FormItem className="lg:col-span-2">
+                          <FormLabel className="text-xs">Description</FormLabel>
+                          <FormControl><Input placeholder="Item description" {...field} disabled={isLoading} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name={`lineItems.${index}.quantity`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Quantity</FormLabel>
+                          <FormControl><Input type="number" placeholder="1" {...field} disabled={isLoading} onChange={(e) => field.onChange(parseFloat(e.target.value))} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name={`lineItems.${index}.unitPrice`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs">Unit Price</FormLabel>
+                          <FormControl><Input type="number" placeholder="0.00" {...field} disabled={isLoading} onChange={(e) => field.onChange(parseFloat(e.target.value))} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="text-destructive hover:bg-destructive/10 absolute top-1 right-1 h-6 w-6" disabled={isLoading}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                     <FormField
+                        control={form.control}
+                        name={`lineItems.${index}.hsnSacCode`}
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel className="text-xs">HSN/SAC (Opt.)</FormLabel>
+                            <FormControl><Input placeholder="HSN/SAC" {...field} disabled={isLoading} /></FormControl>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                        />
+                        <FormField
+                        control={form.control}
+                        name={`lineItems.${index}.gstRate`}
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel className="text-xs">GST Rate % (Opt.)</FormLabel>
+                            <FormControl><Input type="number" placeholder="e.g., 18" {...field} disabled={isLoading} onChange={(e) => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))} /></FormControl>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                        />
+                   </div>
+                </Card>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => append({ description: "", quantity: 1, unitPrice: 0, amount: 0 })}
+                disabled={isLoading}
+              >
+                <PlusCircle className="mr-2 h-4 w-4" /> Add Line Item
+              </Button>
+               {fields.length === 0 && (
+                  <FormField
                     control={form.control}
                     name="itemsSummary"
                     render={({ field }) => (
-                      <FormItem className="md:col-span-2">
-                        <FormLabel>Items/Services Summary (if no line items)</FormLabel>
+                      <FormItem>
+                        <FormLabel>Items/Services Summary (if no line items above)</FormLabel>
                         <FormControl>
                           <Textarea placeholder="e.g., Software development services, 5 Widgets" {...field} disabled={isLoading} className="min-h-[60px]"/>
                         </FormControl>
@@ -401,11 +527,52 @@ export function InvoiceForm() {
                   />
               )}
             </div>
+
+
+            {/* Total Amount Display */}
+            <div className="pt-4 border-t mt-4">
+                <FormLabel>Calculated Total Invoice Amount</FormLabel>
+                <Input 
+                    type="text" 
+                    value={calculatedTotalAmount.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' })} 
+                    readOnly 
+                    disabled 
+                    className="mt-1 bg-muted/50 font-semibold"
+                />
+            </div>
+            
+            <FormField
+              control={form.control}
+              name="status"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Status</FormLabel>
+                  <FormControl>
+                     <Input placeholder="draft" {...field} disabled={isLoading} />
+                     {/* Consider using a Select component here for better UX if more statuses are actively managed by user */}
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="notes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Notes (Optional)</FormLabel>
+                  <FormControl>
+                    <Textarea placeholder="Any additional notes for the customer..." {...field} disabled={isLoading} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </CardContent>
           <CardFooter>
             <Button type="submit" disabled={isLoading || !currentCompanyId}>
               {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-              Save Invoice as Draft
+              {mode === 'create' ? 'Save Invoice as Draft' : 'Update Invoice'}
             </Button>
           </CardFooter>
         </form>
@@ -413,3 +580,21 @@ export function InvoiceForm() {
     </Card>
   );
 }
+
+// Helper hook, if needed elsewhere. For now, direct useMemo is fine.
+// function useCalculatedTotal(lineItems: InvoiceLineItem[] = [], clientLocale: string = 'en-US') {
+//   return useMemo(() => {
+//     if (!lineItems || lineItems.length === 0) return 0;
+//     const total = lineItems.reduce((sum, item) => {
+//       const itemAmount = (item.quantity || 1) * (item.unitPrice || 0);
+//       const itemGst = item.gstRate ? itemAmount * (item.gstRate / 100) : 0;
+//       return sum + itemAmount + itemGst;
+//     }, 0);
+//     return total;
+//   }, [lineItems, clientLocale]);
+// }
+
+// Placeholder for useCalculatedTotal in case it's beneficial
+import { useMemo } from "react";
+
+
