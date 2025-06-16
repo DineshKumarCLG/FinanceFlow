@@ -14,21 +14,32 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Eye, Edit3, Trash2, Loader2, FileText } from "lucide-react";
-// import { deleteInvoice } from "@/lib/data-service"; // For future delete functionality
+import { deleteInvoice } from "@/lib/data-service";
 import { useToast } from "@/hooks/use-toast";
 import type { Invoice } from "@/lib/data-service";
 import { useState, useEffect } from "react";
-import Link from "next/link"; // For edit/view links
+import Link from "next/link";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface InvoiceListProps {
   invoices: Invoice[];
   companyId: string;
-  // onInvoiceDeleted?: () => void; // For future delete functionality
+  onInvoiceDeleted?: () => void;
 }
 
-export function InvoiceList({ invoices = [], companyId }: InvoiceListProps) {
+export function InvoiceList({ invoices = [], companyId, onInvoiceDeleted }: InvoiceListProps) {
   const [clientLocale, setClientLocale] = useState('en-US');
-  const [isDeleting, setIsDeleting] = useState<string | null>(null); // For future delete functionality
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -39,12 +50,12 @@ export function InvoiceList({ invoices = [], companyId }: InvoiceListProps) {
 
   const formatCurrencyDisplay = (value?: number) => {
     if (value === undefined || value === null) return '-';
-    return value.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' }); // Assuming INR for now
+    return value.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' });
   };
 
   const getStatusBadgeVariant = (status: Invoice['status']) => {
     switch (status) {
-      case 'paid': return 'default'; // Green (primary)
+      case 'paid': return 'default';
       case 'sent': return 'secondary';
       case 'overdue': return 'destructive';
       case 'draft': return 'outline';
@@ -52,23 +63,23 @@ export function InvoiceList({ invoices = [], companyId }: InvoiceListProps) {
     }
   };
 
-  // const handleDeleteInvoice = async (invoiceId: string) => {
-  //   if (!companyId) {
-  //     toast({ variant: "destructive", title: "Error", description: "Company ID is missing." });
-  //     return;
-  //   }
-  //   setIsDeleting(invoiceId);
-  //   try {
-  //     await deleteInvoice(companyId, invoiceId);
-  //     toast({ title: "Invoice Deleted", description: "The invoice has been deleted." });
-  //     // onInvoiceDeleted?.();
-  //   } catch (error) {
-  //     console.error("Failed to delete invoice:", error);
-  //     toast({ variant: "destructive", title: "Deletion Failed", description: "Could not delete the invoice." });
-  //   } finally {
-  //     setIsDeleting(null);
-  //   }
-  // };
+  const handleDeleteInvoice = async (invoiceId: string, invoiceNumber: string) => {
+    if (!companyId) {
+      toast({ variant: "destructive", title: "Error", description: "Company ID is missing." });
+      return;
+    }
+    setIsDeleting(invoiceId);
+    try {
+      await deleteInvoice(companyId, invoiceId);
+      toast({ title: "Invoice Deleted", description: `Invoice #${invoiceNumber} has been deleted.` });
+      onInvoiceDeleted?.();
+    } catch (error: any) {
+      console.error("Failed to delete invoice:", error);
+      toast({ variant: "destructive", title: "Deletion Failed", description: error.message || "Could not delete the invoice." });
+    } finally {
+      setIsDeleting(null);
+    }
+  };
 
   return (
     <Card className="shadow-lg">
@@ -122,18 +133,38 @@ export function InvoiceList({ invoices = [], companyId }: InvoiceListProps) {
                         <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit Invoice" asChild>
                            <Link href={`/invoices/${invoice.id}/edit`}> <Edit3 className="h-4 w-4" /> </Link>
                         </Button>
-                        {/* Delete functionality can be added later
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive hover:text-destructive-foreground hover:bg-destructive/90 h-7 w-7"
-                          onClick={() => handleDeleteInvoice(invoice.id)}
-                          disabled={isDeleting === invoice.id}
-                          title="Delete Invoice"
-                        >
-                          {isDeleting === invoice.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                        </Button>
-                        */}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive hover:text-destructive-foreground hover:bg-destructive/90 h-7 w-7"
+                              disabled={isDeleting === invoice.id}
+                              title="Delete Invoice"
+                            >
+                              {isDeleting === invoice.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action cannot be undone. This will permanently delete invoice <strong>#{invoice.invoiceNumber}</strong> for {invoice.customerName}.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => handleDeleteInvoice(invoice.id, invoice.invoiceNumber)}
+                                disabled={isDeleting === invoice.id}
+                                className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                              >
+                                {isDeleting === invoice.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Delete Invoice
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     </TableCell>
                   </TableRow>

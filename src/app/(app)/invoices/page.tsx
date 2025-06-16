@@ -12,10 +12,11 @@ import { getInvoices } from "@/lib/data-service";
 import { useAuth } from "@/contexts/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query'; // Added useQueryClient
 
 export default function InvoicesPage() {
   const { user: currentUser, currentCompanyId } = useAuth();
+  const queryClient = useQueryClient(); // Initialize queryClient
 
   const { data: invoices, isLoading, error } = useQuery<Invoice[], Error>({
     queryKey: ['invoices', currentCompanyId],
@@ -25,6 +26,10 @@ export default function InvoicesPage() {
     },
     enabled: !!currentUser && !!currentCompanyId,
   });
+
+  const handleInvoiceDeleted = () => {
+    queryClient.invalidateQueries({ queryKey: ['invoices', currentCompanyId] });
+  };
 
   if (!currentCompanyId && !isLoading) {
     return (
@@ -69,7 +74,11 @@ export default function InvoicesPage() {
           <AlertDescription>{error.message || "Could not fetch invoices."}</AlertDescription>
         </Alert>
       ) : (
-        <InvoiceList invoices={invoices || []} companyId={currentCompanyId!} />
+        <InvoiceList 
+          invoices={invoices || []} 
+          companyId={currentCompanyId!} 
+          onInvoiceDeleted={handleInvoiceDeleted} 
+        />
       )}
     </div>
   );

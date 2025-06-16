@@ -46,7 +46,7 @@ export interface JournalEntry {
 export interface Notification {
   id: string;
   message: string;
-  type: 'new_entry' | 'user_joined' | 'document_upload' | 'invoice_created' | 'invoice_updated' | 'company_settings_updated' | 'ai_preferences_updated';
+  type: 'new_entry' | 'user_joined' | 'document_upload' | 'invoice_created' | 'invoice_updated' | 'company_settings_updated' | 'ai_preferences_updated' | 'invoice_deleted';
   timestamp: Timestamp | { seconds: number, nanoseconds: number };
   userId?: string;
   relatedId?: string;
@@ -97,6 +97,12 @@ export interface CompanySettings {
   businessType?: string;
   companyGstin?: string;
   gstRegion?: 'india' | 'international_other' | 'none';
+  companyAddress?: string;
+  companyEmail?: string;
+  companyPhone?: string;
+  logoUrl?: string;
+  bankDetails?: string;
+  authorizedSignatory?: string;
   updatedAt?: Timestamp;
 }
 
@@ -440,15 +446,17 @@ export async function addInvoice(
     updatedAt: serverTimestamp() as Timestamp,
   };
   
-  Object.keys(invoicePayload).forEach(key => {
-    if ((invoicePayload as any)[key] === undefined) {
-      delete (invoicePayload as any)[key];
+  // Filter out undefined values before saving
+  const cleanPayload: { [key: string]: any } = {};
+  for (const key in invoicePayload) {
+    if ((invoicePayload as any)[key] !== undefined) {
+      cleanPayload[key] = (invoicePayload as any)[key];
     }
-  });
+  }
 
 
   try {
-    const docRef = await addDoc(collection(db, INVOICE_COLLECTION), invoicePayload);
+    const docRef = await addDoc(collection(db, INVOICE_COLLECTION), cleanPayload);
     const savedInvoice: Invoice = {
       id: docRef.id,
       ...newInvoiceData, 
@@ -502,16 +510,17 @@ export async function updateInvoice(
 
   const invoiceRef = doc(db, INVOICE_COLLECTION, invoiceId);
   
-  const updatePayload: any = {
+  const updatePayloadWithTimestamp: any = {
     ...invoiceDataToUpdate,
     updatedAt: serverTimestamp() as Timestamp,
   };
 
-  Object.keys(updatePayload).forEach(key => {
-    if (updatePayload[key] === undefined) {
-      delete updatePayload[key];
+  const cleanUpdatePayload: { [key: string]: any } = {};
+  for (const key in updatePayloadWithTimestamp) {
+    if (updatePayloadWithTimestamp[key] !== undefined) {
+      cleanUpdatePayload[key] = updatePayloadWithTimestamp[key];
     }
-  });
+  }
   
   try {
     const docSnap = await getDoc(invoiceRef);
@@ -519,7 +528,7 @@ export async function updateInvoice(
         throw new Error("Invoice not found or access denied.");
     }
 
-    await updateDoc(invoiceRef, updatePayload);
+    await updateDoc(invoiceRef, cleanUpdatePayload);
     
     const updatedInvoiceData = { ...docSnap.data(), ...invoiceDataToUpdate, id: invoiceId, updatedAt: Timestamp.now() } as Invoice;
 
@@ -536,6 +545,51 @@ export async function updateInvoice(
 
   } catch (error) {
     console.error(`DataService: Error updating invoice ${invoiceId} for company '${companyId}' (User: ${currentUser.uid}):`, error);
+    throw error;
+  }
+}
+
+export async function deleteInvoice(companyId: string, invoiceId: string): Promise<void> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error("User not authenticated. Cannot delete invoice.");
+  }
+  if (!companyId) {
+    throw new Error("Company ID is required to delete an invoice.");
+  }
+  if (!invoiceId) {
+    throw new Error("Invoice ID is required to delete an invoice.");
+  }
+
+  try {
+    const invoiceRef = doc(db, INVOICE_COLLECTION, invoiceId);
+    const docSnap = await getDoc(invoiceRef);
+
+    if (docSnap.exists()) {
+      const invoiceData = docSnap.data();
+      if (invoiceData.companyId !== companyId) {
+        throw new Error("Invoice does not belong to the specified company or access denied.");
+      }
+      // Optional: Check if invoiceData.creatorUserId === currentUser.uid for stricter permission
+      // if (invoiceData.creatorUserId !== currentUser.uid) {
+      //   throw new Error("You do not have permission to delete this invoice.");
+      // }
+
+      await deleteDoc(invoiceRef);
+
+      const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
+      addNotification(
+        `${userName} deleted invoice #${invoiceData.invoiceNumber || invoiceId.slice(0,8)}.`,
+        'invoice_deleted',
+        companyId,
+        currentUser.uid,
+        invoiceId
+      ).catch(err => console.error("DataService: Failed to add notification for invoice deletion:", err));
+    } else {
+      throw new Error("Invoice not found.");
+    }
+  } catch (error) {
+    console.error(`DataService: Error deleting invoice ${invoiceId} for company '${companyId}' (User: ${currentUser.uid}):`, error);
     throw error;
   }
 }
@@ -670,10 +724,16 @@ export async function getCompanySettings(companyId: string): Promise<CompanySett
         businessType: data.businessType,
         companyGstin: data.companyGstin,
         gstRegion: data.gstRegion,
+        companyAddress: data.companyAddress,
+        companyEmail: data.companyEmail,
+        companyPhone: data.companyPhone,
+        logoUrl: data.logoUrl,
+        bankDetails: data.bankDetails,
+        authorizedSignatory: data.authorizedSignatory,
         updatedAt: data.updatedAt,
       } as CompanySettings;
     } else {
-      console.log(`DataService: No settings found for company ${companyId}.`);
+      console.log(`DataService: No settings found for company ${companyId}. Returning default fallbacks.`);
       return null; 
     }
   } catch (error) {
@@ -698,8 +758,9 @@ export async function saveCompanySettings(
   
   const updatePayload: { [key: string]: any } = {};
   for (const key in settingsData) {
-    if (settingsData[key as keyof typeof settingsData] !== undefined) {
-      updatePayload[key] = settingsData[key as keyof typeof settingsData];
+    const typedKey = key as keyof typeof settingsData;
+    if (settingsData[typedKey] !== undefined) {
+      updatePayload[typedKey] = settingsData[typedKey];
     }
   }
   updatePayload.updatedAt = serverTimestamp() as Timestamp; 
@@ -772,8 +833,9 @@ export async function saveAiPreferences(
   
   const updatePayload: { [key: string]: any } = {};
   for (const key in preferencesData) {
-    if (preferencesData[key as keyof typeof preferencesData] !== undefined) {
-      updatePayload[key] = preferencesData[key as keyof typeof preferencesData];
+    const typedKey = key as keyof typeof preferencesData;
+    if (preferencesData[typedKey] !== undefined) {
+      updatePayload[typedKey] = preferencesData[typedKey];
     }
   }
   updatePayload.updatedAt = serverTimestamp() as Timestamp;
@@ -801,3 +863,4 @@ export interface UserProfile {
   email: string | null;
   displayName: string | null;
 }
+
