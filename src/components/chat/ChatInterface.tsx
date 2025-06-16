@@ -4,15 +4,16 @@
 import { useState, useRef, useEffect, FormEvent, ChangeEvent } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"; // Added ScrollBar
 import { MessageBubble, type Message } from "./MessageBubble";
-import { Send, Paperclip, Mic, Loader2, XCircle } from "lucide-react";
+import { Send, Paperclip, Mic, Loader2, XCircle, Bot } from "lucide-react"; // Added Bot for loading
 import { chatWithAiAssistant } from '@/ai/flows/chat-with-ai-assistant';
 import { useToast } from '@/hooks/use-toast';
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardFooter } from "@/components/ui/card"; // Removed CardHeader
 import Image from 'next/image';
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/contexts/AuthContext"; // Import useAuth to get companyId
+import { useAuth } from "@/contexts/AuthContext";
+import { Avatar, AvatarFallback } from '../ui/avatar';
 
 // Helper to convert file to data URI
 const fileToDataUri = (file: File): Promise<string> => {
@@ -25,7 +26,7 @@ const fileToDataUri = (file: File): Promise<string> => {
 };
 
 export function ChatInterface() {
-  const { currentCompanyId } = useAuth(); // Get currentCompanyId
+  const { currentCompanyId } = useAuth();
   const [messages, setMessages] = useState<Message[]>([
     { id: "0", role: "assistant", content: "Hello! I'm your AI Accounting Assistant. How can I help you today? You can ask me to create invoices, add entries, or analyze documents.", timestamp: new Date() }
   ]);
@@ -41,12 +42,11 @@ export function ChatInterface() {
   const [isMicSupported, setIsMicSupported] = useState(false);
 
   useEffect(() => {
-    // Scroll to bottom when messages change
     if (scrollAreaRef.current) {
       const viewport = scrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
       if (viewport) viewport.scrollTop = viewport.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, isLoading]); // Added isLoading to scroll down when loading bubble appears
 
   useEffect(() => {
     if (typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
@@ -109,10 +109,10 @@ export function ChatInterface() {
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
       const files = Array.from(event.target.files);
-      setAttachedFiles(prev => [...prev, ...files]);
+      setAttachedFiles(prev => [...prev, ...files].slice(0, 5)); // Limit to 5 files
       
       const previews = await Promise.all(files.map(fileToDataUri));
-      setFilePreviews(prev => [...prev, ...previews]);
+      setFilePreviews(prev => [...prev, ...previews].slice(0, 5));
       
       if (event.target) event.target.value = ""; 
     }
@@ -134,7 +134,7 @@ export function ChatInterface() {
 
     const userMessageContent = input.trim();
     const userMessage: Message = {
-      id: String(messages.length + 1),
+      id: String(Date.now()), // More unique ID
       role: "user",
       content: userMessageContent,
       timestamp: new Date(),
@@ -149,34 +149,30 @@ export function ChatInterface() {
     setFilePreviews([]);
 
     try {
-      // Map existing messages to the format expected by the AI flow
-      // This should also include any tool responses from previous turns.
       const conversationHistoryForFlow = messages
-        .filter(msg => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'tool') // Ensure only valid roles are passed
+        .filter(msg => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'tool')
         .map(msg => ({
-          role: msg.role as 'user' | 'assistant' | 'tool', // Cast here
+          role: msg.role as 'user' | 'assistant' | 'tool',
           content: msg.content,
-          // tool_name: msg.toolName // if you add toolName to Message interface
       }));
-
 
       const aiResponse = await chatWithAiAssistant({
         message: userMessageContent,
         conversationHistory: conversationHistoryForFlow,
-        uploadedFiles: fileDataUris.map((uri, index) => uri), // Pass as simple strings
-        companyId: currentCompanyId, // Pass companyId
+        uploadedFiles: fileDataUris,
+        companyId: currentCompanyId,
       });
       
       setMessages((prev) => [
         ...prev,
-        { id: String(prev.length + 1), role: "assistant", content: aiResponse.response, timestamp: new Date() },
+        { id: String(Date.now() + 1), role: "assistant", content: aiResponse.response, timestamp: new Date() },
       ]);
     } catch (error: any) {
       console.error("Chat error:", error);
       toast({ variant: "destructive", title: "AI Error", description: error.message || "Failed to get response from AI." });
        setMessages((prev) => [
         ...prev,
-        { id: String(prev.length + 1), role: "system", content: "Error: Could not connect to AI assistant.", timestamp: new Date() },
+        { id: String(Date.now() + 1), role: "system", content: "Error: Could not connect to AI assistant.", timestamp: new Date() },
       ]);
     } finally {
       setIsLoading(false);
@@ -184,54 +180,66 @@ export function ChatInterface() {
   };
 
   return (
-    <Card className="h-full flex flex-col shadow-xl">
-      <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
-        <div className="space-y-2">
-          {messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} />
-          ))}
-          {isLoading && messages[messages.length-1]?.role === 'user' && (
-             <div className="flex items-start gap-3 py-3 px-1 justify-start">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-             </div>
-          )}
-        </div>
-      </ScrollArea>
+    <Card className="h-full flex flex-col shadow-xl bg-background">
+      <CardContent className="flex-1 p-0 overflow-hidden">
+        <ScrollArea className="h-full p-4" ref={scrollAreaRef}>
+          <div className="space-y-2">
+            {messages.map((msg) => (
+              <MessageBubble key={msg.id} message={msg} />
+            ))}
+            {isLoading && messages[messages.length-1]?.role === 'user' && (
+               <div className="flex items-start gap-3 py-3 px-1 justify-start">
+                  <Avatar className="h-8 w-8 border border-border bg-muted">
+                    <AvatarFallback><Bot className="h-4 w-4 text-primary" /></AvatarFallback>
+                  </Avatar>
+                  <div className="rounded-xl px-4 py-3 shadow-md text-sm bg-muted text-card-foreground rounded-bl-none border max-w-[70%]">
+                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  </div>
+               </div>
+            )}
+          </div>
+        </ScrollArea>
+      </CardContent>
       
       {filePreviews.length > 0 && (
-        <div className="p-2 border-t border-border">
-          <p className="text-xs text-muted-foreground mb-1">Attachments:</p>
-          <div className="flex gap-2 overflow-x-auto">
-            {filePreviews.map((preview, index) => (
-              <div key={index} className="relative group w-16 h-16 border rounded">
-                {attachedFiles[index].type.startsWith("image/") ? (
-                   <Image src={preview} alt={attachedFiles[index].name} layout="fill" objectFit="cover" className="rounded" data-ai-hint="file preview"/>
-                ): (
-                  <div className="w-full h-full flex items-center justify-center bg-muted rounded text-muted-foreground text-xs p-1 overflow-hidden">
-                    {attachedFiles[index].name}
-                  </div>
-                )}
-                <Button
-                  variant="destructive"
-                  size="icon"
-                  className="absolute -top-2 -right-2 h-5 w-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={() => removeAttachedFile(index)}
-                >
-                  <XCircle className="h-3 w-3" />
-                </Button>
-              </div>
-            ))}
-          </div>
+        <div className="p-2 border-t border-border bg-muted/30">
+          <p className="text-xs text-muted-foreground mb-1.5 px-2">Attachments ({filePreviews.length}/5):</p>
+          <ScrollArea className="w-full whitespace-nowrap">
+            <div className="flex gap-2 pb-2 px-2">
+              {filePreviews.map((preview, index) => (
+                <div key={index} className="relative group w-14 h-14 border rounded-md bg-background shadow-sm shrink-0 overflow-hidden">
+                  {attachedFiles[index].type.startsWith("image/") ? (
+                     <Image src={preview} alt={attachedFiles[index].name} layout="fill" objectFit="cover" className="rounded-md" data-ai-hint="file preview"/>
+                  ): (
+                    <div className="w-full h-full flex flex-col items-center justify-center bg-muted rounded-md text-muted-foreground text-[10px] p-1 leading-tight text-center">
+                      <Paperclip className="h-4 w-4 mb-0.5"/>
+                      <span className="truncate w-full">{attachedFiles[index].name}</span>
+                    </div>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute -top-1 -right-1 h-5 w-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity bg-destructive/80 hover:bg-destructive text-destructive-foreground"
+                    onClick={() => removeAttachedFile(index)}
+                    title="Remove file"
+                  >
+                    <XCircle className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
         </div>
       )}
 
-      <CardContent className="p-4 border-t border-border">
-        <form onSubmit={handleSubmit} className="flex items-end gap-2">
+      <CardFooter className="p-3 border-t border-border bg-background">
+        <form onSubmit={handleSubmit} className="flex items-end gap-2 w-full">
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Type your message or ask a question..."
-            className="flex-1 resize-none min-h-[40px]"
+            placeholder="Type your message..."
+            className="flex-1 resize-none min-h-[40px] max-h-[120px] bg-card border-input focus-visible:ring-primary"
             rows={1}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -239,27 +247,27 @@ export function ChatInterface() {
                 handleSubmit();
               }
             }}
-            disabled={isLoading || !currentCompanyId} // Disable if no companyId
+            disabled={isLoading || !currentCompanyId}
           />
-          <Button type="button" variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} disabled={isLoading || !currentCompanyId} title="Attach file">
+          <Button type="button" variant="outline" size="icon" onClick={() => fileInputRef.current?.click()} disabled={isLoading || !currentCompanyId || attachedFiles.length >= 5} title="Attach file">
             <Paperclip className="h-5 w-5" />
           </Button>
-          <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" multiple accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv"/>
+          <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" multiple accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv" disabled={attachedFiles.length >=5}/>
           {isMicSupported && (
-            <Button type="button" variant="ghost" size="icon" onClick={handleVoiceInput} disabled={isLoading || !currentCompanyId} title="Use voice input">
+            <Button type="button" variant="outline" size="icon" onClick={handleVoiceInput} disabled={isLoading || !currentCompanyId} title="Use voice input">
               <Mic className={cn("h-5 w-5", isListening && "text-destructive animate-pulse")} />
             </Button>
           )}
-          <Button type="submit" size="icon" disabled={isLoading || (!input.trim() && attachedFiles.length === 0) || !currentCompanyId} title="Send message">
+          <Button type="submit" size="icon" className="bg-primary hover:bg-primary/90" disabled={isLoading || (!input.trim() && attachedFiles.length === 0) || !currentCompanyId} title="Send message">
             {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
           </Button>
         </form>
          {!currentCompanyId && (
-            <p className="text-xs text-destructive mt-1 text-center">
-                Please select a Company ID in settings or on the login page to use the AI Assistant.
+            <p className="text-xs text-destructive mt-1 text-center w-full">
+                Select a Company ID to enable the AI Assistant.
             </p>
         )}
-      </CardContent>
+      </CardFooter>
     </Card>
   );
 }
