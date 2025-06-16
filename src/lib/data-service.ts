@@ -1,3 +1,4 @@
+
 // src/lib/data-service.ts
 import { auth, db } from './firebase';
 import {
@@ -696,15 +697,21 @@ export async function saveCompanySettings(
   }
 
   const settingsRef = doc(db, COMPANY_SETTINGS_COLLECTION, companyId);
-  const dataToSave = {
-    ...settingsData,
-    updatedAt: serverTimestamp() as Timestamp,
-  };
+  
+  // Prepare the data to be saved, filtering out undefined values.
+  // Firestore does not support 'undefined' as a field value.
+  const updatePayload: { [key: string]: any } = {};
+  for (const key in settingsData) {
+    if (settingsData[key as keyof typeof settingsData] !== undefined) {
+      updatePayload[key] = settingsData[key as keyof typeof settingsData];
+    }
+  }
+  updatePayload.updatedAt = serverTimestamp() as Timestamp; // Add/update the timestamp
 
   try {
     // Using setDoc with merge: true will create the document if it doesn't exist,
-    // or update it if it does.
-    await setDoc(settingsRef, dataToSave, { merge: true });
+    // or update it if it does, only affecting fields present in updatePayload.
+    await setDoc(settingsRef, updatePayload, { merge: true });
 
     const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
     addNotification(
@@ -727,3 +734,4 @@ export interface UserProfile {
   email: string | null;
   displayName: string | null;
 }
+
