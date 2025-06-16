@@ -21,7 +21,7 @@ import { useState, useEffect } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { getCompanySettings, saveCompanySettings, type CompanySettings } from "@/lib/data-service"; // Import new functions and type
+import * as DataService from "@/lib/data-service"; // Changed import
 
 const profileFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -77,7 +77,7 @@ export function ProfileForm() {
       if (user && currentCompanyId) {
         setIsFetchingSettings(true);
         try {
-          const companySettings = await getCompanySettings(currentCompanyId);
+          const companySettings = await DataService.getCompanySettings(currentCompanyId); // Use DataService namespace
           form.reset({
             name: user.displayName || "",
             email: user.email || "",
@@ -89,7 +89,6 @@ export function ProfileForm() {
         } catch (error) {
           console.error("Failed to load company settings:", error);
           toast({ variant: "destructive", title: "Error", description: "Could not load company settings." });
-          // Reset with user data only if company settings fail
           form.reset({
             name: user.displayName || "",
             email: user.email || "",
@@ -102,7 +101,6 @@ export function ProfileForm() {
           setIsFetchingSettings(false);
         }
       } else if (user) {
-        // No companyId, just load user profile
         form.reset({
           name: user.displayName || "",
           email: user.email || "",
@@ -127,13 +125,13 @@ export function ProfileForm() {
         await updateUserProfileName(data.name);
       }
       
-      const companySettingsToSave: Partial<CompanySettings> = {
+      const companySettingsToSave: Partial<DataService.CompanySettings> = { // Use DataService namespace for type
         businessName: data.businessName || undefined,
         businessType: data.businessType || undefined,
         companyGstin: data.companyGstin || undefined,
         gstRegion: data.gstRegion || undefined,
       };
-      await saveCompanySettings(currentCompanyId, companySettingsToSave);
+      await DataService.saveCompanySettings(currentCompanyId, companySettingsToSave); // Use DataService namespace
       
       toast({
         title: "Settings Updated",
