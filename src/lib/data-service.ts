@@ -13,6 +13,8 @@ import {
   writeBatch,
   doc,
   deleteDoc,
+  // getDoc, // Potentially needed for update/get single invoice
+  // updateDoc, // Potentially needed for update invoice
 } from 'firebase/firestore';
 
 export interface JournalEntry {
@@ -43,15 +45,51 @@ export interface JournalEntry {
 export interface Notification {
   id: string;
   message: string;
-  type: 'new_entry' | 'user_joined' | 'document_upload';
+  type: 'new_entry' | 'user_joined' | 'document_upload' | 'invoice_created';
   timestamp: Timestamp | { seconds: number, nanoseconds: number };
   userId?: string;
   relatedId?: string;
   companyId: string;
 }
 
+export interface InvoiceLineItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  amount: number; // quantity * unitPrice
+  hsnSacCode?: string;
+  gstRate?: number; // Percentage
+  gstAmount?: number;
+}
+
+export interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  invoiceDate: string; // YYYY-MM-DD
+  dueDate?: string; // YYYY-MM-DD
+  customerName: string;
+  customerGstin?: string;
+  customerEmail?: string;
+  billingAddress?: string;
+  shippingAddress?: string;
+  // lineItems: InvoiceLineItem[]; // For future enhancement
+  itemsSummary?: string; // For initial AI extraction if line items are not structured
+  subTotal: number; // Sum of line item amounts before tax
+  totalGstAmount: number;
+  totalAmount: number; // subTotal + totalGstAmount
+  notes?: string;
+  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'void';
+  companyId: string;
+  creatorUserId: string;
+  createdAt: Timestamp | { seconds: number, nanoseconds: number };
+  updatedAt?: Timestamp | { seconds: number, nanoseconds: number };
+}
+
+
 const JOURNAL_COLLECTION = 'journalEntries';
 const NOTIFICATION_COLLECTION = 'notifications';
+const INVOICE_COLLECTION = 'invoices';
+
 
 export async function addNotification(
   message: string,
@@ -340,6 +378,86 @@ export async function deleteJournalEntry(companyId: string, entryId: string): Pr
     throw error;
   }
 }
+
+// Base type for adding new Invoices, excluding server-generated fields
+export type NewInvoiceData = Omit<Invoice, 'id' | 'companyId' | 'creatorUserId' | 'createdAt' | 'updatedAt'>;
+
+export async function addInvoice(
+  companyId: string,
+  newInvoiceData: NewInvoiceData
+): Promise<Invoice> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error("User not authenticated. Cannot add invoice.");
+  }
+  if (!companyId) {
+    throw new Error("Company ID is required to add an invoice.");
+  }
+
+  const invoiceToSave = {
+    ...newInvoiceData,
+    companyId: companyId,
+    creatorUserId: currentUser.uid,
+    createdAt: serverTimestamp() as Timestamp,
+    updatedAt: serverTimestamp() as Timestamp,
+  };
+
+  try {
+    const docRef = await addDoc(collection(db, INVOICE_COLLECTION), invoiceToSave);
+    const savedInvoice: Invoice = {
+      id: docRef.id,
+      ...invoiceToSave,
+      createdAt: Timestamp.now(), // Use client-side timestamp for immediate return
+      updatedAt: Timestamp.now(),
+    };
+    
+    const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
+    addNotification(
+      `${userName} created invoice #${savedInvoice.invoiceNumber} for ${savedInvoice.customerName}.`,
+      'invoice_created',
+      companyId,
+      currentUser.uid,
+      savedInvoice.id
+    ).catch(err => console.error("DataService: Failed to add notification for new invoice:", err));
+
+    return savedInvoice;
+  } catch (error) {
+    console.error(`DataService: Error adding invoice to Firestore for company '${companyId}' (User: ${currentUser.uid}):`, error);
+    throw error;
+  }
+}
+
+export async function getInvoices(companyId: string): Promise<Invoice[]> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    return [];
+  }
+  if (!companyId) {
+    return [];
+  }
+  try {
+    const q = query(
+      collection(db, INVOICE_COLLECTION),
+      where("companyId", "==", companyId),
+      orderBy("invoiceDate", "desc"),
+      orderBy("createdAt", "desc")
+    );
+    const querySnapshot = await getDocs(q);
+    const invoices: Invoice[] = [];
+    querySnapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      invoices.push({
+        id: docSnap.id,
+        ...data,
+      } as Invoice); // Type assertion, ensure data matches Invoice structure
+    });
+    return invoices;
+  } catch (error) {
+    console.error(`DataService: Error fetching invoices for company '${companyId}' (User: ${currentUser.uid}) from Firestore:`, error);
+    throw error;
+  }
+}
+
 
 export interface UserProfile {
   uid: string;

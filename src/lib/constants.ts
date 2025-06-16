@@ -1,6 +1,6 @@
 
 import type { LucideIcon } from "lucide-react";
-import { LayoutDashboard, BookOpenText, BookCopy, MessageCircle, Settings, PlusCircle, UploadCloud, ListChecks, Landmark, BarChart3 } from "lucide-react";
+import { LayoutDashboard, BookOpenText, BookCopy, MessageCircle, Settings, PlusCircle, UploadCloud, ListChecks, Landmark, BarChart3, FileText as InvoiceIcon } from "lucide-react";
 
 export interface NavItem {
   title: string;
@@ -30,6 +30,11 @@ export const NAV_ITEMS_MAIN: NavItem[] = [
     icon: UploadCloud,
   },
   {
+    title: "Invoices", // New Invoice Item
+    href: "/invoices",
+    icon: InvoiceIcon, // Using FileText as a placeholder, consider a more specific invoice icon if available
+  },
+  {
     title: "Journal",
     href: "/journal",
     icon: BookOpenText,
@@ -40,7 +45,7 @@ export const NAV_ITEMS_MAIN: NavItem[] = [
     icon: BookCopy,
   },
   {
-    title: "Financial Statements", // New Hub Page
+    title: "Financial Statements",
     href: "/financial-statements",
     icon: BarChart3,
   },
@@ -58,19 +63,3 @@ export const NAV_ITEMS_BOTTOM: NavItem[] = [
     icon: Settings,
   },
 ];
-
-// Individual statement links can be kept if direct access is still desired,
-// or removed if the hub page is preferred as the sole entry point.
-// For now, I'm keeping them and adding the new hub.
-// If you want to remove the direct links for Trial Balance and Balance Sheet from NAV_ITEMS_MAIN,
-// you can delete these from the array above:
-// {
-//   title: "Trial Balance",
-//   href: "/trial-balance",
-//   icon: ListChecks,
-// },
-// {
-//   title: "Balance Sheet",
-//   href: "/balance-sheet",
-//   icon: Landmark,
-// },
