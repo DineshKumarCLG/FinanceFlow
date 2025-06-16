@@ -26,47 +26,47 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
-import { Calendar as CalendarComponent } from "@/components/ui/calendar"; 
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { useRouter } from 'next/navigation';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const lineItemFormSchema = z.object({
-  description: z.string().min(1, "Item description is required."),
+  description: z.string().min(1, "Item description is required.").default(""),
   quantity: z.coerce.number().min(0.000001, "Quantity must be > 0.").default(1),
   unitPrice: z.coerce.number().min(0, "Unit price cannot be negative.").default(0),
-  amount: z.coerce.number().min(0, "Amount cannot be negative.").optional(), // Taxable amount: quantity * unitPrice
-  hsnSacCode: z.string().optional(),
+  amount: z.coerce.number().min(0, "Amount cannot be negative.").optional(),
+  hsnSacCode: z.string().optional().default(""),
   gstRate: z.coerce.number().min(0).max(100).optional(),
 });
 
 const invoiceFormSchema = z.object({
-  invoiceDescription: z.string().optional(), 
+  invoiceDescription: z.string().optional().default(""),
   invoiceNumber: z.string().min(1, { message: "Invoice number is required." }),
-  
+
   customerName: z.string().min(1, { message: "Customer name is required." }),
-  customerEmail: z.string().email({ message: "Invalid email address."}).optional().or(z.literal('')),
-  billingAddress: z.string().optional(),
-  shippingAddress: z.string().optional(),
+  customerEmail: z.string().email({ message: "Invalid email address."}).optional().or(z.literal('')).default(""),
+  billingAddress: z.string().optional().default(""),
+  shippingAddress: z.string().optional().default(""),
   customerGstin: z.string().optional().refine(val => !val || /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i.test(val), {
     message: "Invalid GSTIN format.",
-  }),
+  }).default(""),
 
   invoiceDate: z.date({ required_error: "Invoice date is required."}),
   dueDate: z.date().optional(),
-  paymentTerms: z.string().optional(),
-  
-  itemsSummary: z.string().optional(), // Fallback if no line items
+  paymentTerms: z.string().optional().default(""),
+
+  itemsSummary: z.string().optional().default(""),
   lineItems: z.array(lineItemFormSchema).optional().default([]),
-  
+
   status: z.enum(['draft', 'sent', 'paid', 'overdue', 'void']).default('draft'),
-  notes: z.string().optional(),
+  notes: z.string().optional().default(""),
 });
 
 type InvoiceFormValues = z.infer<typeof invoiceFormSchema>;
 
 interface InvoiceFormProps {
-  mode?: 'create' | 'edit'; // Optional, defaults to 'create'
-  initialInvoiceData?: Invoice | null; // For edit mode
+  mode?: 'create' | 'edit';
+  initialInvoiceData?: Invoice | null;
 }
 
 const defaultFormValues: InvoiceFormValues = {
@@ -103,22 +103,35 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
 
   const form = useForm<InvoiceFormValues>({
     resolver: zodResolver(invoiceFormSchema),
-    defaultValues: initialInvoiceData 
+    defaultValues: initialInvoiceData
       ? {
-          ...defaultFormValues,
-          ...initialInvoiceData,
+          ...defaultFormValues, // Start with base defaults
+          invoiceDescription: initialInvoiceData.itemsSummary || initialInvoiceData.lineItems?.map(li => `${li.description} (Qty: ${li.quantity}, Rate: ${li.unitPrice})`).join('\n') || "",
+          invoiceNumber: initialInvoiceData.invoiceNumber, // Assumed to be always string
+          customerName: initialInvoiceData.customerName, // Assumed to be always string
+          customerEmail: initialInvoiceData.customerEmail || "",
+          billingAddress: initialInvoiceData.billingAddress || "",
+          shippingAddress: initialInvoiceData.shippingAddress || "",
+          customerGstin: initialInvoiceData.customerGstin || "",
           invoiceDate: initialInvoiceData.invoiceDate ? parseISO(initialInvoiceData.invoiceDate) : new Date(),
           dueDate: initialInvoiceData.dueDate ? parseISO(initialInvoiceData.dueDate) : undefined,
-          lineItems: initialInvoiceData.lineItems?.map(item => ({
-            ...item,
+          paymentTerms: initialInvoiceData.paymentTerms || "",
+          itemsSummary: initialInvoiceData.itemsSummary || "",
+          lineItems: (initialInvoiceData.lineItems?.map(item => ({
+            description: item.description || "",
             quantity: item.quantity || 1,
             unitPrice: item.unitPrice || 0,
-            // 'amount' in form is for display/calculation; will be quantity*unitPrice on submit
-          })) || [],
+            amount: item.amount || 0,
+            hsnSacCode: item.hsnSacCode || "",
+            gstRate: item.gstRate, // Can be undefined or number
+          }))) || [],
+          status: initialInvoiceData.status || 'draft',
+          notes: initialInvoiceData.notes || "",
         }
       : defaultFormValues,
+    mode: "onChange",
   });
-  
+
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "lineItems",
@@ -126,7 +139,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
 
   useEffect(() => {
     if (mode === 'edit' && initialInvoiceData) {
-      const resetData: Partial<InvoiceFormValues> = {
+      const resetData = {
         invoiceDescription: initialInvoiceData.itemsSummary || initialInvoiceData.lineItems?.map(li => `${li.description} (Qty: ${li.quantity}, Rate: ${li.unitPrice})`).join('\n') || "",
         invoiceNumber: initialInvoiceData.invoiceNumber,
         customerName: initialInvoiceData.customerName,
@@ -137,15 +150,15 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
         invoiceDate: initialInvoiceData.invoiceDate ? parseISO(initialInvoiceData.invoiceDate) : new Date(),
         dueDate: initialInvoiceData.dueDate ? parseISO(initialInvoiceData.dueDate) : undefined,
         paymentTerms: initialInvoiceData.paymentTerms || "",
-        itemsSummary: initialInvoiceData.itemsSummary,
-        lineItems: initialInvoiceData.lineItems?.map(item => ({
-            description: item.description,
+        itemsSummary: initialInvoiceData.itemsSummary || "",
+        lineItems: (initialInvoiceData.lineItems?.map(item => ({
+            description: item.description || "",
             quantity: item.quantity || 1,
             unitPrice: item.unitPrice || 0,
-            amount: item.amount, // This is taxable_value_per_line
+            amount: item.amount || 0,
             hsnSacCode: item.hsnSacCode || "",
             gstRate: item.gstRate,
-        })) || [],
+        }))) || [],
         status: initialInvoiceData.status || 'draft',
         notes: initialInvoiceData.notes || "",
       };
@@ -153,7 +166,9 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
     } else if (mode === 'create') {
        form.reset(defaultFormValues);
     }
-  }, [mode, initialInvoiceData, form]);
+  // form.reset should not be in dependency array usually if form instance is stable.
+  // If form instance can change, then it should be. For this case, mode & initialInvoiceData are the main triggers.
+  }, [mode, initialInvoiceData, form.reset]);
 
 
   const watchedLineItems = form.watch("lineItems");
@@ -191,19 +206,19 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
     setAiError(null);
     try {
       const result: GenerateInvoiceDetailsOutput = await generateInvoiceDetails({ description });
-      
-      if (result.customerName) form.setValue("customerName", result.customerName, { shouldValidate: true });
-      if (result.customerEmail) form.setValue("customerEmail", result.customerEmail, { shouldValidate: true });
-      if (result.billingAddress) form.setValue("billingAddress", result.billingAddress, { shouldValidate: true });
-      if (result.shippingAddress) form.setValue("shippingAddress", result.shippingAddress, { shouldValidate: true });
-      if (result.invoiceNumber && mode === 'create') form.setValue("invoiceNumber", result.invoiceNumber, { shouldValidate: true }); // Only set inv number for create mode
-      if (result.paymentTerms) form.setValue("paymentTerms", result.paymentTerms, { shouldValidate: true });
-      if (result.notes) form.setValue("notes", result.notes, { shouldValidate: true });
+
+      form.setValue("customerName", result.customerName || "", { shouldValidate: true });
+      form.setValue("customerEmail", result.customerEmail || "", { shouldValidate: true });
+      form.setValue("billingAddress", result.billingAddress || "", { shouldValidate: true });
+      form.setValue("shippingAddress", result.shippingAddress || "", { shouldValidate: true });
+      if (mode === 'create') form.setValue("invoiceNumber", result.invoiceNumber || "", { shouldValidate: true });
+      form.setValue("paymentTerms", result.paymentTerms || "", { shouldValidate: true });
+      form.setValue("notes", result.notes || "", { shouldValidate: true });
 
 
       if (result.lineItems && result.lineItems.length > 0) {
         const aiLineItems = result.lineItems.map(li => ({
-          description: li.description,
+          description: li.description || "",
           quantity: li.quantity || 1,
           unitPrice: li.unitPrice || 0,
           amount: parseFloat(((li.quantity || 1) * (li.unitPrice || 0)).toFixed(2)),
@@ -211,14 +226,14 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
           gstRate: li.gstRate,
         }));
         form.setValue("lineItems", aiLineItems , { shouldValidate: true });
-        form.setValue("itemsSummary", ""); 
+        form.setValue("itemsSummary", "");
       } else if (result.itemsSummary) {
-        form.setValue("itemsSummary", result.itemsSummary);
+        form.setValue("itemsSummary", result.itemsSummary || "");
         form.setValue("lineItems", []);
       }
-      
+
       const todayForForm = new Date();
-      todayForForm.setHours(0,0,0,0); // Normalize to start of day
+      todayForForm.setHours(0,0,0,0);
 
       if (result.invoiceDate) {
         try {
@@ -226,7 +241,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
             if (!isNaN(parsedDate.getTime())) {
                  form.setValue("invoiceDate", parsedDate, { shouldValidate: true });
             } else {
-                form.setValue("invoiceDate", todayForForm, { shouldValidate: true }); 
+                form.setValue("invoiceDate", todayForForm, { shouldValidate: true });
             }
         } catch (e) {
             form.setValue("invoiceDate", todayForForm, { shouldValidate: true });
@@ -268,11 +283,11 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
 
     const processedLineItems = values.lineItems?.map(item => {
       const taxableAmount = parseFloat(((item.quantity || 1) * (item.unitPrice || 0)).toFixed(2));
-      return { 
+      return {
         description: item.description,
         quantity: item.quantity || 1,
         unitPrice: item.unitPrice || 0,
-        amount: taxableAmount, // This is the taxable amount for the line
+        amount: taxableAmount,
         hsnSacCode: item.hsnSacCode || undefined,
         gstRate: item.gstRate,
       };
@@ -289,7 +304,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
     currentSubTotal = parseFloat(currentSubTotal.toFixed(2));
     currentTotalGstAmount = parseFloat(currentTotalGstAmount.toFixed(2));
     const currentTotalAmount = parseFloat((currentSubTotal + currentTotalGstAmount).toFixed(2));
-    
+
     if (processedLineItems.length === 0 && !values.itemsSummary) {
         toast({variant: "destructive", title: "Missing Items", description: "Please add line items or provide an items summary."});
         setIsSaving(false);
@@ -309,11 +324,11 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
         paymentTerms: values.paymentTerms || undefined,
         lineItems: processedLineItems.length > 0 ? processedLineItems : undefined,
         itemsSummary: processedLineItems.length === 0 ? (values.itemsSummary || undefined) : undefined,
-        subTotal: currentSubTotal, 
-        totalGstAmount: currentTotalGstAmount, 
+        subTotal: currentSubTotal,
+        totalGstAmount: currentTotalGstAmount,
         totalAmount: currentTotalAmount,
         status: values.status || 'draft',
-        notes: values.notes || undefined, 
+        notes: values.notes || undefined,
       };
 
       if (mode === 'create') {
@@ -323,16 +338,16 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
         await updateInvoice(currentCompanyId, initialInvoiceData.id, invoiceData as UpdateInvoiceData);
         toast({ title: "Invoice Updated!", description: `Invoice #${values.invoiceNumber} has been updated.` });
       }
-      
-      form.reset(defaultFormValues); // Reset to default after successful save
-      router.push('/invoices'); 
+
+      form.reset(defaultFormValues);
+      router.push('/invoices');
     } catch (e: any) {
       toast({ variant: "destructive", title: "Saving Error", description: e.message || "Could not save the invoice." });
     } finally {
       setIsSaving(false);
     }
   }
-  
+
   const isLoading = isParsing || isSaving;
 
   if (!currentCompanyId) {
@@ -359,7 +374,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
       <CardHeader>
         <CardTitle className="text-2xl">{mode === 'create' ? 'New Invoice' : `Edit Invoice ${initialInvoiceData?.invoiceNumber || ''}`} ({currentCompanyId})</CardTitle>
         <CardDescription>
-          {mode === 'create' 
+          {mode === 'create'
             ? "Describe the invoice for AI to parse, or fill in the details manually."
             : "Edit the invoice details below."
           }
@@ -402,7 +417,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
                 <AlertDescription>{aiError}</AlertDescription>
               </Alert>
             )}
-            
+
             <h3 className="text-lg font-semibold pt-4 border-t mt-4">Invoice Details</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField
@@ -566,7 +581,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
                     )}
                 />
             </div>
-            
+
             {/* Line Items Section */}
             <h3 className="text-lg font-semibold pt-4 border-t mt-4">Items & Services</h3>
             <div className="space-y-3">
@@ -668,15 +683,15 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                     <span className="text-muted-foreground">Subtotal (Pre-tax):</span>
                     <span className="text-right font-medium">{totals.subTotal.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' })}</span>
-                    
+
                     <span className="text-muted-foreground">Total GST:</span>
                     <span className="text-right font-medium">{totals.totalGst.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' })}</span>
-                    
+
                     <span className="text-foreground font-bold text-base pt-1 border-t mt-1">Grand Total:</span>
                     <span className="text-right font-bold text-base pt-1 border-t mt-1">{totals.grandTotal.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' })}</span>
                 </div>
             </div>
-            
+
             <h3 className="text-lg font-semibold pt-4 border-t mt-4">Terms & Notes</h3>
              <FormField
               control={form.control}
