@@ -9,9 +9,10 @@ import { MessageBubble, type Message } from "./MessageBubble";
 import { Send, Paperclip, Mic, Loader2, XCircle } from "lucide-react";
 import { chatWithAiAssistant } from '@/ai/flows/chat-with-ai-assistant';
 import { useToast } from '@/hooks/use-toast';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent } from "@/components/ui/card";
 import Image from 'next/image';
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext"; // Import useAuth to get companyId
 
 // Helper to convert file to data URI
 const fileToDataUri = (file: File): Promise<string> => {
@@ -24,8 +25,9 @@ const fileToDataUri = (file: File): Promise<string> => {
 };
 
 export function ChatInterface() {
+  const { currentCompanyId } = useAuth(); // Get currentCompanyId
   const [messages, setMessages] = useState<Message[]>([
-    { id: "0", role: "assistant", content: "Hello! I'm your AI Accounting Assistant. How can I help you today?", timestamp: new Date() }
+    { id: "0", role: "assistant", content: "Hello! I'm your AI Accounting Assistant. How can I help you today? You can ask me to create invoices, add entries, or analyze documents.", timestamp: new Date() }
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -60,7 +62,6 @@ export function ChatInterface() {
         };
         recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
           if (event.error === "no-speech") {
-            // console.info("Speech recognition: No speech detected."); // Optional: use console.info or remove logging for this case
             toast({ variant: "default", title: "Voice Input", description: "No speech detected. Please try speaking again." });
           } else if (event.error === "not-allowed" || event.error === "service-not-allowed") {
             console.warn("Speech recognition permission error:", event.error);
@@ -126,6 +127,11 @@ export function ChatInterface() {
     e?.preventDefault();
     if (!input.trim() && attachedFiles.length === 0) return;
 
+    if (!currentCompanyId) {
+      toast({ variant: "destructive", title: "Company ID Missing", description: "Please select a company before chatting with the AI." });
+      return;
+    }
+
     const userMessageContent = input.trim();
     const userMessage: Message = {
       id: String(messages.length + 1),
@@ -143,11 +149,22 @@ export function ChatInterface() {
     setFilePreviews([]);
 
     try {
-      const conversationHistory = messages.map(msg => ({ role: msg.role as 'user' | 'assistant', content: msg.content }));
+      // Map existing messages to the format expected by the AI flow
+      // This should also include any tool responses from previous turns.
+      const conversationHistoryForFlow = messages
+        .filter(msg => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'tool') // Ensure only valid roles are passed
+        .map(msg => ({
+          role: msg.role as 'user' | 'assistant' | 'tool', // Cast here
+          content: msg.content,
+          // tool_name: msg.toolName // if you add toolName to Message interface
+      }));
+
+
       const aiResponse = await chatWithAiAssistant({
         message: userMessageContent,
-        conversationHistory,
-        uploadedFiles: fileDataUris,
+        conversationHistory: conversationHistoryForFlow,
+        uploadedFiles: fileDataUris.map((uri, index) => uri), // Pass as simple strings
+        companyId: currentCompanyId, // Pass companyId
       });
       
       setMessages((prev) => [
@@ -222,21 +239,26 @@ export function ChatInterface() {
                 handleSubmit();
               }
             }}
-            disabled={isLoading}
+            disabled={isLoading || !currentCompanyId} // Disable if no companyId
           />
-          <Button type="button" variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} disabled={isLoading} title="Attach file">
+          <Button type="button" variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} disabled={isLoading || !currentCompanyId} title="Attach file">
             <Paperclip className="h-5 w-5" />
           </Button>
           <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" multiple accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv"/>
           {isMicSupported && (
-            <Button type="button" variant="ghost" size="icon" onClick={handleVoiceInput} disabled={isLoading} title="Use voice input">
+            <Button type="button" variant="ghost" size="icon" onClick={handleVoiceInput} disabled={isLoading || !currentCompanyId} title="Use voice input">
               <Mic className={cn("h-5 w-5", isListening && "text-destructive animate-pulse")} />
             </Button>
           )}
-          <Button type="submit" size="icon" disabled={isLoading || (!input.trim() && attachedFiles.length === 0)} title="Send message">
+          <Button type="submit" size="icon" disabled={isLoading || (!input.trim() && attachedFiles.length === 0) || !currentCompanyId} title="Send message">
             {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
           </Button>
         </form>
+         {!currentCompanyId && (
+            <p className="text-xs text-destructive mt-1 text-center">
+                Please select a Company ID in settings or on the login page to use the AI Assistant.
+            </p>
+        )}
       </CardContent>
     </Card>
   );
