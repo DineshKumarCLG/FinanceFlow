@@ -758,9 +758,12 @@ export async function saveCompanySettings(
   const settingsRef = doc(db, COMPANY_SETTINGS_COLLECTION, companyId);
   
   const updatePayload: { [key: string]: any } = { ...settingsData };
-  updatePayload.updatedAt = serverTimestamp() as Timestamp; 
-  // Ensure logoUrl is not included if it was removed from settingsData
-  // delete updatePayload.logoUrl; // Explicitly remove if not needed
+  updatePayload.updatedAt = serverTimestamp() as Timestamp;
+  // Ensure logoUrl is explicitly handled if it was part of settingsData,
+  // and set to an empty string if it's meant to be cleared.
+  // if (settingsData.hasOwnProperty('logoUrl')) { // Check if logoUrl was intentionally passed
+  //   updatePayload.logoUrl = settingsData.logoUrl || ""; // Ensure it's a string
+  // } // Removed logoUrl
 
   try {
     await setDoc(settingsRef, updatePayload, { merge: true });

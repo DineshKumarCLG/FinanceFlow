@@ -10,7 +10,7 @@ interface AppLogoProps {
   collapsed?: boolean;
   showText?: boolean; 
   variant?: 'logo' | 'icon';
-  // companyLogoUrl?: string; // Prop removed
+  // companyLogoUrl prop removed
 }
 
 export function AppLogo({ 
@@ -20,13 +20,11 @@ export function AppLogo({
   collapsed = false, 
   showText = true, 
   variant,
-  // companyLogoUrl // Prop removed
 }: AppLogoProps) {
 
   const displayVariant = variant || (collapsed ? 'icon' : 'logo');
   const effectiveShowText = (displayVariant === 'logo' && showText);
 
-  // companyLogoUrl logic removed, always show default FinanceFlow logo/icon
   return (
     <div className={cn("flex items-center gap-2", className)}>
       {displayVariant === 'icon' ? (

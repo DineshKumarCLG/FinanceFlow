@@ -19,7 +19,7 @@ const fallbackCompanyDetails: Required<Pick<CompanySettings, 'businessName' | 'c
   companyGstin: "YOUR_GSTIN_HERE",
   email: "your.email@example.com",
   phone: "+1234567890",
-  // logoUrl: "", // Removed logoUrl
+  // logoUrl: "", // Removed
   bankDetails: "Bank: Default Bank\nAccount Name: Your Company\nAccount No: 0000000000\nIFSC: DEFB0000000",
   authorizedSignatory: "Authorized Signatory",
 };
@@ -41,7 +41,7 @@ export function PrintableInvoice({ invoice, companyDetails }: PrintableInvoicePr
     gstin: companyDetails?.companyGstin || fallbackCompanyDetails.companyGstin,
     email: companyDetails?.companyEmail || fallbackCompanyDetails.email,
     phone: companyDetails?.companyPhone || fallbackCompanyDetails.phone,
-    // logoUrl: companyDetails?.logoUrl || fallbackCompanyDetails.logoUrl, // Removed logoUrl
+    // logoUrl: companyDetails?.logoUrl, // Removed
     bankDetails: companyDetails?.bankDetails || fallbackCompanyDetails.bankDetails,
     authorizedSignatory: companyDetails?.authorizedSignatory || fallbackCompanyDetails.authorizedSignatory,
   };
@@ -92,7 +92,7 @@ export function PrintableInvoice({ invoice, companyDetails }: PrintableInvoicePr
     <div className="bg-white p-6 sm:p-10 text-sm font-sans printable-card text-gray-800 printable-text">
       <header className="grid grid-cols-2 gap-4 mb-8 items-start">
         <div>
-          {/* Logo display logic removed, fallback to company name */}
+          {/* Logo display logic removed */}
           <h2 className="text-xl font-bold text-gray-900 mb-3">{currentCompanyDetails.name}</h2>
           <p className="text-xs text-gray-600 whitespace-pre-line">{currentCompanyDetails.address || fallbackCompanyDetails.address}</p>
           {currentCompanyDetails.gstin && <p className="text-xs text-gray-600">GSTIN/VAT: {currentCompanyDetails.gstin}</p>}

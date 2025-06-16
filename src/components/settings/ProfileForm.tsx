@@ -19,11 +19,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
-import { Loader2, AlertCircle } from "lucide-react"; // Removed UploadCloud, ImageIcon, Trash2
+import { Loader2, AlertCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import * as DataService from "@/lib/data-service";
-// Firebase Storage imports removed
 
 const profileFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -34,7 +33,7 @@ const profileFormSchema = z.object({
     message: "Invalid GSTIN format (e.g., 29ABCDE1234F1Z5)",
   }).or(z.literal('')),
   gstRegion: z.enum(["india", "international_other", "none"]).optional(),
-  // logoUrl: z.string().url("Invalid URL for logo.").optional().or(z.literal('')), // Removed logoUrl
+  // logoUrl: z.string().url("Invalid URL for logo.").optional().or(z.literal('')), // Removed
   companyAddress: z.string().optional().or(z.literal('')),
   registeredAddress: z.string().optional().or(z.literal('')),
   corporateAddress: z.string().optional().or(z.literal('')),
@@ -65,11 +64,6 @@ export function ProfileForm() {
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
   const [isFetchingSettings, setIsFetchingSettings] = useState(false);
-  // Logo related state removed
-  // const [isUploadingLogo, setIsUploadingLogo] = useState(false);
-  // const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
-  // const [selectedLogoFile, setSelectedLogoFile] = useState<File | null>(null);
-
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
@@ -80,7 +74,6 @@ export function ProfileForm() {
       businessType: "",
       companyGstin: "",
       gstRegion: "none",
-      // logoUrl: "", // Removed logoUrl
       companyAddress: "",
       registeredAddress: "",
       corporateAddress: "",
@@ -102,17 +95,11 @@ export function ProfileForm() {
             businessType: companySettings?.businessType || "",
             companyGstin: companySettings?.companyGstin || "",
             gstRegion: companySettings?.gstRegion || "none",
-            // logoUrl: companySettings?.logoUrl || "", // Removed logoUrl
             companyAddress: companySettings?.companyAddress || "",
             registeredAddress: companySettings?.registeredAddress || "",
             corporateAddress: companySettings?.corporateAddress || "",
             billingAddress: companySettings?.billingAddress || "",
           });
-          // if (companySettings?.logoUrl) { // Removed logoUrl
-          //   setLogoPreviewUrl(companySettings.logoUrl);
-          // } else {
-          //   setLogoPreviewUrl(null);
-          // }
         } catch (error) {
           console.error("Failed to load company settings:", error);
           toast({ variant: "destructive", title: "Error", description: "Could not load company settings." });
@@ -123,13 +110,11 @@ export function ProfileForm() {
             businessType: "",
             companyGstin: "",
             gstRegion: "none",
-            // logoUrl: "", // Removed logoUrl
             companyAddress: "",
             registeredAddress: "",
             corporateAddress: "",
             billingAddress: "",
           });
-          // setLogoPreviewUrl(null); // Removed logoUrl
         } finally {
           setIsFetchingSettings(false);
         }
@@ -141,19 +126,18 @@ export function ProfileForm() {
           businessType: "",
           companyGstin: "",
           gstRegion: "none",
-          // logoUrl: "", // Removed logoUrl
           companyAddress: "",
           registeredAddress: "",
           corporateAddress: "",
           billingAddress: "",
         });
-        // setLogoPreviewUrl(null); // Removed logoUrl
       }
     }
-    loadProfileAndSettings();
-  }, [user, currentCompanyId, form, toast]);
-
-  // Logo upload and remove handlers removed
+    if (user) { // Only run if user object is available to prevent resetting form with empty user data during auth loading
+      loadProfileAndSettings();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, currentCompanyId]); // form and toast are stable
 
   async function onSubmit(data: ProfileFormValues) {
     if (!currentCompanyId) {
@@ -171,7 +155,6 @@ export function ProfileForm() {
         businessType: data.businessType || "",
         companyGstin: data.companyGstin || "",
         gstRegion: data.gstRegion || "none",
-        // logoUrl: data.logoUrl || "", // Removed logoUrl
         companyAddress: data.companyAddress || "",
         registeredAddress: data.registeredAddress || "",
         corporateAddress: data.corporateAddress || "",
@@ -195,7 +178,7 @@ export function ProfileForm() {
     }
   }
 
-  const isLoadingUiElements = authIsLoading || isFetchingSettings; // Removed isUploadingLogo
+  const isLoadingUiElements = authIsLoading || isFetchingSettings;
   const isSaveButtonDisabled = authIsLoading || isFetchingSettings || isSaving;
   
   if (!currentCompanyId && !authIsLoading && !isFetchingSettings) {
@@ -260,8 +243,6 @@ export function ProfileForm() {
               <p className="text-xs text-muted-foreground">Company context for the current session. Change on login page.</p>
             </div>
             
-            {/* Company Logo Section Removed */}
-
             <FormField
               control={form.control}
               name="businessName"
