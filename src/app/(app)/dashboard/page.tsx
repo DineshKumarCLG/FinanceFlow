@@ -9,7 +9,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/com
 import { UserSpendingList, type UserSpending } from "@/components/dashboard/UserSpendingList";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { getJournalEntries, type JournalEntry as StoredJournalEntry, getNotifications } from "@/lib/data-service";
 import type { DateRange } from "react-day-picker";
 import { Calendar } from "@/components/ui/calendar";
@@ -110,6 +110,31 @@ export default function DashboardPage() {
   const [analyticsExpenseCategories, setAnalyticsExpenseCategories] = useState<AnalyticsExpenseCategoryData[]>([]);
   const [profitLossReportData, setProfitLossReportData] = useState<ProfitLossReportData | undefined>();
 
+  const resetDashboardData = useCallback(() => {
+    setAllJournalEntries([]);
+    setNotifications([]);
+    setSummaryData({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
+    const now = new Date();
+    const defaultLocale = clientLocale || 'en-US';
+    setChartDisplayData(
+        eachMonthOfInterval({ start: startOfMonth(subMonths(now, 11)), end: endOfMonth(now) }).map(d => ({
+            month: d.toLocaleString(defaultLocale, { month: 'short' }), income: 0, expense: 0
+        }))
+    );
+    setUserSpendingData([]);
+    setAnalyticsKpis({ avgTransactionValue: 0, profitMargin: 0, incomeTransactions: 0, expenseTransactions: 0 });
+    setAnalyticsExpenseCategories([]);
+    const defaultDateRange = dateRange || { from: startOfMonth(subMonths(now, 5)), to: endOfMonth(now) };
+    if (defaultDateRange.from && defaultDateRange.to) {
+      const formattedRange = `${format(defaultDateRange.from, "LLL dd, y")} - ${format(defaultDateRange.to, "LLL dd, y")}`;
+      setProfitLossReportData({
+          revenueItems: [], expenseItems: [], totalRevenue: 0, totalExpenses: 0, netProfit: 0, formattedDateRange: formattedRange
+      });
+    } else {
+        setProfitLossReportData(undefined);
+    }
+  }, [clientLocale, dateRange]);
+
 
   useEffect(() => {
     if (typeof navigator !== 'undefined') {
@@ -124,122 +149,77 @@ export default function DashboardPage() {
     }
   }, [searchParams]);
 
-
+  // Effect to load all entries and notifications
   useEffect(() => {
-    async function loadInitialData() {
-      if (!currentUser || !currentCompanyId) { 
+    async function loadAllData() {
+      if (!currentUser || !currentCompanyId || pathname !== '/dashboard') {
         setIsLoadingData(false);
         setIsLoadingNotifications(false);
-        setAllJournalEntries([]);
-        setNotifications([]);
-        setSummaryData({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
-        const now = new Date();
-        setChartDisplayData(
-            eachMonthOfInterval({ start: startOfMonth(subMonths(now, 11)), end: endOfMonth(now) }).map(d => ({
-                month: d.toLocaleString(clientLocale || 'en-US', { month: 'short' }), income: 0, expense: 0
-            }))
-        );
-        setUserSpendingData([]);
-        setAnalyticsKpis({ avgTransactionValue: 0, profitMargin: 0, incomeTransactions: 0, expenseTransactions: 0 });
-        setAnalyticsExpenseCategories([]);
-        if (dateRange?.from && dateRange?.to) {
-            const formattedRange = `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}`;
-            setProfitLossReportData({
-                revenueItems: [], expenseItems: [], totalRevenue: 0, totalExpenses: 0, netProfit: 0, formattedDateRange: formattedRange
-            });
-        } else {
-            setProfitLossReportData(undefined);
-        }
+        if (pathname === '/dashboard') resetDashboardData(); // Reset only if on dashboard page
         return;
       }
-      console.log(`Dashboard: Starting to load initial data for company ${currentCompanyId}...`);
-      setIsLoadingData(true);
-      setIsLoadingNotifications(true);
+
+      console.log(`Dashboard: Starting data load for company ${currentCompanyId}, user ${currentUser.uid}, path ${pathname}`);
+      setIsLoadingData(true); // Governs journal entry dependent data
+      setIsLoadingNotifications(true); // Governs notifications list
+
+      let entriesFetched = false;
       try {
-        const [fetchedEntries, fetchedNotifications] = await Promise.all([
-          getJournalEntries(currentCompanyId), 
-          getNotifications(currentCompanyId)  
-        ]);
-
+        const fetchedEntries = await getJournalEntries(currentCompanyId);
         setAllJournalEntries(fetchedEntries);
-        setNotifications(fetchedNotifications);
-
+        entriesFetched = true;
+        console.log(`Dashboard: Successfully fetched ${fetchedEntries.length} journal entries.`);
       } catch (error: any) {
-        console.error("Failed to load dashboard data:", error);
-        toast({
-          variant: "destructive",
-          title: "Error Loading Dashboard Data",
-          description: error.message || "Could not fetch initial financial data or notifications. Please try again later.",
-        });
-         setSummaryData({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
-         setUserSpendingData([]);
-         setNotifications([]);
-         setAllJournalEntries([]);
-         const now = new Date();
-         setChartDisplayData(
-             Array.from({ length: 12 }).map((_, i) => {
-                 const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
-                 return { month: d.toLocaleString(clientLocale || 'en-US', { month: 'short' }), income: 0, expense: 0 };
-             })
-         );
-         setAnalyticsKpis({ avgTransactionValue: 0, profitMargin: 0, incomeTransactions: 0, expenseTransactions: 0 });
-         setAnalyticsExpenseCategories([]);
-         setProfitLossReportData(undefined);
-         setIsLoadingData(false);
+        console.error("Failed to load journal entries:", error);
+        toast({ variant: "destructive", title: "Error Loading Entries", description: error.message || "Could not fetch journal entries." });
+        setAllJournalEntries([]); // Clear entries on error
+      }
+      // setIsLoadingData is set to false by the processing useEffect
+
+      try {
+        const fetchedNotifications = await getNotifications(currentCompanyId);
+        setNotifications(fetchedNotifications);
+        console.log(`Dashboard: Successfully fetched ${fetchedNotifications.length} notifications.`);
+      } catch (error: any) {
+        console.error("Failed to load notifications:", error);
+        toast({ variant: "destructive", title: "Error Loading Notifications", description: error.message || "Could not fetch notifications." });
+        setNotifications([]);
       } finally {
         setIsLoadingNotifications(false);
-        console.log("Dashboard: Finished loading initial notifications.");
       }
     }
-    if (pathname === '/dashboard') {
-      loadInitialData();
-    } else if (!currentUser || !currentCompanyId) { 
-      setIsLoadingData(false);
-      setIsLoadingNotifications(false);
-      setAllJournalEntries([]);
-      setNotifications([]);
-      setSummaryData({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
-      const now = new Date();
-      setChartDisplayData(
-           eachMonthOfInterval({ start: startOfMonth(subMonths(now, 11)), end: endOfMonth(now) }).map(d => ({
-              month: d.toLocaleString(clientLocale || 'en-US', { month: 'short' }), income: 0, expense: 0
-          }))
-      );
-      setUserSpendingData([]);
-      setAnalyticsKpis({ avgTransactionValue: 0, profitMargin: 0, incomeTransactions: 0, expenseTransactions: 0 });
-      setAnalyticsExpenseCategories([]);
-      if (dateRange?.from && dateRange?.to) {
-        const formattedRange = `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}`;
-        setProfitLossReportData({
-            revenueItems: [], expenseItems: [], totalRevenue: 0, totalExpenses: 0, netProfit: 0, formattedDateRange: formattedRange
-        });
-      } else {
-        setProfitLossReportData(undefined);
-      }
-    }
-  }, [currentUser, currentCompanyId, pathname, clientLocale, dateRange, toast]); 
+
+    loadAllData();
+  }, [currentUser, currentCompanyId, pathname, toast, resetDashboardData]); // Dependencies for initial load
 
 
+  // Effect to process entries when they or dateRange change
   useEffect(() => {
-    console.log("Dashboard: Processing effect triggered. allJournalEntries count:", allJournalEntries.length, "dateRange from:", dateRange?.from, "to:", dateRange?.to);
+    console.log("Dashboard Processing: Triggered. Entries count:", allJournalEntries.length, "DateRange:", dateRange);
     const overallProcessingStartTime = Date.now();
 
     if (!dateRange?.from || !dateRange?.to) {
-      console.log("Dashboard: Date range not fully set, skipping processing.");
-      if (allJournalEntries.length === 0 && !isLoadingNotifications) setIsLoadingData(false);
+      console.log("Dashboard Processing: Date range not fully set, skipping.");
+      // If allJournalEntries are loaded but dateRange is somehow bad, we might show loading indefinitely.
+      // Consider setting setIsLoadingData(false) if allJournalEntries has content but dateRange is bad.
+      if(allJournalEntries.length > 0) setIsLoadingData(false);
       return;
     }
     
-    if (allJournalEntries.length > 0) {
-        setIsLoadingData(true);
-    } else if (allJournalEntries.length === 0 && !isLoadingNotifications) {
-        setIsLoadingData(false);
-        console.log("Dashboard: No entries and notifications loaded. Setting defaults for empty state.");
+    // If currently loading notifications, wait for them, but still proceed with processing entries
+    // if (isLoadingNotifications) {
+    //   console.log("Dashboard Processing: Still loading notifications, will re-process if entries change later.");
+    // }
+
+    if (allJournalEntries.length === 0) {
+        console.log("Dashboard Processing: No entries to process. Setting defaults.");
+        // Reset data to empty/zero state
         setSummaryData({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
         const now = new Date();
+        const currentLocale = clientLocale || 'en-US';
         setChartDisplayData(
             eachMonthOfInterval({ start: startOfMonth(subMonths(now, 11)), end: endOfMonth(now) }).map(d => ({
-                month: d.toLocaleString(clientLocale, { month: 'short' }), income: 0, expense: 0
+                month: d.toLocaleString(currentLocale, { month: 'short' }), income: 0, expense: 0
             }))
         );
         setUserSpendingData([]);
@@ -249,22 +229,12 @@ export default function DashboardPage() {
         setProfitLossReportData({
             revenueItems: [], expenseItems: [], totalRevenue: 0, totalExpenses: 0, netProfit: 0, formattedDateRange: formattedRange
         });
-        console.log(`Dashboard: Finished processing (empty state) in ${Date.now() - overallProcessingStartTime}ms.`);
-        return;
-    }
-
-    if (!currentUser && allJournalEntries.length === 0) {
-        console.log("Dashboard: No current user and no journal entries. Setting defaults for empty state (covered).");
-        if (!isLoadingNotifications) setIsLoadingData(false);
+        setIsLoadingData(false); // Data processing complete (empty state)
+        console.log(`Dashboard Processing: Finished (empty state) in ${Date.now() - overallProcessingStartTime}ms.`);
         return;
     }
     
-    if (allJournalEntries.length === 0) {
-        console.log(`Dashboard: No entries to process (count: ${allJournalEntries.length}). isLoadingNotifications: ${isLoadingNotifications}`);
-        return;
-    }
-
-    console.log("Dashboard: Starting calculations for", allJournalEntries.length, "entries.");
+    console.log("Dashboard Processing: Starting calculations for", allJournalEntries.length, "entries.");
     let sectionStartTime = Date.now();
 
     let calculatedTotalRevenue = 0;
@@ -288,15 +258,16 @@ export default function DashboardPage() {
     const chartIntervalStart = startOfMonth(subMonths(new Date(), 11));
     const chartIntervalEnd = endOfMonth(new Date());
     const monthsForChart = eachMonthOfInterval({ start: chartIntervalStart, end: chartIntervalEnd });
+    const currentLocale = clientLocale || 'en-US';
 
     monthsForChart.forEach(d => {
       const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const monthLabel = d.toLocaleString(clientLocale, { month: 'short' });
+      const monthLabel = d.toLocaleString(currentLocale, { month: 'short' });
       if (!monthlyAggregates[yearMonth]) {
         monthlyAggregates[yearMonth] = { income: 0, expense: 0, monthLabel, yearMonth };
       }
     });
-    console.log(`Dashboard: Initial month setup for chart took ${Date.now() - sectionStartTime}ms.`);
+    console.log(`Dashboard Processing: Initial month setup for chart took ${Date.now() - sectionStartTime}ms.`);
     sectionStartTime = Date.now();
 
     allJournalEntries.forEach(entry => {
@@ -309,26 +280,15 @@ export default function DashboardPage() {
 
       const debitAccountLower = entry.debitAccount?.toLowerCase() || "";
       const creditAccountLower = entry.creditAccount?.toLowerCase() || "";
-      const descriptionLower = entry.description.toLowerCase();
+      // const descriptionLower = entry.description.toLowerCase(); // Keep if needed for classification
 
-      if (incomeKeywords.some(keyword => creditAccountLower.includes(keyword) || descriptionLower.includes(keyword)) ||
-          (debitAccountLower.includes('cash') || debitAccountLower.includes('bank'))) {
+      if (incomeKeywords.some(keyword => creditAccountLower.includes(keyword))) {
           isIncomeEntry = true;
       }
-      
-      if (expenseKeywords.some(keyword => debitAccountLower.includes(keyword) || descriptionLower.includes(keyword))) {
-          isExpenseEntry = true;
-      } else if ((creditAccountLower.includes('cash') || creditAccountLower.includes('bank')) && !isIncomeEntry) {
+      if (expenseKeywords.some(keyword => debitAccountLower.includes(keyword))) {
           isExpenseEntry = true;
       }
       
-      if (entry.description.toLowerCase().includes("web development")) {
-          console.log(`DEBUG: Entry for Web Dev: "${entry.description}", Debit: ${entry.debitAccount}, Credit: ${entry.creditAccount}, Amount: ${entry.amount}`);
-          console.log(`  - debitAccountMatchesExpenseKeyword: ${expenseKeywords.some(keyword => debitAccountLower.includes(keyword))}`);
-          console.log(`  - descriptionMatchesExpenseKeyword: ${expenseKeywords.some(keyword => descriptionLower.includes(keyword))}`);
-          console.log(`  - isIncome (initial): ${isIncomeEntry}, isExpense (initial): ${isExpenseEntry}`);
-      }
-
       if (isWithinRange) {
         transactionCountInRange++;
         if (isIncomeEntry) calculatedTotalRevenue += entry.amount;
@@ -368,32 +328,29 @@ export default function DashboardPage() {
         }
       }
     });
-    console.log(`Dashboard: Main entry iteration (${allJournalEntries.length} entries) took ${Date.now() - sectionStartTime}ms.`);
-    console.log(`Dashboard: expensesByAccountForAnalytics:`, JSON.stringify(expensesByAccountForAnalytics, null, 2));
-
+    console.log(`Dashboard Processing: Main entry iteration (${allJournalEntries.length} entries) took ${Date.now() - sectionStartTime}ms.`);
+    
     sectionStartTime = Date.now();
-
     setSummaryData({
         totalRevenue: calculatedTotalRevenue,
         totalExpenses: calculatedTotalExpenses,
         netProfit: calculatedTotalRevenue - calculatedTotalExpenses,
         transactionCount: transactionCountInRange,
     });
-    console.log(`Dashboard: Summary data state update took ${Date.now() - sectionStartTime}ms.`);
+    console.log(`Dashboard Processing: Summary data state update took ${Date.now() - sectionStartTime}ms.`);
+    
     sectionStartTime = Date.now();
-
     const newChartData = Object.values(monthlyAggregates)
       .sort((a, b) => a.yearMonth.localeCompare(b.yearMonth))
       .map(agg => ({ month: agg.monthLabel, income: agg.income, expense: agg.expense }));
     setChartDisplayData(newChartData);
-    console.log(`Dashboard: Chart data state update took ${Date.now() - sectionStartTime}ms.`);
-    sectionStartTime = Date.now();
+    console.log(`Dashboard Processing: Chart data state update took ${Date.now() - sectionStartTime}ms.`);
 
+    sectionStartTime = Date.now();
     const topSpenders = Object.entries(userExpenses)
       .map(([userId, totalSpent]) => {
         let displayName = `User ...${userId.slice(-6)}`;
         let avatarFallbackInitials = userId.substring(0, 2).toUpperCase();
-
         if (currentUser && userId === currentUser.uid) {
           displayName = currentUser.displayName || `User ...${userId.slice(-6)}`;
           if (currentUser.displayName && currentUser.displayName.trim() !== "") {
@@ -403,14 +360,13 @@ export default function DashboardPage() {
             avatarFallbackInitials = currentUser.email.substring(0, 2).toUpperCase();
           }
         }
-        
         return { userId, totalSpent, displayName, avatarFallback: avatarFallbackInitials };
       })
       .sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 5);
     setUserSpendingData(topSpenders);
-    console.log(`Dashboard: Top spenders state update took ${Date.now() - sectionStartTime}ms.`);
+    console.log(`Dashboard Processing: Top spenders state update took ${Date.now() - sectionStartTime}ms.`);
+    
     sectionStartTime = Date.now();
-
     const calculatedAnalyticsKpis: AnalyticsKpiData = {
       avgTransactionValue: allJournalEntries.length > 0 ? analyticsTotalTransactionAmount / allJournalEntries.length : 0,
       profitMargin: analyticsTotalRevenueForMargin > 0 ? ((analyticsTotalRevenueForMargin - analyticsTotalExpensesForMargin) / analyticsTotalRevenueForMargin) * 100 : 0,
@@ -418,21 +374,19 @@ export default function DashboardPage() {
       expenseTransactions: analyticsExpenseTransactions,
     };
     setAnalyticsKpis(calculatedAnalyticsKpis);
-    console.log(`Dashboard: Analytics KPIs state update took ${Date.now() - sectionStartTime}ms.`);
-    sectionStartTime = Date.now();
+    console.log(`Dashboard Processing: Analytics KPIs state update took ${Date.now() - sectionStartTime}ms.`);
 
+    sectionStartTime = Date.now();
     const topAnalyticsExpenseCategories = Object.entries(expensesByAccountForAnalytics)
       .map(([name, total]) => ({ name, total }))
       .sort((a, b) => b.total - a.total).slice(0, 5);
     setAnalyticsExpenseCategories(topAnalyticsExpenseCategories);
-    console.log(`Dashboard: Analytics expense categories state update took ${Date.now() - sectionStartTime}ms.`);
-    console.log(`Dashboard: topAnalyticsExpenseCategories:`, JSON.stringify(topAnalyticsExpenseCategories, null, 2));
+    console.log(`Dashboard Processing: Analytics expense categories state update took ${Date.now() - sectionStartTime}ms.`);
 
     sectionStartTime = Date.now();
-
     const plRevenueItemsList: PLReportLineItem[] = Object.entries(revenuesForReport).map(([accountName, amount]) => ({ accountName, amount }));
     const plExpenseItemsList: PLReportLineItem[] = Object.entries(expensesForReport).map(([accountName, amount]) => ({ accountName, amount }));
-    const formattedRange = dateRange?.from && dateRange?.to ? `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}` : "All Time";
+    const formattedRange = `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}`;
     setProfitLossReportData({
       revenueItems: plRevenueItemsList,
       expenseItems: plExpenseItemsList,
@@ -441,20 +395,16 @@ export default function DashboardPage() {
       netProfit: reportTotalRevenue - reportTotalExpenses,
       formattedDateRange: formattedRange,
     });
-    console.log(`Dashboard: P&L report data state update took ${Date.now() - sectionStartTime}ms.`);
+    console.log(`Dashboard Processing: P&L report data state update took ${Date.now() - sectionStartTime}ms.`);
 
-    setIsLoadingData(false);
-    console.log(`Dashboard: Finished overall processing calculations in ${Date.now() - overallProcessingStartTime}ms.`);
-  }, [allJournalEntries, dateRange, clientLocale, currentUser, isLoadingNotifications]);
+    setIsLoadingData(false); // All data processing complete
+    console.log(`Dashboard Processing: Finished overall processing calculations in ${Date.now() - overallProcessingStartTime}ms.`);
+  }, [allJournalEntries, dateRange, clientLocale, currentUser, resetDashboardData]); // Removed isLoadingNotifications
 
 
   const handleDownloadReport = () => {
     if (!profitLossReportData) {
-      toast({
-        variant: "destructive",
-        title: "No Report Data",
-        description: "Please ensure there is data loaded for the selected period.",
-      });
+      toast({ variant: "destructive", title: "No Report Data", description: "Please ensure there is data loaded for the selected period." });
       return;
     }
     if (!currentCompanyId) {
@@ -463,23 +413,15 @@ export default function DashboardPage() {
     }
 
     const { revenueItems, expenseItems, totalRevenue, totalExpenses, netProfit, formattedDateRange } = profitLossReportData;
-
     let csvContent = `Company: ${currentCompanyId} - Profit & Loss Statement\n`; 
     csvContent += `Period: ${formattedDateRange}\n\n`;
     csvContent += "Account,Amount (INR)\n";
-
     csvContent += "Revenue\n";
-    revenueItems.forEach(item => {
-      csvContent += `"${item.accountName}",${item.amount}\n`;
-    });
+    revenueItems.forEach(item => { csvContent += `"${item.accountName}",${item.amount}\n`; });
     csvContent += "Total Revenue," + totalRevenue + "\n\n";
-
     csvContent += "Expenses\n";
-    expenseItems.forEach(item => {
-      csvContent += `"${item.accountName}",${item.amount}\n`;
-    });
+    expenseItems.forEach(item => { csvContent += `"${item.accountName}",${item.amount}\n`; });
     csvContent += "Total Expenses," + totalExpenses + "\n\n";
-
     csvContent += "Net Profit / (Loss)," + netProfit + "\n";
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -495,20 +437,13 @@ export default function DashboardPage() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-       toast({
-        title: "Report Downloaded",
-        description: "Profit & Loss Statement CSV has been downloaded.",
-      });
+       toast({ title: "Report Downloaded", description: "Profit & Loss Statement CSV has been downloaded." });
     } else {
-       toast({
-        variant: "destructive",
-        title: "Download Failed",
-        description: "Your browser does not support this download method.",
-      });
+       toast({ variant: "destructive", title: "Download Failed", description: "Your browser does not support this download method." });
     }
   };
 
-  if (!currentCompanyId && !isLoadingData) {
+  if (!currentCompanyId && !isLoadingData && pathname === '/dashboard') { // Check pathname to avoid alert on other pages during initial load
     return (
       <div className="space-y-6 md:space-y-8 p-4">
         <Alert variant="destructive">
