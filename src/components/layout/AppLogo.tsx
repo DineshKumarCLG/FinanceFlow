@@ -1,44 +1,55 @@
-
 import type { SVGProps } from 'react';
 import { cn } from '@/lib/utils';
-
-// Using an inline SVG for the logo for simplicity and scalability
-// This is a generic icon, you might want to replace it with one that matches your new theme.
-// The image shows a green circle with a white letter A or a stylized shape.
-const LogoIcon = (props: SVGProps<SVGSVGElement>) => (
-  <svg 
-    width="24" 
-    height="24" 
-    viewBox="0 0 24 24" 
-    fill="currentColor" // Changed to currentColor to inherit from parent
-    xmlns="http://www.w3.org/2000/svg"
-    {...props}
-  >
-    <circle cx="12" cy="12" r="10" />
-    {/* Simple A for Alicia Koch example, or your app initial */}
-    {/* <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fontSize="12" fill={props.fill === 'hsl(var(--accent))' || props.fill === 'currentColor' ? 'hsl(var(--background))' : 'hsl(var(--accent-foreground))'}>A</text> */}
-  </svg>
-);
-
+import Image from 'next/image'; // Import the Image component
 
 interface AppLogoProps {
   className?: string;
-  iconClassName?: string;
+  iconClassName?: string; // This will now apply to the img tag
   textClassName?: string;
   collapsed?: boolean;
-  showText?: boolean; // New prop to explicitly control text visibility
+  showText?: boolean; // Prop to explicitly control text visibility (used when showing logo)
+  variant?: 'logo' | 'icon'; // New prop to explicitly choose variant
 }
 
-export function AppLogo({ className, iconClassName, textClassName, collapsed = false, showText = true }: AppLogoProps) {
-  const displayAppName = collapsed ? false : showText;
+export function AppLogo({ className, iconClassName, textClassName, collapsed = false, showText = true, variant }: AppLogoProps) {
+
+  // Determine which variant to show based on variant prop or collapsed prop
+  // If variant is provided, use it. Otherwise, use collapsed state (icon when collapsed, logo when not).
+  const displayVariant = variant || (collapsed ? 'icon' : 'logo');
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
-      <LogoIcon className={cn("h-7 w-7 text-accent", iconClassName)} /> {/* Default to accent color (green) */}
-      {displayAppName && (
-        <span className={cn("text-xl font-semibold text-foreground", textClassName)}>
-          FinanceFlow AI {/* Or "Alicia Koch" from example */}
-        </span>
+      {displayVariant === 'icon' ? (
+        // Show icon
+        <Image
+          src="/assets/images/financeflow_icon.png" // Path to your icon file
+          alt="FinanceFlow Icon" // Accessible alt text
+          width={36} // Base width, adjusted by CSS
+          height={36} // Base height, adjusted by CSS
+          className={cn(
+            "h-7 w-7 sm:h-9 sm:w-9", // Responsive sizing
+            iconClassName // Apply any additional icon class names
+          )}
+        />
+      ) : (
+        // Show full logo and optional text
+        <>
+          <Image
+            src="/assets/images/financeflow_logo.png" // Path to your logo file
+            alt="FinanceFlow Logo" // Accessible alt text
+            width={36} // Base width, adjusted by CSS
+            height={36} // Base height, adjusted by CSS
+            className={cn(
+              "h-7 w-7 sm:h-9 sm:w-9", // Responsive sizing
+              iconClassName // Apply any additional icon class names
+            )}
+          />
+          {showText && (
+            <span className={cn("text-xl font-semibold text-foreground", textClassName)}>
+              FinanceFlow AI
+            </span>
+          )}
+        </>
       )}
     </div>
   );

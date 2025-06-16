@@ -106,7 +106,8 @@ export default function CompanyLoginPage() {
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4">
-            <AppLogo iconClassName="h-10 w-10 text-primary" textClassName="text-2xl font-semibold" />
+            {/* Using the icon variant for the auth page as requested */}
+            <AppLogo variant="icon" iconClassName="h-10 w-10 text-primary" textClassName="text-2xl font-semibold" />
           </div>
           <CardTitle className="text-2xl">Welcome to FinanceFlow AI</CardTitle>
           <CardDescription>
