@@ -9,7 +9,7 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import {z}from 'genkit';
 
 const GenerateInvoiceDetailsInputSchema = z.object({
   description: z.string().describe('A textual description of the invoice, e.g., "Invoice Client Corp for 10 hours of consulting at $50/hour and 2 licenses for Product X at $100 each, due in 30 days, project XYZ. Send to client@example.com, billing address: 123 Main St, Anytown. Shipping to 456 Oak Ave."'),
@@ -43,6 +43,10 @@ const GenerateInvoiceDetailsOutputSchema = z.object({
   // The AI can optionally provide a totalAmount if it's explicitly stated and no line items can be discerned.
   totalAmount: z.number().optional().describe('The total amount of the invoice, if explicitly mentioned and line items cannot be broken down. Prefer calculation from line items.'), 
   notes: z.string().optional().describe("Any additional notes or comments mentioned for the invoice."),
+  // Added for consistency with manageInvoiceTool, though AI might not populate it directly
+  customerGstin: z.string().optional().describe("The customer's GSTIN, if discernible."),
+  status: z.enum(['draft', 'sent', 'paid', 'overdue', 'void']).optional().default('draft').describe("The status of the invoice."),
+
 
 });
 export type GenerateInvoiceDetailsOutput = z.infer<typeof GenerateInvoiceDetailsOutputSchema>;
@@ -64,6 +68,7 @@ Extract the following information:
 - Customer Email: The customer's email address.
 - Billing Address: The full billing address for the customer.
 - Shipping Address: The full shipping address, if different from billing.
+- Customer GSTIN: The customer's GSTIN, if mentioned.
 - Invoice Number: If an invoice number is mentioned.
 - Invoice Date: The date the invoice is issued. If no date is mentioned, use today's date. Format as YYYY-MM-DD.
 - Due Date: The date the payment is due. If terms like "Net 30", "due in 15 days", or "payment by end of month" are mentioned, calculate this relative to the invoice date. Format as YYYY-MM-DD. If no due date or terms are mentioned, you can leave this blank or suggest a common term like "Net 30".
@@ -72,6 +77,7 @@ Extract the following information:
 - Items Summary: If structured line items cannot be reliably extracted, provide a concise text summary of what is being invoiced (e.g., "Consulting services for Project XYZ", "Sale of 5 widgets").
 - Total Amount: Only if the description explicitly states a total amount and line items cannot be reliably determined, provide this total. Otherwise, it will be calculated from line items.
 - Notes: Any other relevant notes for the invoice.
+- Status: Default to 'draft' unless specified otherwise.
 
 **Date Handling Rules (Crucial):**
 1. For Invoice Date: If the description explicitly mentions a specific date for the invoice itself (e.g., "invoice dated July 20th"), use that exact date. If no specific invoice date is mentioned, you MUST use the *current calendar date* (the date this request is being processed) as the invoiceDate.
@@ -128,13 +134,10 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
       processedInvoiceDate = today;
     } else if (output.invoiceDate && !/^\d{4}-\d{2}-\d{2}$/.test(output.invoiceDate)) { // If AI provided date is not in YYYY-MM-DD
       try {
-        // Attempt to parse AI's date string. This might be risky if format is unpredictable.
         const parsedDate = new Date(output.invoiceDate);
-        // Check if parsing resulted in a valid date. Invalid dates often become 'Invalid Date' or epoch.
         if (!isNaN(parsedDate.getTime()) && parsedDate.getFullYear() > 1970) { 
           processedInvoiceDate = parsedDate.toISOString().split('T')[0];
         } else {
-          // Fallback to today if parsing failed or resulted in an obviously wrong date.
           console.warn(`AI returned invoiceDate '${output.invoiceDate}' which could not be reliably parsed to YYYY-MM-DD. Input: "${input.description}". Defaulting to today: ${today}.`);
           processedInvoiceDate = today;
         }
@@ -143,12 +146,19 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
         processedInvoiceDate = today;
       }
     } else if (!output.invoiceDate && !explicitInvoiceDateMentioned && !dateMentionRegex.test(input.description.toLowerCase())) {
-        // If AI did not provide a date and no date found in description
         processedInvoiceDate = today;
     }
 
 
     let finalOutput = { ...output, invoiceDate: processedInvoiceDate };
+
+    // Ensure all optional string fields that AI might return as "" or null are actually undefined if empty/null.
+    const stringFieldsToClean: (keyof GenerateInvoiceDetailsOutput)[] = ['customerName', 'customerEmail', 'billingAddress', 'shippingAddress', 'invoiceNumber', 'paymentTerms', 'itemsSummary', 'notes', 'customerGstin'];
+    stringFieldsToClean.forEach(field => {
+        if (finalOutput[field] === "" || finalOutput[field] === null) {
+            (finalOutput as any)[field] = undefined;
+        }
+    });
 
     if (finalOutput.lineItems && finalOutput.lineItems.length > 0) {
       finalOutput.lineItems = finalOutput.lineItems.map(item => {
@@ -163,7 +173,6 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
             gstRate: item.gstRate,
         };
       });
-      // The application will sum these up, AI should not provide totalAmount if lineItems are present.
       finalOutput.totalAmount = undefined; 
       finalOutput.itemsSummary = undefined; 
     }
@@ -199,13 +208,12 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
         }
     }
     
-    // Ensure all optional string fields that AI might return as "" are actually undefined if empty.
-    const stringFieldsToClean: (keyof GenerateInvoiceDetailsOutput)[] = ['customerName', 'customerEmail', 'billingAddress', 'shippingAddress', 'invoiceNumber', 'paymentTerms', 'itemsSummary', 'notes'];
-    stringFieldsToClean.forEach(field => {
-        if (finalOutput[field] === "") {
-            (finalOutput as any)[field] = undefined;
-        }
-    });
+    if (finalOutput.status === null || finalOutput.status === "") {
+        (finalOutput as any).status = undefined; // Ensure status is undefined if empty/null
+    }
+    if (!finalOutput.status) { // If undefined or now explicitly undefined
+        finalOutput.status = 'draft'; // Set default status if not provided by AI
+    }
 
 
     return finalOutput;
