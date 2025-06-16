@@ -22,7 +22,7 @@ import { useState, useEffect, ChangeEvent } from "react";
 import { Loader2, AlertCircle, UploadCloud, Image as ImageIcon, Trash2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import * as DataService from "@/lib/data-service"; 
+import * as DataService from "@/lib/data-service";
 import { storage } from "@/lib/firebase"; // Import Firebase storage
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import Image from "next/image"; // For preview
@@ -36,7 +36,7 @@ const profileFormSchema = z.object({
     message: "Invalid GSTIN format (e.g., 29ABCDE1234F1Z5)",
   }).or(z.literal('')),
   gstRegion: z.enum(["india", "international_other", "none"]).optional(),
-  logoUrl: z.string().url("Invalid URL.").optional().or(z.literal('')), // Added logoUrl
+  logoUrl: z.string().url("Invalid URL.").optional().or(z.literal('')),
   companyAddress: z.string().optional().or(z.literal('')),
   registeredAddress: z.string().optional().or(z.literal('')),
   corporateAddress: z.string().optional().or(z.literal('')),
@@ -77,7 +77,7 @@ export function ProfileForm() {
     defaultValues: {
       name: "",
       email: "",
-      businessName: "", 
+      businessName: "",
       businessType: "",
       companyGstin: "",
       gstRegion: "none",
@@ -95,7 +95,7 @@ export function ProfileForm() {
       if (user && currentCompanyId) {
         setIsFetchingSettings(true);
         try {
-          const companySettings = await DataService.getCompanySettings(currentCompanyId); 
+          const companySettings = await DataService.getCompanySettings(currentCompanyId);
           form.reset({
             name: user.displayName || "",
             email: user.email || "",
@@ -152,7 +152,7 @@ export function ProfileForm() {
       }
     }
     loadProfileAndSettings();
-  }, [user, currentCompanyId, form, toast]);
+  }, [user, currentCompanyId]); // Refined dependencies
 
   const handleLogoFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -165,11 +165,9 @@ export function ProfileForm() {
         const logoFileName = `logo.${fileExtension}`;
         const storageRef = ref(storage, `companyLogos/${currentCompanyId}/${logoFileName}`);
         
-        // Delete existing logo if one exists at this specific path to prevent multiple logo files
-        // For more robust multi-logo management, a different strategy would be needed.
         try {
-            await getDownloadURL(storageRef); // Check if file exists
-            await deleteObject(storageRef); // Delete if it exists
+            await getDownloadURL(storageRef); 
+            await deleteObject(storageRef); 
             console.log("Previous logo deleted successfully.");
         } catch (error: any) {
             if (error.code !== 'storage/object-not-found') {
@@ -188,7 +186,7 @@ export function ProfileForm() {
         toast({ variant: "destructive", title: "Logo Upload Failed", description: error.message || "Could not upload logo." });
       } finally {
         setIsUploadingLogo(false);
-        if(event.target) event.target.value = ""; // Reset file input
+        if(event.target) event.target.value = ""; 
       }
     } else if (!currentCompanyId) {
         toast({variant: "destructive", title: "Company ID Missing", description: "Cannot upload logo without a Company ID."})
@@ -200,12 +198,11 @@ export function ProfileForm() {
         toast({ variant: "destructive", title: "Error", description: "No logo to remove or company ID missing." });
         return;
     }
-    setIsUploadingLogo(true); // Use same state for visual feedback
+    setIsUploadingLogo(true); 
     toast({ title: "Removing Logo..." });
     try {
         const currentLogoUrl = form.getValues("logoUrl");
         if (currentLogoUrl) {
-            // Attempt to delete from storage only if it's a firebase storage URL
             if (currentLogoUrl.includes("firebasestorage.googleapis.com")) {
                  const logoRef = ref(storage, currentLogoUrl);
                  await deleteObject(logoRef);
@@ -231,7 +228,7 @@ export function ProfileForm() {
     }
     setIsSaving(true);
     try {
-      if (data.name !== user?.displayName) {
+      if (user && data.name !== user.displayName) {
         await updateUserProfileName(data.name);
       }
       
@@ -240,7 +237,7 @@ export function ProfileForm() {
         businessType: data.businessType || undefined,
         companyGstin: data.companyGstin || undefined,
         gstRegion: data.gstRegion || undefined,
-        logoUrl: data.logoUrl || "", // Ensure empty string if no logo, not undefined
+        logoUrl: data.logoUrl || "", 
         companyAddress: data.companyAddress || undefined,
         registeredAddress: data.registeredAddress || undefined,
         corporateAddress: data.corporateAddress || undefined,
@@ -483,7 +480,7 @@ export function ProfileForm() {
           </CardContent>
           <CardFooter>
             <Button type="submit" disabled={isLoading}>
-              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save Changes
             </Button>
           </CardFooter>
