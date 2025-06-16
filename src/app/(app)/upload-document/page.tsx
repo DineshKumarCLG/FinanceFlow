@@ -7,14 +7,14 @@ import { FileUploader } from "@/components/shared/FileUploader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, FileText, CheckCircle, AlertCircle, CornerDownLeft } from 'lucide-react';
-import { extractAccountingData, type ExtractAccountingDataOutput } from '@/ai/flows/extract-accounting-data'; // Removed ExtractAccountingDataInput as it's not used here directly
+import { Loader2, FileText, CheckCircle, AlertCircle, CornerDownLeft, Info } from 'lucide-react';
+import { extractAccountingData, type ExtractAccountingDataOutput, type ExtractAccountingDataInput } from '@/ai/flows/extract-accounting-data';
 import { useToast } from '@/hooks/use-toast';
-import { addJournalEntries } from '@/lib/data-service';
-import { useAuth } from "@/contexts/AuthContext"; // Import useAuth
+import { addJournalEntries, type JournalEntry } from '@/lib/data-service';
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function UploadDocumentPage() {
-  const { currentCompanyId } = useAuth(); // Get currentCompanyId
+  const { currentCompanyId } = useAuth();
   const [isProcessingAi, setIsProcessingAi] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [extractedData, setExtractedData] = useState<ExtractAccountingDataOutput | null>(null);
@@ -41,7 +41,9 @@ export default function UploadDocumentPage() {
     setError(null);
 
     try {
-      const result = await extractAccountingData({ documentDataUri: dataUri });
+      // Potentially pass gstRegionContext here if available from settings
+      const aiInput: ExtractAccountingDataInput = { documentDataUri: dataUri };
+      const result = await extractAccountingData(aiInput);
       setExtractedData(result);
       if (result.entries.length === 0) {
         toast({ variant: "default", title: "Parsing Complete", description: "AI could not find any accounting entries in this document." });
@@ -70,14 +72,26 @@ export default function UploadDocumentPage() {
     }
     setIsSaving(true);
     try {
-      const entriesToSave = extractedData.entries.map(entry => ({
+      const entriesToSave: Omit<JournalEntry, 'id' | 'creatorUserId' | 'companyId' | 'createdAt'>[] = extractedData.entries.map(entry => ({
         date: entry.date,
         description: entry.description,
         debitAccount: entry.debitAccount,
         creditAccount: entry.creditAccount,
-        amount: entry.amount,
+        amount: entry.amount, // Total Amount
+        // GST Fields
+        taxableAmount: entry.taxableAmount,
+        gstType: entry.gstType,
+        gstRate: entry.gstRate,
+        igstAmount: entry.igstAmount,
+        cgstAmount: entry.cgstAmount,
+        sgstAmount: entry.sgstAmount,
+        vatAmount: entry.vatAmount,
+        hsnSacCode: entry.hsnSacCode,
+        partyGstin: entry.partyGstin,
+        isInterState: entry.isInterState,
+        tags: [], // Initialize tags or allow AI to suggest later
       }));
-      await addJournalEntries(currentCompanyId, entriesToSave); // Pass companyId
+      await addJournalEntries(currentCompanyId, entriesToSave);
       toast({ title: "Entries Saved!", description: "The extracted accounting entries have been recorded." });
       setExtractedData(null);
       setCurrentFile(null);
@@ -96,6 +110,11 @@ export default function UploadDocumentPage() {
   };
 
   const isLoading = isProcessingAi || isSaving;
+
+  const formatCurrencyDisplay = (value?: number) => {
+    if (value === undefined || value === null) return 'N/A';
+    return value.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' });
+  };
 
   if (!currentCompanyId && !isLoading) {
      return (
@@ -121,7 +140,7 @@ export default function UploadDocumentPage() {
     <div>
       <PageTitle
         title={`Upload Document ${currentCompanyId ? `(${currentCompanyId})` : ''}`}
-        description="Upload your receipts, bills, or invoices. Our AI will extract the accounting data."
+        description="Upload receipts, bills, or invoices. Our AI will extract accounting data, including GST details."
       />
       <div className="max-w-2xl mx-auto space-y-6">
         <FileUploader onFileUpload={handleFileUpload} isProcessing={isProcessingAi} />
@@ -162,14 +181,37 @@ export default function UploadDocumentPage() {
               ) : (
                 extractedData.entries.map((entry, index) => (
                   <Card key={index} className="bg-secondary/30 p-4">
-                    <p><strong>Entry #{index + 1}</strong></p>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mt-2">
+                    <p className="font-semibold mb-2">Entry #{index + 1}</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-sm">
                       <div><strong>Date:</strong> {entry.date}</div>
-                      <div><strong>Amount:</strong> {entry.amount.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' })}</div>
+                      <div><strong>Total Amount:</strong> {formatCurrencyDisplay(entry.amount)}</div>
                       <div><strong>Debit:</strong> {entry.debitAccount}</div>
                       <div><strong>Credit:</strong> {entry.creditAccount}</div>
-                      <div className="col-span-2"><strong>Description:</strong> {entry.description}</div>
+                      <div className="md:col-span-2"><strong>Description:</strong> {entry.description}</div>
                     </div>
+                     {(entry.gstType && entry.gstType !== 'none') && (
+                        <div className="mt-2 pt-2 border-t border-border/30 text-sm">
+                          <p className="font-medium mb-1 flex items-center text-xs"><Info className="h-3 w-3 mr-1 text-primary"/>Tax Details:</p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-px">
+                            <div><strong>Taxable:</strong> {formatCurrencyDisplay(entry.taxableAmount)}</div>
+                            <div><strong>GST Type:</strong> <span className="uppercase">{entry.gstType}</span></div>
+                            <div><strong>GST Rate:</strong> {entry.gstRate ? `${entry.gstRate}%` : 'N/A'}</div>
+                            {entry.gstType === 'igst' && <div><strong>IGST:</strong> {formatCurrencyDisplay(entry.igstAmount)}</div>}
+                            {entry.gstType === 'cgst-sgst' && (
+                              <>
+                                <div><strong>CGST:</strong> {formatCurrencyDisplay(entry.cgstAmount)}</div>
+                                <div><strong>SGST:</strong> {formatCurrencyDisplay(entry.sgstAmount)}</div>
+                              </>
+                            )}
+                            {entry.gstType === 'vat' && <div><strong>VAT:</strong> {formatCurrencyDisplay(entry.vatAmount)}</div>}
+                            <div><strong>HSN/SAC:</strong> {entry.hsnSacCode || 'N/A'}</div>
+                            <div><strong>Party GSTIN:</strong> {entry.partyGstin || 'N/A'}</div>
+                             {entry.gstType !== 'vat' && entry.gstType !== 'none' && (
+                                <div><strong>Inter-State:</strong> {entry.isInterState === undefined ? 'N/A' : entry.isInterState ? 'Yes' : 'No'}</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                   </Card>
                 ))
               )}

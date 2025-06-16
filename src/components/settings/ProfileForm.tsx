@@ -22,16 +22,17 @@ import { Loader2, AlertCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-
+// TODO: Store and retrieve these company-specific settings from Firestore
+// For now, they are just part of the form state and logged.
 const profileFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   email: z.string().email().optional(),
-  // currentCompanyIdDisplay: z.string().optional(), // For display only
-  // Business name and type might be company-specific, not user-specific in a multi-company setup
-  // Or they could be user's default business info if they manage multiple companies.
-  // For now, let's keep them as user-level settings.
   businessName: z.string().min(2, "Business name must be at least 2 characters.").optional(),
   businessType: z.string().optional(),
+  companyGstin: z.string().optional().refine(val => !val || /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i.test(val), {
+    message: "Invalid GSTIN format (e.g., 29ABCDE1234F1Z5)",
+  }),
+  gstRegion: z.enum(["india", "international_other", "none"]).optional(),
 });
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
@@ -46,6 +47,13 @@ const businessTypes = [
   { value: "other", label: "Other" },
 ];
 
+const gstRegionOptions = [
+  { value: "india", label: "India (GST)" },
+  { value: "international_other", label: "International (VAT/Other Sales Tax)" },
+  { value: "none", label: "None / Not Applicable" },
+];
+
+
 export function ProfileForm() {
   const { user, updateUserProfileName, isLoading: authIsLoading, currentCompanyId } = useAuth();
   const { toast } = useToast();
@@ -56,21 +64,26 @@ export function ProfileForm() {
     defaultValues: {
       name: user?.displayName || "",
       email: user?.email || "",
-      businessName: "", // This should ideally be fetched from a user profile if stored
-      businessType: "", // This too
+      businessName: "", 
+      businessType: "",
+      companyGstin: "",
+      gstRegion: "none",
     },
     mode: "onChange",
   });
 
   useEffect(() => {
     if (user) {
+      // TODO: Fetch these settings from Firestore for the currentCompanyId
+      // For demo, using placeholder values or KENESIS defaults.
+      const isKenesis = currentCompanyId === "KENESIS";
       form.reset({
         name: user.displayName || "",
         email: user.email || "",
-        // Fetch businessName and businessType from a user profile in Firestore if you store them
-        // For now, if they are empty in the form, keep them empty or set a default
-        businessName: form.getValues("businessName") || (currentCompanyId === "KENESIS" ? "KENESIS" : ""),
-        businessType: form.getValues("businessType") || (currentCompanyId === "KENESIS" ? "startup" : ""),
+        businessName: form.getValues("businessName") || (isKenesis ? "KENESIS Solutions Pvt. Ltd." : ""),
+        businessType: form.getValues("businessType") || (isKenesis ? "startup" : ""),
+        companyGstin: form.getValues("companyGstin") || (isKenesis ? "29AAPCK1234A1Z5" : ""), // Example GSTIN
+        gstRegion: form.getValues("gstRegion") || (isKenesis ? "india" : "none"),
       });
     }
   }, [user, form, currentCompanyId]);
@@ -81,19 +94,24 @@ export function ProfileForm() {
       if (data.name !== user?.displayName) {
         await updateUserProfileName(data.name);
       }
-      // TODO: Add logic to save businessName and businessType to a Firestore user profile document,
-      // potentially scoped by companyId or as general user info.
-      console.log("Profile data to save (potentially to Firestore):", { businessName: data.businessName, businessType: data.businessType, forCompany: currentCompanyId });
+      // TODO: Save company-specific settings (businessName, businessType, companyGstin, gstRegion)
+      // to a Firestore document associated with currentCompanyId.
+      console.log("Profile & Company Settings to save (for company:", currentCompanyId, ") :", {
+        businessName: data.businessName,
+        businessType: data.businessType,
+        companyGstin: data.companyGstin,
+        gstRegion: data.gstRegion,
+      });
       
       toast({
-        title: "Profile Updated",
-        description: "Your profile information has been saved.",
+        title: "Settings Updated",
+        description: "Your profile and company settings have been saved (simulated).",
       });
     } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Update Failed",
-        description: error.message || "Could not update profile.",
+        description: error.message || "Could not update settings.",
       });
     } finally {
       setIsSaving(false);
@@ -106,14 +124,14 @@ export function ProfileForm() {
     return (
        <Card>
         <CardHeader>
-            <CardTitle>User Profile</CardTitle>
+            <CardTitle>User Profile & Company Settings</CardTitle>
         </CardHeader>
         <CardContent>
              <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>No Company Selected</AlertTitle>
                 <AlertDescription>
-                Please select or enter a Company ID on the main page to manage profile settings.
+                Please select or enter a Company ID on the main login page to manage profile and company settings.
                 </AlertDescription>
             </Alert>
         </CardContent>
@@ -125,8 +143,8 @@ export function ProfileForm() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>User Profile {currentCompanyId ? `(Company: ${currentCompanyId})` : ''}</CardTitle>
-        <CardDescription>Manage your personal and business information.</CardDescription>
+        <CardTitle>User Profile & Company Settings {currentCompanyId ? `(${currentCompanyId})` : ''}</CardTitle>
+        <CardDescription>Manage your personal information and company-specific details like GST.</CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -158,7 +176,6 @@ export function ProfileForm() {
                 </FormItem>
               )}
             />
-             {/* Display Current Company ID - Not editable here */}
             <div>
               <FormLabel>Current Company ID</FormLabel>
               <Input value={currentCompanyId || "N/A"} disabled readOnly className="mt-1"/>
@@ -170,9 +187,9 @@ export function ProfileForm() {
               name="businessName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Business Name (Optional)</FormLabel>
+                  <FormLabel>Business Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Your business name" {...field} disabled={isLoading || (currentCompanyId === "KENESIS" && field.value === "KENESIS")}/>
+                    <Input placeholder="Your business name" {...field} disabled={isLoading}/>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -183,7 +200,7 @@ export function ProfileForm() {
               name="businessType"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Business Type (Optional)</FormLabel>
+                  <FormLabel>Business Type</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value} disabled={isLoading}>
                     <FormControl>
                       <SelectTrigger>
@@ -197,6 +214,43 @@ export function ProfileForm() {
                     </SelectContent>
                   </Select>
                   <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="companyGstin"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Company GSTIN (India) / VAT ID</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g., 29ABCDE1234F1Z5 or your VAT ID" {...field} disabled={isLoading}/>
+                  </FormControl>
+                  <FormMessage />
+                   <p className="text-xs text-muted-foreground">Enter your company's Goods and Services Tax Identification Number or VAT ID.</p>
+                </FormItem>
+              )}
+            />
+             <FormField
+              control={form.control}
+              name="gstRegion"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Primary GST / VAT Region</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value} disabled={isLoading}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select your primary tax region" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {gstRegionOptions.map(opt => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                  <p className="text-xs text-muted-foreground">This helps the AI understand the tax context.</p>
                 </FormItem>
               )}
             />

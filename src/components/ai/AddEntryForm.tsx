@@ -16,7 +16,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useState, useEffect, useRef } from "react";
-import { Loader2, Mic, Send, CornerDownLeft, FileText, AlertCircle } from "lucide-react";
+import { Loader2, Mic, Send, CornerDownLeft, FileText, AlertCircle, Info } from "lucide-react";
 import { parseAccountingEntry, type ParseAccountingEntryOutput } from "@/ai/flows/parse-accounting-entry";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -28,7 +28,7 @@ const formSchema = z.object({
 });
 
 export function AddEntryForm() {
-  const { currentCompanyId } = useAuth(); // Get currentCompanyId
+  const { currentCompanyId } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [parsedResult, setParsedResult] = useState<ParseAccountingEntryOutput | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -100,6 +100,7 @@ export function AddEntryForm() {
     setParsedResult(null);
     setError(null);
     try {
+      // Potentially pass gstRegionContext here if available from settings
       const result = await parseAccountingEntry({ entryText: values.entryText });
       setParsedResult(result);
       toast({ title: "Entry Parsed", description: "Review the details below and confirm." });
@@ -122,12 +123,24 @@ export function AddEntryForm() {
     try {
       const entryToSave = {
         date: parsedResult.date,
-        description: `${parsedResult.purpose} - ${parsedResult.description}`,
+        description: `${parsedResult.purpose} - ${parsedResult.description}`, // Main description
         debitAccount: parsedResult.debitAccount,
         creditAccount: parsedResult.creditAccount,
-        amount: parsedResult.amount,
+        amount: parsedResult.amount, // Total amount
+        // GST fields from parsedResult
+        taxableAmount: parsedResult.taxableAmount,
+        gstType: parsedResult.gstType,
+        gstRate: parsedResult.gstRate,
+        igstAmount: parsedResult.igstAmount,
+        cgstAmount: parsedResult.cgstAmount,
+        sgstAmount: parsedResult.sgstAmount,
+        vatAmount: parsedResult.vatAmount,
+        hsnSacCode: parsedResult.hsnSacCode,
+        partyGstin: parsedResult.partyGstin,
+        isInterState: parsedResult.isInterState,
+        tags: [], // Initialize tags or carry over if AI suggests them
       };
-      await addJournalEntry(currentCompanyId, entryToSave); // Pass companyId
+      await addJournalEntry(currentCompanyId, entryToSave);
       toast({ title: "Entry Saved!", description: "The accounting entry has been successfully recorded." });
       setParsedResult(null);
       form.reset();
@@ -138,6 +151,11 @@ export function AddEntryForm() {
       setIsLoading(false);
     }
   }
+
+  const formatCurrencyDisplay = (value?: number) => {
+    if (value === undefined || value === null) return 'N/A';
+    return value.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' });
+  };
 
   if (!currentCompanyId) {
     return (
@@ -162,7 +180,7 @@ export function AddEntryForm() {
     <Card className="w-full shadow-xl">
       <CardHeader>
         <CardTitle className="text-2xl">Add New Accounting Entry ({currentCompanyId})</CardTitle>
-        <CardDescription>Describe your transaction using text or voice. Our AI will parse it for you.</CardDescription>
+        <CardDescription>Describe your transaction using text or voice. Our AI will parse it for you, including GST details if mentioned.</CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -175,7 +193,7 @@ export function AddEntryForm() {
                   <FormLabel>Transaction Description</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="e.g., 'Paid ₹2000 for office supplies on July 15th' or 'Received ₹10000 from Client X for project completion'"
+                      placeholder="e.g., 'Paid ₹2360 for office supplies to XYZ Corp (GSTIN:...) with 18% GST on July 15th' or 'Received ₹10000 from Client X for project completion'"
                       className="min-h-[100px] resize-none"
                       {...field}
                     />
@@ -212,15 +230,39 @@ export function AddEntryForm() {
                   <CardDescription>Please review the AI-generated entry and confirm.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm">
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2">
                     <div><strong>Date:</strong> {parsedResult.date}</div>
-                    <div><strong>Amount:</strong> {parsedResult.amount.toLocaleString(clientLocale, { style: 'currency', currency: 'INR' })}</div>
+                    <div><strong>Total Amount:</strong> {formatCurrencyDisplay(parsedResult.amount)}</div>
                     <div><strong>Type:</strong> <span className="capitalize">{parsedResult.type}</span></div>
                     <div><strong>Purpose:</strong> {parsedResult.purpose}</div>
                     <div><strong>Debit Account:</strong> {parsedResult.debitAccount}</div>
                     <div><strong>Credit Account:</strong> {parsedResult.creditAccount}</div>
+                    <div className="md:col-span-2"><strong>Description:</strong> {parsedResult.description}</div>
                   </div>
-                  <div><strong>Description:</strong> {parsedResult.description}</div>
+                  
+                  {(parsedResult.gstType && parsedResult.gstType !== 'none') && (
+                    <div className="mt-3 pt-3 border-t border-border/50">
+                      <p className="font-semibold text-base mb-1 flex items-center"><Info className="h-4 w-4 mr-2 text-primary" />Tax Details:</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1">
+                        <div><strong>Taxable Amount:</strong> {formatCurrencyDisplay(parsedResult.taxableAmount)}</div>
+                        <div><strong>GST Type:</strong> <span className="uppercase">{parsedResult.gstType}</span></div>
+                        <div><strong>GST Rate:</strong> {parsedResult.gstRate ? `${parsedResult.gstRate}%` : 'N/A'}</div>
+                        {parsedResult.gstType === 'igst' && <div><strong>IGST:</strong> {formatCurrencyDisplay(parsedResult.igstAmount)}</div>}
+                        {parsedResult.gstType === 'cgst-sgst' && (
+                          <>
+                            <div><strong>CGST:</strong> {formatCurrencyDisplay(parsedResult.cgstAmount)}</div>
+                            <div><strong>SGST:</strong> {formatCurrencyDisplay(parsedResult.sgstAmount)}</div>
+                          </>
+                        )}
+                        {parsedResult.gstType === 'vat' && <div><strong>VAT:</strong> {formatCurrencyDisplay(parsedResult.vatAmount)}</div>}
+                        <div><strong>HSN/SAC:</strong> {parsedResult.hsnSacCode || 'N/A'}</div>
+                        <div><strong>Party GSTIN:</strong> {parsedResult.partyGstin || 'N/A'}</div>
+                        {parsedResult.gstType !== 'vat' && parsedResult.gstType !== 'none' && (
+                            <div><strong>Inter-State:</strong> {parsedResult.isInterState === undefined ? 'N/A' : parsedResult.isInterState ? 'Yes' : 'No'}</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
                 <CardFooter>
                   <Button onClick={handleConfirmEntry} className="w-full" disabled={isLoading || !currentCompanyId}>
