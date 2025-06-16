@@ -1,4 +1,3 @@
-
 // src/lib/data-service.ts
 import { auth, db } from './firebase';
 import {
@@ -14,7 +13,8 @@ import {
   doc,
   deleteDoc,
   getDoc,
-  updateDoc, 
+  updateDoc,
+  setDoc, // Added setDoc for saveCompanySettings
 } from 'firebase/firestore';
 
 export interface JournalEntry {
@@ -45,7 +45,7 @@ export interface JournalEntry {
 export interface Notification {
   id: string;
   message: string;
-  type: 'new_entry' | 'user_joined' | 'document_upload' | 'invoice_created' | 'invoice_updated';
+  type: 'new_entry' | 'user_joined' | 'document_upload' | 'invoice_created' | 'invoice_updated' | 'company_settings_updated';
   timestamp: Timestamp | { seconds: number, nanoseconds: number };
   userId?: string;
   relatedId?: string;
@@ -91,10 +91,21 @@ export interface Invoice {
   updatedAt: Timestamp | { seconds: number, nanoseconds: number };
 }
 
+// New interface for Company Settings
+export interface CompanySettings {
+  id?: string; // This will be the companyId itself
+  businessName?: string;
+  businessType?: string;
+  companyGstin?: string;
+  gstRegion?: 'india' | 'international_other' | 'none';
+  updatedAt?: Timestamp;
+}
+
 
 const JOURNAL_COLLECTION = 'journalEntries';
 const NOTIFICATION_COLLECTION = 'notifications';
 const INVOICE_COLLECTION = 'invoices';
+const COMPANY_SETTINGS_COLLECTION = 'companySettings'; // New collection
 
 
 export async function addNotification(
@@ -373,7 +384,7 @@ export async function deleteJournalEntry(companyId: string, entryId: string): Pr
     const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
     addNotification(
       `${userName} deleted journal entry ID: ${entryId.slice(0,8)}...`,
-      'new_entry',
+      'new_entry', // Consider a 'entry_deleted' type
       companyId,
       currentUser.uid,
       entryId
@@ -637,10 +648,82 @@ export async function getInvoiceById(companyId: string, invoiceId: string): Prom
   }
 }
 
+export async function getCompanySettings(companyId: string): Promise<CompanySettings | null> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    console.warn("DataService: User not authenticated. Cannot fetch company settings.");
+    return null;
+  }
+  if (!companyId) {
+    console.warn("DataService: Company ID is required to fetch company settings.");
+    return null;
+  }
+
+  try {
+    const settingsRef = doc(db, COMPANY_SETTINGS_COLLECTION, companyId);
+    const docSnap = await getDoc(settingsRef);
+
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        businessName: data.businessName,
+        businessType: data.businessType,
+        companyGstin: data.companyGstin,
+        gstRegion: data.gstRegion,
+        updatedAt: data.updatedAt,
+      } as CompanySettings;
+    } else {
+      console.log(`DataService: No settings found for company ${companyId}.`);
+      return null; // Or return default settings object if preferred
+    }
+  } catch (error) {
+    console.error(`DataService: Error fetching settings for company '${companyId}' (User: ${currentUser.uid}):`, error);
+    throw error;
+  }
+}
+
+export async function saveCompanySettings(
+  companyId: string,
+  settingsData: Partial<Omit<CompanySettings, 'id' | 'updatedAt'>>
+): Promise<void> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error("User not authenticated. Cannot save company settings.");
+  }
+  if (!companyId) {
+    throw new Error("Company ID is required to save company settings.");
+  }
+
+  const settingsRef = doc(db, COMPANY_SETTINGS_COLLECTION, companyId);
+  const dataToSave = {
+    ...settingsData,
+    updatedAt: serverTimestamp() as Timestamp,
+  };
+
+  try {
+    // Using setDoc with merge: true will create the document if it doesn't exist,
+    // or update it if it does.
+    await setDoc(settingsRef, dataToSave, { merge: true });
+
+    const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
+    addNotification(
+      `${userName} updated company settings for ${companyId}.`,
+      'company_settings_updated',
+      companyId,
+      currentUser.uid,
+      companyId // relatedId can be the companyId itself for settings
+    ).catch(err => console.error("DataService: Failed to add notification for company settings update:", err));
+
+  } catch (error) {
+    console.error(`DataService: Error saving settings for company '${companyId}' (User: ${currentUser.uid}):`, error);
+    throw error;
+  }
+}
+
 
 export interface UserProfile {
   uid: string;
   email: string | null;
   displayName: string | null;
 }
-

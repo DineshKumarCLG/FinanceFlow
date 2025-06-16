@@ -21,17 +21,16 @@ import { useState, useEffect } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { getCompanySettings, saveCompanySettings, type CompanySettings } from "@/lib/data-service"; // Import new functions and type
 
-// TODO: Store and retrieve these company-specific settings from Firestore
-// For now, they are just part of the form state and logged.
 const profileFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   email: z.string().email().optional(),
-  businessName: z.string().min(2, "Business name must be at least 2 characters.").optional(),
-  businessType: z.string().optional(),
+  businessName: z.string().min(2, "Business name must be at least 2 characters.").optional().or(z.literal('')),
+  businessType: z.string().optional().or(z.literal('')),
   companyGstin: z.string().optional().refine(val => !val || /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i.test(val), {
     message: "Invalid GSTIN format (e.g., 29ABCDE1234F1Z5)",
-  }),
+  }).or(z.literal('')),
   gstRegion: z.enum(["india", "international_other", "none"]).optional(),
 });
 
@@ -58,12 +57,13 @@ export function ProfileForm() {
   const { user, updateUserProfileName, isLoading: authIsLoading, currentCompanyId } = useAuth();
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
+  const [isFetchingSettings, setIsFetchingSettings] = useState(false);
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
     defaultValues: {
-      name: user?.displayName || "",
-      email: user?.email || "",
+      name: "",
+      email: "",
       businessName: "", 
       businessType: "",
       companyGstin: "",
@@ -73,39 +73,71 @@ export function ProfileForm() {
   });
 
   useEffect(() => {
-    if (user) {
-      // TODO: Fetch these settings from Firestore for the currentCompanyId
-      // For demo, using placeholder values or KENESIS defaults.
-      const isKenesis = currentCompanyId === "KENESIS";
-      form.reset({
-        name: user.displayName || "",
-        email: user.email || "",
-        businessName: form.getValues("businessName") || (isKenesis ? "KENESIS Solutions Pvt. Ltd." : ""),
-        businessType: form.getValues("businessType") || (isKenesis ? "startup" : ""),
-        companyGstin: form.getValues("companyGstin") || (isKenesis ? "29AAPCK1234A1Z5" : ""), // Example GSTIN
-        gstRegion: form.getValues("gstRegion") || (isKenesis ? "india" : "none"),
-      });
+    async function loadProfileAndSettings() {
+      if (user && currentCompanyId) {
+        setIsFetchingSettings(true);
+        try {
+          const companySettings = await getCompanySettings(currentCompanyId);
+          form.reset({
+            name: user.displayName || "",
+            email: user.email || "",
+            businessName: companySettings?.businessName || "",
+            businessType: companySettings?.businessType || "",
+            companyGstin: companySettings?.companyGstin || "",
+            gstRegion: companySettings?.gstRegion || "none",
+          });
+        } catch (error) {
+          console.error("Failed to load company settings:", error);
+          toast({ variant: "destructive", title: "Error", description: "Could not load company settings." });
+          // Reset with user data only if company settings fail
+          form.reset({
+            name: user.displayName || "",
+            email: user.email || "",
+            businessName: "",
+            businessType: "",
+            companyGstin: "",
+            gstRegion: "none",
+          });
+        } finally {
+          setIsFetchingSettings(false);
+        }
+      } else if (user) {
+        // No companyId, just load user profile
+        form.reset({
+          name: user.displayName || "",
+          email: user.email || "",
+          businessName: "",
+          businessType: "",
+          companyGstin: "",
+          gstRegion: "none",
+        });
+      }
     }
-  }, [user, form, currentCompanyId]);
+    loadProfileAndSettings();
+  }, [user, currentCompanyId, form, toast]);
 
   async function onSubmit(data: ProfileFormValues) {
+    if (!currentCompanyId) {
+      toast({ variant: "destructive", title: "Error", description: "No Company ID selected. Cannot save settings." });
+      return;
+    }
     setIsSaving(true);
     try {
       if (data.name !== user?.displayName) {
         await updateUserProfileName(data.name);
       }
-      // TODO: Save company-specific settings (businessName, businessType, companyGstin, gstRegion)
-      // to a Firestore document associated with currentCompanyId.
-      console.log("Profile & Company Settings to save (for company:", currentCompanyId, ") :", {
-        businessName: data.businessName,
-        businessType: data.businessType,
-        companyGstin: data.companyGstin,
-        gstRegion: data.gstRegion,
-      });
+      
+      const companySettingsToSave: Partial<CompanySettings> = {
+        businessName: data.businessName || undefined,
+        businessType: data.businessType || undefined,
+        companyGstin: data.companyGstin || undefined,
+        gstRegion: data.gstRegion || undefined,
+      };
+      await saveCompanySettings(currentCompanyId, companySettingsToSave);
       
       toast({
         title: "Settings Updated",
-        description: "Your profile and company settings have been saved (simulated).",
+        description: "Your profile and company settings have been successfully saved.",
       });
     } catch (error: any) {
       toast({
@@ -118,9 +150,9 @@ export function ProfileForm() {
     }
   }
 
-  const isLoading = authIsLoading || isSaving;
+  const isLoading = authIsLoading || isSaving || isFetchingSettings;
   
-  if (!currentCompanyId && !authIsLoading) {
+  if (!currentCompanyId && !authIsLoading && !isFetchingSettings) {
     return (
        <Card>
         <CardHeader>
@@ -156,7 +188,7 @@ export function ProfileForm() {
                 <FormItem>
                   <FormLabel>Full Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Your full name" {...field} disabled={isLoading} />
+                    <Input placeholder="Your full name" {...field} value={field.value ?? ""} disabled={isLoading} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -169,7 +201,7 @@ export function ProfileForm() {
                 <FormItem>
                   <FormLabel>Email Address</FormLabel>
                   <FormControl>
-                    <Input type="email" placeholder="your@email.com" {...field} disabled />
+                    <Input type="email" placeholder="your@email.com" {...field} value={field.value ?? ""} disabled />
                   </FormControl>
                   <FormMessage />
                   <p className="text-xs text-muted-foreground">Email is managed by your Google account.</p>
@@ -189,7 +221,7 @@ export function ProfileForm() {
                 <FormItem>
                   <FormLabel>Business Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Your business name" {...field} disabled={isLoading}/>
+                    <Input placeholder="Your business name" {...field} value={field.value ?? ""} disabled={isLoading}/>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -201,7 +233,7 @@ export function ProfileForm() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Business Type</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value} disabled={isLoading}>
+                  <Select onValueChange={field.onChange} value={field.value ?? ""} disabled={isLoading}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select your business type" />
@@ -224,7 +256,7 @@ export function ProfileForm() {
                 <FormItem>
                   <FormLabel>Company GSTIN (India) / VAT ID</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., 29ABCDE1234F1Z5 or your VAT ID" {...field} disabled={isLoading}/>
+                    <Input placeholder="e.g., 29ABCDE1234F1Z5 or your VAT ID" {...field} value={field.value ?? ""} disabled={isLoading}/>
                   </FormControl>
                   <FormMessage />
                    <p className="text-xs text-muted-foreground">Enter your company's Goods and Services Tax Identification Number or VAT ID.</p>
@@ -237,7 +269,7 @@ export function ProfileForm() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Primary GST / VAT Region</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value} disabled={isLoading}>
+                  <Select onValueChange={field.onChange} value={field.value ?? "none"} disabled={isLoading}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select your primary tax region" />
