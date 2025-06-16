@@ -15,7 +15,7 @@ import {
   deleteDoc,
   getDoc,
   updateDoc,
-  setDoc, // Added setDoc for saveCompanySettings
+  setDoc,
 } from 'firebase/firestore';
 
 export interface JournalEntry {
@@ -46,7 +46,7 @@ export interface JournalEntry {
 export interface Notification {
   id: string;
   message: string;
-  type: 'new_entry' | 'user_joined' | 'document_upload' | 'invoice_created' | 'invoice_updated' | 'company_settings_updated';
+  type: 'new_entry' | 'user_joined' | 'document_upload' | 'invoice_created' | 'invoice_updated' | 'company_settings_updated' | 'ai_preferences_updated';
   timestamp: Timestamp | { seconds: number, nanoseconds: number };
   userId?: string;
   relatedId?: string;
@@ -60,7 +60,6 @@ export interface InvoiceLineItem {
   amount: number; // Taxable amount for this line item (quantity * unitPrice)
   hsnSacCode?: string;
   gstRate?: number; // GST rate applicable to this item (e.g., 18 for 18%)
-  // gstAmount is typically calculated: amount * (gstRate / 100)
 }
 
 export interface Invoice {
@@ -92,7 +91,6 @@ export interface Invoice {
   updatedAt: Timestamp | { seconds: number, nanoseconds: number };
 }
 
-// New interface for Company Settings
 export interface CompanySettings {
   id?: string; // This will be the companyId itself
   businessName?: string;
@@ -102,11 +100,20 @@ export interface CompanySettings {
   updatedAt?: Timestamp;
 }
 
+export interface AiPreferencesSettings {
+  id?: string; // This will be the companyId
+  aiModel?: string; // e.g., "gemini_flash", "gemini_pro"
+  verbosity?: number; // 0-100
+  tone?: string; // e.g., "formal", "neutral", "friendly", "concise"
+  updatedAt?: Timestamp;
+}
+
 
 const JOURNAL_COLLECTION = 'journalEntries';
 const NOTIFICATION_COLLECTION = 'notifications';
 const INVOICE_COLLECTION = 'invoices';
-const COMPANY_SETTINGS_COLLECTION = 'companySettings'; // New collection
+const COMPANY_SETTINGS_COLLECTION = 'companySettings';
+const AI_PREFERENCES_COLLECTION = 'aiPreferencesSettings';
 
 
 export async function addNotification(
@@ -222,7 +229,6 @@ export async function getJournalEntries(companyId: string): Promise<JournalEntry
   }
 }
 
-// Base type for adding new entries, excluding server-generated fields
 type NewEntryDataBase = Omit<JournalEntry, 'id' | 'creatorUserId' | 'companyId' | 'createdAt'>;
 
 export async function addJournalEntry(
@@ -242,12 +248,11 @@ export async function addJournalEntry(
     description: newEntryData.description,
     debitAccount: newEntryData.debitAccount,
     creditAccount: newEntryData.creditAccount,
-    amount: newEntryData.amount, // Total amount
+    amount: newEntryData.amount,
     tags: newEntryData.tags || [],
     creatorUserId: currentUser.uid,
     companyId: companyId,
     createdAt: serverTimestamp() as Timestamp,
-    // GST fields
     taxableAmount: newEntryData.taxableAmount,
     gstType: newEntryData.gstType,
     gstRate: newEntryData.gstRate,
@@ -265,7 +270,7 @@ export async function addJournalEntry(
     const savedEntry: JournalEntry = {
       id: docRef.id,
       ...entryToSave,
-      createdAt: Timestamp.now() // Use client-side timestamp for immediate return
+      createdAt: Timestamp.now() 
     };
 
     const shortDesc = savedEntry.description.length > 30 ? savedEntry.description.substring(0, 27) + "..." : savedEntry.description;
@@ -301,7 +306,7 @@ export async function addJournalEntries(
 
   const batch = writeBatch(db);
   const preparedEntries: JournalEntry[] = [];
-  const currentTime = Timestamp.now(); // For optimistic response
+  const currentTime = Timestamp.now(); 
 
   newEntriesData.forEach(newData => {
     const docRef = doc(collection(db, JOURNAL_COLLECTION));
@@ -310,12 +315,11 @@ export async function addJournalEntries(
       description: newData.description,
       debitAccount: newData.debitAccount,
       creditAccount: newData.creditAccount,
-      amount: newData.amount, // Total amount
+      amount: newData.amount, 
       tags: newData.tags || [],
       creatorUserId: currentUser.uid,
       companyId: companyId,
       createdAt: serverTimestamp() as Timestamp,
-      // GST fields
       taxableAmount: newData.taxableAmount,
       gstType: newData.gstType,
       gstRate: newData.gstRate,
@@ -331,7 +335,7 @@ export async function addJournalEntries(
     preparedEntries.push({
       id: docRef.id,
       ...entryToSave,
-      createdAt: currentTime // Optimistic timestamp
+      createdAt: currentTime 
     });
   });
 
@@ -385,7 +389,7 @@ export async function deleteJournalEntry(companyId: string, entryId: string): Pr
     const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
     addNotification(
       `${userName} deleted journal entry ID: ${entryId.slice(0,8)}...`,
-      'new_entry', // Consider a 'entry_deleted' type
+      'new_entry', 
       companyId,
       currentUser.uid,
       entryId
@@ -397,9 +401,7 @@ export async function deleteJournalEntry(companyId: string, entryId: string): Pr
   }
 }
 
-// Base type for adding new Invoices, excluding server-generated fields
 export type NewInvoiceData = Omit<Invoice, 'id' | 'companyId' | 'creatorUserId' | 'createdAt' | 'updatedAt'>;
-// Type for updating existing invoices, excluding server-generated/immutable fields
 export type UpdateInvoiceData = Partial<Omit<Invoice, 'id' | 'companyId' | 'creatorUserId' | 'createdAt'>>;
 
 
@@ -438,7 +440,6 @@ export async function addInvoice(
     updatedAt: serverTimestamp() as Timestamp,
   };
   
-  // Remove undefined fields from payload to prevent Firestore errors
   Object.keys(invoicePayload).forEach(key => {
     if ((invoicePayload as any)[key] === undefined) {
       delete (invoicePayload as any)[key];
@@ -448,16 +449,14 @@ export async function addInvoice(
 
   try {
     const docRef = await addDoc(collection(db, INVOICE_COLLECTION), invoicePayload);
-    // For optimistic response, combine original data with server-generated/normalized fields
     const savedInvoice: Invoice = {
       id: docRef.id,
-      ...newInvoiceData, // Spread original data
-      lineItems: newInvoiceData.lineItems || [], // Ensure lineItems is array
+      ...newInvoiceData, 
+      lineItems: newInvoiceData.lineItems || [], 
       companyId: companyId,
       creatorUserId: currentUser.uid,
-      createdAt: Timestamp.now(), // Use client-side timestamp for immediate return
+      createdAt: Timestamp.now(), 
       updatedAt: Timestamp.now(),
-      // Ensure all fields from Invoice interface are present, even if undefined from newInvoiceData
       dueDate: newInvoiceData.dueDate,
       customerGstin: newInvoiceData.customerGstin,
       customerEmail: newInvoiceData.customerEmail,
@@ -508,7 +507,6 @@ export async function updateInvoice(
     updatedAt: serverTimestamp() as Timestamp,
   };
 
-  // Remove undefined fields from payload to prevent Firestore errors
   Object.keys(updatePayload).forEach(key => {
     if (updatePayload[key] === undefined) {
       delete updatePayload[key];
@@ -676,7 +674,7 @@ export async function getCompanySettings(companyId: string): Promise<CompanySett
       } as CompanySettings;
     } else {
       console.log(`DataService: No settings found for company ${companyId}.`);
-      return null; // Or return default settings object if preferred
+      return null; 
     }
   } catch (error) {
     console.error(`DataService: Error fetching settings for company '${companyId}' (User: ${currentUser.uid}):`, error);
@@ -698,19 +696,15 @@ export async function saveCompanySettings(
 
   const settingsRef = doc(db, COMPANY_SETTINGS_COLLECTION, companyId);
   
-  // Prepare the data to be saved, filtering out undefined values.
-  // Firestore does not support 'undefined' as a field value.
   const updatePayload: { [key: string]: any } = {};
   for (const key in settingsData) {
     if (settingsData[key as keyof typeof settingsData] !== undefined) {
       updatePayload[key] = settingsData[key as keyof typeof settingsData];
     }
   }
-  updatePayload.updatedAt = serverTimestamp() as Timestamp; // Add/update the timestamp
+  updatePayload.updatedAt = serverTimestamp() as Timestamp; 
 
   try {
-    // Using setDoc with merge: true will create the document if it doesn't exist,
-    // or update it if it does, only affecting fields present in updatePayload.
     await setDoc(settingsRef, updatePayload, { merge: true });
 
     const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
@@ -719,7 +713,7 @@ export async function saveCompanySettings(
       'company_settings_updated',
       companyId,
       currentUser.uid,
-      companyId // relatedId can be the companyId itself for settings
+      companyId 
     ).catch(err => console.error("DataService: Failed to add notification for company settings update:", err));
 
   } catch (error) {
@@ -728,10 +722,82 @@ export async function saveCompanySettings(
   }
 }
 
+export async function getAiPreferences(companyId: string): Promise<AiPreferencesSettings | null> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    console.warn("DataService: User not authenticated. Cannot fetch AI preferences.");
+    return null;
+  }
+  if (!companyId) {
+    console.warn("DataService: Company ID is required to fetch AI preferences.");
+    return null;
+  }
+
+  try {
+    const prefsRef = doc(db, AI_PREFERENCES_COLLECTION, companyId);
+    const docSnap = await getDoc(prefsRef);
+
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        aiModel: data.aiModel,
+        verbosity: data.verbosity,
+        tone: data.tone,
+        updatedAt: data.updatedAt,
+      } as AiPreferencesSettings;
+    } else {
+      console.log(`DataService: No AI preferences found for company ${companyId}.`);
+      return null;
+    }
+  } catch (error) {
+    console.error(`DataService: Error fetching AI preferences for company '${companyId}' (User: ${currentUser.uid}):`, error);
+    throw error;
+  }
+}
+
+export async function saveAiPreferences(
+  companyId: string,
+  preferencesData: Partial<Omit<AiPreferencesSettings, 'id' | 'updatedAt'>>
+): Promise<void> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error("User not authenticated. Cannot save AI preferences.");
+  }
+  if (!companyId) {
+    throw new Error("Company ID is required to save AI preferences.");
+  }
+
+  const prefsRef = doc(db, AI_PREFERENCES_COLLECTION, companyId);
+  
+  const updatePayload: { [key: string]: any } = {};
+  for (const key in preferencesData) {
+    if (preferencesData[key as keyof typeof preferencesData] !== undefined) {
+      updatePayload[key] = preferencesData[key as keyof typeof preferencesData];
+    }
+  }
+  updatePayload.updatedAt = serverTimestamp() as Timestamp;
+
+  try {
+    await setDoc(prefsRef, updatePayload, { merge: true });
+    
+    const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
+    addNotification(
+      `${userName} updated AI preferences for ${companyId}.`,
+      'ai_preferences_updated',
+      companyId,
+      currentUser.uid,
+      companyId
+    ).catch(err => console.error("DataService: Failed to add notification for AI preferences update:", err));
+
+  } catch (error) {
+    console.error(`DataService: Error saving AI preferences for company '${companyId}' (User: ${currentUser.uid}):`, error);
+    throw error;
+  }
+}
 
 export interface UserProfile {
   uid: string;
   email: string | null;
   displayName: string | null;
 }
-
