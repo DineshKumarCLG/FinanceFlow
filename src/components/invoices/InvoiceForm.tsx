@@ -120,7 +120,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
             description: item.description || "",
             quantity: item.quantity || 1,
             unitPrice: item.unitPrice || 0,
-            amount: item.amount || 0, // This is taxable_value
+            amount: item.amount || 0, 
             hsnSacCode: item.hsnSacCode || "",
             gstRate: item.gstRate === undefined ? undefined : Number(item.gstRate),
           }))) || [],
@@ -165,7 +165,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
     } else if (mode === 'create') {
        form.reset(defaultFormValues);
     }
-  }, [mode, initialInvoiceData, form]); // form added to dependency array
+  }, [mode, initialInvoiceData, form]); 
 
 
   const watchedLineItems = form.watch("lineItems");
@@ -209,7 +209,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
       form.setValue("billingAddress", result.billingAddress || form.getValues("billingAddress") || "", { shouldValidate: true });
       form.setValue("shippingAddress", result.shippingAddress || form.getValues("shippingAddress") || "", { shouldValidate: true });
       
-      if (mode === 'create') { // Only set invoice number from AI if creating
+      if (mode === 'create') { 
         form.setValue("invoiceNumber", result.invoiceNumber || "", { shouldValidate: true });
       }
 
@@ -247,7 +247,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
         } catch (e) {
             form.setValue("invoiceDate", form.getValues("invoiceDate") || todayForForm, { shouldValidate: true });
         }
-      } else if (mode === 'create'){ // Only default invoiceDate if creating
+      } else if (mode === 'create'){ 
         form.setValue("invoiceDate", todayForForm, { shouldValidate: true });
       }
 
@@ -384,7 +384,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <CardContent className="space-y-6">
-            {/* AI Parsing Section - Always Visible */}
+            
             <>
               <FormField
                 control={form.control}
@@ -426,7 +426,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Invoice Number</FormLabel>
-                    <FormControl><Input placeholder="e.g., INV-2024-001" {...field} disabled={isLoading || mode === 'edit'} /></FormControl>
+                    <FormControl><Input placeholder="e.g., INV-2024-001" {...field} disabled={isLoading || (mode === 'edit' && !!initialInvoiceData?.invoiceNumber)} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -531,7 +531,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
                     render={({ field }) => (
                     <FormItem>
                         <FormLabel>Customer Name</FormLabel>
-                        <FormControl><Input placeholder="Client Company Name" {...field} disabled={isLoading} /></FormControl>
+                        <FormControl><Input placeholder="Client Company Name" {...field} value={field.value ?? ""} disabled={isLoading} /></FormControl>
                         <FormMessage />
                     </FormItem>
                     )}
@@ -582,7 +582,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
                 />
             </div>
 
-            {/* Line Items Section */}
+            
             <h3 className="text-lg font-semibold pt-4 border-t mt-4">Items & Services</h3>
             <div className="space-y-3">
               {fields.map((item, index) => (
@@ -592,9 +592,9 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
                       control={form.control}
                       name={`lineItems.${index}.description`}
                       render={({ field }) => (
-                        <FormItem className="sm:col-span-2 lg:col-span-4"> {/* Full width for description */}
+                        <FormItem className="sm:col-span-2 lg:col-span-4"> 
                           <FormLabel className="text-xs">Description</FormLabel>
-                          <FormControl><Input placeholder="Item or service description" {...field} disabled={isLoading} /></FormControl>
+                          <FormControl><Input placeholder="Item or service description" {...field} value={field.value ?? ""} disabled={isLoading} /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -605,7 +605,20 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel className="text-xs">Quantity</FormLabel>
-                          <FormControl><Input type="number" placeholder="1" {...field} step="any" disabled={isLoading} onChange={(e) => field.onChange(parseFloat(e.target.value))} /></FormControl>
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              placeholder="1" 
+                              {...field} 
+                              value={Number.isNaN(field.value) ? '' : field.value ?? ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                field.onChange(val === '' ? undefined : parseFloat(val));
+                              }}
+                              step="any" 
+                              disabled={isLoading} 
+                            />
+                          </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -616,7 +629,20 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel className="text-xs">Unit Price (Pre-tax)</FormLabel>
-                          <FormControl><Input type="number" placeholder="0.00" {...field} step="any" disabled={isLoading} onChange={(e) => field.onChange(parseFloat(e.target.value))} /></FormControl>
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              placeholder="0.00" 
+                              {...field} 
+                              value={Number.isNaN(field.value) ? '' : field.value ?? ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                field.onChange(val === '' ? undefined : parseFloat(val));
+                              }}
+                              step="any" 
+                              disabled={isLoading} 
+                            />
+                          </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -638,7 +664,20 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
                         render={({ field }) => (
                             <FormItem>
                             <FormLabel className="text-xs">GST Rate %</FormLabel>
-                            <FormControl><Input type="number" placeholder="e.g., 18" {...field} step="any" disabled={isLoading} onChange={(e) => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))} value={field.value ?? ""} /></FormControl>
+                            <FormControl>
+                              <Input 
+                                type="number" 
+                                placeholder="e.g., 18" 
+                                {...field} 
+                                value={Number.isNaN(field.value) ? '' : field.value ?? ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  field.onChange(val === '' ? undefined : parseFloat(val));
+                                }}
+                                step="any" 
+                                disabled={isLoading} 
+                              />
+                            </FormControl>
                             <FormMessage />
                             </FormItem>
                         )}
@@ -677,7 +716,7 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
             </div>
 
 
-            {/* Totals Display */}
+            
             <div className="pt-6 border-t mt-6 space-y-2">
                 <h3 className="text-md font-semibold">Invoice Totals</h3>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
@@ -729,5 +768,3 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
     </Card>
   );
 }
-
-    
