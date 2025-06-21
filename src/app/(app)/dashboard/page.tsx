@@ -23,7 +23,7 @@ import { ExpensesPieChart } from "@/components/dashboard/ExpensesPieChart";
 import { AnalyticsOverview, type AnalyticsKpiData, type ExpenseCategoryData } from "@/components/dashboard/AnalyticsOverview";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { NotificationList } from "@/components/dashboard/NotificationList";
-import { UserSpendingList, type UserSpending } from "@/components/dashboard/UserSpendingList";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 
 export const incomeKeywords = ['revenue', 'sales', 'income', 'service fee', 'interest received', 'consulting income', 'project revenue', 'deposit', 'commission', 'dividend'];
@@ -49,7 +49,6 @@ export default function DashboardPage() {
   const [expensesPieChartData, setExpensesPieChartData] = useState<{ name: string; total: number }[]>([]);
   const [analyticsKpis, setAnalyticsKpis] = useState<AnalyticsKpiData>({ avgTransactionValue: 0, profitMargin: 0, incomeTransactions: 0, expenseTransactions: 0 });
   const [analyticsExpenseCategories, setAnalyticsExpenseCategories] = useState<ExpenseCategoryData[]>([]);
-  const [userSpendingData, setUserSpendingData] = useState<UserSpending[]>([]);
 
   // Fetch journal entries
   const { data: journalEntriesData, isLoading: isLoadingJournalEntries, error: journalEntriesError } = useQuery<StoredJournalEntry[], Error>({
@@ -91,7 +90,6 @@ export default function DashboardPage() {
     let expenseTransactionsCount = 0;
     
     const expensesByCategory: Record<string, number> = {};
-    const userSpending: Record<string, { total: number; displayName: string }> = {};
     
     const monthlyAggregates: Record<string, { income: number; expense: number; monthLabel: string; yearMonth: string }> = {};
     const monthsForCharts = eachMonthOfInterval({ start: dateRangeFrom, end: dateRangeTo });
@@ -120,13 +118,6 @@ export default function DashboardPage() {
           if (monthlyAggregates[yearMonth]) monthlyAggregates[yearMonth].expense += entry.amount;
           const category = entry.debitAccount || "Uncategorized";
           expensesByCategory[category] = (expensesByCategory[category] || 0) + entry.amount;
-
-          // Process user spending
-          const userId = entry.creatorUserId;
-          if (!userSpending[userId]) {
-            userSpending[userId] = { total: 0, displayName: `User ...${userId.slice(-6)}` };
-          }
-          userSpending[userId].total += entry.amount;
       }
     });
 
@@ -158,14 +149,6 @@ export default function DashboardPage() {
     setNetIncomeChartData(netIncomeForChart);
     setCashFlowChartData(cashFlowForChart);
     setExpensesPieChartData(Object.entries(expensesByCategory).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total));
-
-    const processedUserSpending: UserSpending[] = Object.entries(userSpending).map(([userId, data]) => ({
-      userId,
-      displayName: data.displayName,
-      totalSpent: data.total,
-      avatarFallback: data.displayName.substring(0, 2).toUpperCase(),
-    })).sort((a,b) => b.totalSpent - a.totalSpent).slice(0, 5);
-    setUserSpendingData(processedUserSpending);
 
   }, [journalEntriesData, dateRange]);
 
@@ -238,31 +221,40 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-           {isLoading ? (
-            <div className="space-y-6">
-              <Skeleton className="h-96 rounded-lg" />
-              <div className="grid gap-6 lg:grid-cols-2">
-                <Skeleton className="h-80 rounded-lg" />
-                <Skeleton className="h-80 rounded-lg" />
-              </div>
-              <Skeleton className="h-96 rounded-lg" />
-            </div>
-           ) : (
-            <>
-              <NetIncomeChart data={netIncomeChartData} isLoading={isLoadingJournalEntries} />
-              <div className="grid gap-6 md:grid-cols-2">
-                  <CashFlowChart data={cashFlowChartData} isLoading={isLoadingJournalEntries} />
-                  <ExpensesPieChart data={expensesPieChartData} isLoading={isLoadingJournalEntries} />
-              </div>
-              <AnalyticsOverview kpis={analyticsKpis} expenseCategories={analyticsExpenseCategories} isLoading={isLoadingJournalEntries} />
-            </>
-           )}
+        <div className="lg:col-span-2">
+           <Tabs defaultValue="overview" className="w-full">
+            <TabsList>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="notifications">Notifications</TabsTrigger>
+            </TabsList>
+            <TabsContent value="overview" className="mt-4 space-y-6">
+              {isLoading ? (
+                <div className="space-y-6">
+                  <Skeleton className="h-96 rounded-lg" />
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    <Skeleton className="h-80 rounded-lg" />
+                    <Skeleton className="h-80 rounded-lg" />
+                  </div>
+                  <Skeleton className="h-96 rounded-lg" />
+                </div>
+              ) : (
+                <>
+                  <NetIncomeChart data={netIncomeChartData} isLoading={isLoadingJournalEntries} />
+                  <div className="grid gap-6 md:grid-cols-2">
+                      <CashFlowChart data={cashFlowChartData} isLoading={isLoadingJournalEntries} />
+                      <ExpensesPieChart data={expensesPieChartData} isLoading={isLoadingJournalEntries} />
+                  </div>
+                  <AnalyticsOverview kpis={analyticsKpis} expenseCategories={analyticsExpenseCategories} isLoading={isLoadingJournalEntries} />
+                </>
+              )}
+            </TabsContent>
+            <TabsContent value="notifications" className="mt-4">
+                <NotificationList notifications={notificationsData || []} isLoading={isLoadingNotifications} />
+            </TabsContent>
+           </Tabs>
         </div>
         <div className="lg:col-span-1 space-y-6">
             <QuickActions />
-            <NotificationList notifications={notificationsData || []} isLoading={isLoadingNotifications} />
-            <UserSpendingList spendingData={userSpendingData} isLoading={isLoadingJournalEntries} />
         </div>
       </div>
     </div>
