@@ -6,7 +6,7 @@ import { SummaryCard } from "@/components/dashboard/SummaryCard";
 import { DollarSign, TrendingUp, TrendingDown, Activity, CalendarDays, Download, AlertCircle, BarChart2, FileText, Bell, Percent, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect, useCallback } from "react";
-import { getJournalEntries, getNotifications, type JournalEntry as StoredJournalEntry, type Notification as StoredNotification } from "@/lib/data-service";
+import { getJournalEntries, type JournalEntry as StoredJournalEntry } from "@/lib/data-service";
 import type { DateRange } from "react-day-picker";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
@@ -20,10 +20,7 @@ import { useQuery } from '@tanstack/react-query';
 import { NetIncomeChart } from "@/components/dashboard/NetIncomeChart";
 import { CashFlowChart } from "@/components/dashboard/CashFlowChart";
 import { ExpensesPieChart } from "@/components/dashboard/ExpensesPieChart";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AnalyticsOverview, type AnalyticsKpiData, type ExpenseCategoryData } from "@/components/dashboard/AnalyticsOverview";
-import { ProfitLossReport, type ProfitLossReportData, type ReportLineItem } from "@/components/dashboard/ProfitLossReport";
-import { NotificationList } from "@/components/dashboard/NotificationList";
 
 
 export const incomeKeywords = ['revenue', 'sales', 'income', 'service fee', 'interest received', 'consulting income', 'project revenue', 'deposit', 'commission', 'dividend'];
@@ -49,7 +46,6 @@ export default function DashboardPage() {
   const [expensesPieChartData, setExpensesPieChartData] = useState<{ name: string; total: number }[]>([]);
   const [analyticsKpis, setAnalyticsKpis] = useState<AnalyticsKpiData>({ avgTransactionValue: 0, profitMargin: 0, incomeTransactions: 0, expenseTransactions: 0 });
   const [analyticsExpenseCategories, setAnalyticsExpenseCategories] = useState<ExpenseCategoryData[]>([]);
-  const [profitLossReportData, setProfitLossReportData] = useState<ProfitLossReportData | undefined>(undefined);
 
   // Fetch journal entries
   const { data: journalEntriesData, isLoading: isLoadingJournalEntries, error: journalEntriesError } = useQuery<StoredJournalEntry[], Error>({
@@ -57,22 +53,12 @@ export default function DashboardPage() {
     queryFn: () => getJournalEntries(currentCompanyId!),
     enabled: !!currentUser && !!currentCompanyId,
   });
-  
-  // Fetch notifications
-  const { data: notificationsData, isLoading: isLoadingNotifications, error: notificationsError } = useQuery<StoredNotification[], Error>({
-    queryKey: ['notifications', currentCompanyId],
-    queryFn: () => getNotifications(currentCompanyId!),
-    enabled: !!currentUser && !!currentCompanyId,
-  });
 
   useEffect(() => {
     if (journalEntriesError) {
       toast({ variant: "destructive", title: "Error Loading Entries", description: journalEntriesError.message || "Could not fetch journal entries." });
     }
-     if (notificationsError) {
-      toast({ variant: "destructive", title: "Error Loading Notifications", description: notificationsError.message || "Could not fetch notifications." });
-    }
-  }, [journalEntriesError, notificationsError, toast]);
+  }, [journalEntriesError, toast]);
 
   // Data processing logic
   useEffect(() => {
@@ -93,8 +79,6 @@ export default function DashboardPage() {
     let incomeTransactionsCount = 0;
     let expenseTransactionsCount = 0;
     
-    const revenueItemsForReport: Record<string, number> = {};
-    const expenseItemsForReport: Record<string, number> = {};
     const expensesByCategory: Record<string, number> = {};
     
     const monthlyAggregates: Record<string, { income: number; expense: number; monthLabel: string; yearMonth: string }> = {};
@@ -117,7 +101,6 @@ export default function DashboardPage() {
           calculatedTotalRevenue += entry.amount;
           incomeTransactionsCount++;
           if (monthlyAggregates[yearMonth]) monthlyAggregates[yearMonth].income += entry.amount;
-          revenueItemsForReport[entry.creditAccount] = (revenueItemsForReport[entry.creditAccount] || 0) + entry.amount;
       }
       if (isExpenseEntry) {
           calculatedTotalExpenses += entry.amount;
@@ -125,7 +108,6 @@ export default function DashboardPage() {
           if (monthlyAggregates[yearMonth]) monthlyAggregates[yearMonth].expense += entry.amount;
           const category = entry.debitAccount || "Uncategorized";
           expensesByCategory[category] = (expensesByCategory[category] || 0) + entry.amount;
-          expenseItemsForReport[category] = (expenseItemsForReport[category] || 0) + entry.amount;
       }
     });
 
@@ -161,16 +143,6 @@ export default function DashboardPage() {
     setCashFlowChartData(cashFlowForChart);
     setExpensesPieChartData(Object.entries(expensesByCategory).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total));
 
-    // Set Profit & Loss Report data
-    setProfitLossReportData({
-        revenueItems: Object.entries(revenueItemsForReport).map(([accountName, amount]) => ({accountName, amount})).sort((a,b) => b.amount - a.amount),
-        expenseItems: Object.entries(expenseItemsForReport).map(([accountName, amount]) => ({accountName, amount})).sort((a,b) => b.amount - a.amount),
-        totalRevenue: calculatedTotalRevenue,
-        totalExpenses: calculatedTotalExpenses,
-        netProfit: calculatedTotalRevenue - calculatedTotalExpenses,
-        formattedDateRange: `${format(dateRangeFrom, "LLL dd, y")} - ${format(dateRangeTo, "LLL dd, y")}`
-    });
-
   }, [journalEntriesData, dateRange]);
 
 
@@ -178,7 +150,7 @@ export default function DashboardPage() {
     toast({ title: "Feature In Development", description: "CSV/PDF report downloads are coming soon!" });
   };
 
-  const isLoading = isLoadingJournalEntries || isLoadingNotifications;
+  const isLoading = isLoadingJournalEntries;
 
   if (!currentCompanyId && !isLoading && pathname === '/dashboard') {
     return (
@@ -234,57 +206,41 @@ export default function DashboardPage() {
         </div>
       </div>
 
-       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
-            <TabsTrigger value="overview"><LayoutDashboard className="mr-2 h-4 w-4"/>Overview</TabsTrigger>
-            <TabsTrigger value="analytics"><BarChart2 className="mr-2 h-4 w-4"/>Analytics</TabsTrigger>
-            <TabsTrigger value="reports"><FileText className="mr-2 h-4 w-4"/>Reports</TabsTrigger>
-            <TabsTrigger value="notifications"><Bell className="mr-2 h-4 w-4"/>Notifications</TabsTrigger>
-        </TabsList>
-        <TabsContent value="overview" className="space-y-6">
-            {isLoading ? (
-              <div className="grid gap-6">
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                  {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28 rounded-lg" />)}
-                </div>
-                <Skeleton className="h-96 rounded-lg" />
-                <div className="grid gap-6 lg:grid-cols-2">
-                  <Skeleton className="h-80 rounded-lg" />
-                  <Skeleton className="h-80 rounded-lg" />
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                  <SummaryCard title="Revenue" value={summaryData.totalRevenue} icon={DollarSign} />
-                  <SummaryCard title="Burn Rate" value={summaryData.totalExpenses} icon={TrendingDown} />
-                  <SummaryCard title="Net Profit" value={summaryData.netProfit} icon={TrendingUp} />
-                  <SummaryCard title="Transactions" value={summaryData.transactionCount} icon={Activity} isCurrency={false} />
-                </div>
+      {isLoading ? (
+        <div className="grid gap-6">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28 rounded-lg" />)}
+          </div>
+          <Skeleton className="h-96 rounded-lg" />
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Skeleton className="h-80 rounded-lg" />
+            <Skeleton className="h-80 rounded-lg" />
+          </div>
+          <Skeleton className="h-96 rounded-lg" />
+        </div>
+      ) : (
+        <div className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            <SummaryCard title="Revenue" value={summaryData.totalRevenue} icon={DollarSign} />
+            <SummaryCard title="Burn Rate" value={summaryData.totalExpenses} icon={TrendingDown} />
+            <SummaryCard title="Net Profit" value={summaryData.netProfit} icon={TrendingUp} />
+            <SummaryCard title="Transactions" value={summaryData.transactionCount} icon={Activity} isCurrency={false} />
+          </div>
 
-                <NetIncomeChart data={netIncomeChartData} isLoading={isLoading} />
-                
-                <div className="grid gap-6 lg:grid-cols-5">
-                  <div className="lg:col-span-3">
-                    <CashFlowChart data={cashFlowChartData} isLoading={isLoading} />
-                  </div>
-                  <div className="lg:col-span-2">
-                    <ExpensesPieChart data={expensesPieChartData} isLoading={isLoading} />
-                  </div>
-                </div>
-              </div>
-            )}
-        </TabsContent>
-        <TabsContent value="analytics">
-            <AnalyticsOverview kpis={analyticsKpis} expenseCategories={analyticsExpenseCategories} isLoading={isLoading} />
-        </TabsContent>
-        <TabsContent value="reports">
-            <ProfitLossReport reportData={profitLossReportData} isLoading={isLoading} />
-        </TabsContent>
-        <TabsContent value="notifications">
-            <NotificationList notifications={notificationsData || []} isLoading={isLoading}/>
-        </TabsContent>
-        </Tabs>
+          <NetIncomeChart data={netIncomeChartData} isLoading={isLoading} />
+          
+          <div className="grid gap-6 lg:grid-cols-5">
+            <div className="lg:col-span-3">
+              <CashFlowChart data={cashFlowChartData} isLoading={isLoading} />
+            </div>
+            <div className="lg:col-span-2">
+              <ExpensesPieChart data={expensesPieChartData} isLoading={isLoading} />
+            </div>
+          </div>
+
+          <AnalyticsOverview kpis={analyticsKpis} expenseCategories={analyticsExpenseCategories} isLoading={isLoading} />
+        </div>
+      )}
     </div>
   );
 }

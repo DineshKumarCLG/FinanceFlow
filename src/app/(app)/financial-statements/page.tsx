@@ -24,9 +24,9 @@ export default function FinancialStatementsPage() {
       aiHint: "trial balance"
     },
     {
-      title: "Profit &amp; Loss Statement",
-      description: "Analyze your company's revenues and expenses over a period. Track profitability. (Available on Dashboard)",
-      href: "/dashboard?tab=reports#reports",
+      title: "Profit & Loss Statement",
+      description: "Analyze your company's revenues and expenses over a period to track profitability.",
+      href: "/profit-loss",
       icon: PieChart,
       imageUrl: "https://placehold.co/600x400.png",
       aiHint: "profit loss"
