@@ -20,7 +20,7 @@ const QueriedJournalEntrySchema = z.object({
 });
 
 const QueryJournalInputSchema = z.object({
-  companyId: z.string().describe("The ID of the company for which to query journal entries."),
+  companyId: z.string().describe("The ID of the company for which to query journal entries. This is provided by the system."),
   dateFrom: z.string().optional().describe("Start date for the query (YYYY-MM-DD)."),
   dateTo: z.string().optional().describe("End date for the query (YYYY-MM-DD)."),
   accountName: z.string().optional().describe("Filter by account name (matches debit or credit account)."),
@@ -45,7 +45,7 @@ export const queryJournalTool = ai.defineTool(
   },
   async (input: QueryJournalInput): Promise<QueryJournalOutput> => {
     if (!input.companyId) {
-      return { querySummary: "Error: Company ID is required to query journal entries.", matchCount: 0 };
+      return { querySummary: "Error: Company ID is required to query journal entries. This should be provided by the system.", matchCount: 0 };
     }
 
     try {
@@ -67,22 +67,22 @@ export const queryJournalTool = ai.defineTool(
         
         const interval: Interval = {};
         if (startDate) interval.start = startDate;
-        if (endDate) interval.end = endDate;
-        // Adjust endDate to be end of day if only one date is provided or for range end
-        if (endDate && startDate && startDate.getTime() === endDate.getTime()) {
-            interval.end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999);
-        } else if (endDate) {
-            interval.end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999);
+        
+        let intervalEnd = endDate;
+        if (endDate) {
+           const endOfDay = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999);
+           intervalEnd = endOfDay;
         }
-
+        if (intervalEnd) interval.end = intervalEnd;
+        
 
         filteredEntries = filteredEntries.filter(entry => {
           const entryDate = parseISO(entry.date);
           if (!isValid(entryDate)) return false;
           
-          if (startDate && endDate) return isWithinInterval(entryDate, { start: startDate, end: interval.end! });
+          if (startDate && interval.end) return isWithinInterval(entryDate, { start: startDate, end: interval.end });
           if (startDate) return entryDate >= startDate;
-          if (endDate) return entryDate <= interval.end!;
+          if (interval.end) return entryDate <= interval.end;
           return false; 
         });
       }

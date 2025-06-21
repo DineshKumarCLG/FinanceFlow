@@ -37,8 +37,8 @@ const InvoiceDetailsForToolSchema = z.object({
 
 const ManageInvoiceInputSchema = z.object({
   action: z.enum(['create', 'update']).describe("Whether to create a new invoice or update an existing one."),
-  companyId: z.string().describe("The ID of the company for which the invoice is being managed."),
-  creatorUserId: z.string().describe("The ID of the user performing the action."),
+  companyId: z.string().describe("The ID of the company for which the invoice is being managed. This is provided by the system."),
+  creatorUserId: z.string().describe("The ID of the user performing the action. This is provided by the system."),
   invoiceId: z.string().optional().describe("The ID of the invoice to update (required if action is 'update')."),
   textDescription: z.string().optional().describe("Full natural language description of the invoice provided by the user. The tool will parse this if direct details are not sufficient."),
   invoiceDetails: InvoiceDetailsForToolSchema.optional().describe("Pre-structured details for the invoice. If textDescription is also provided, this can be used as a base and textDescription can augment it."),
@@ -149,10 +149,10 @@ export const manageInvoiceTool = ai.defineTool(
     let structuredDetails: GenerateInvoiceDetailsOutput;
 
     if (!input.companyId) {
-      return { success: false, message: "Error: Company ID is required to manage an invoice." };
+      return { success: false, message: "Error: Company ID is required to manage an invoice. This should be provided by the system." };
     }
     if (!input.creatorUserId) {
-      return { success: false, message: "Error: User ID is required to manage an invoice." };
+      return { success: false, message: "Error: User ID is required to manage an invoice. This should be provided by the system." };
     }
 
     // 1. Determine structured details
@@ -221,7 +221,9 @@ export const manageInvoiceTool = ai.defineTool(
       return { success: false, message: "Invalid action specified." };
     } catch (e: any) {
       console.error(`Error during invoice ${input.action}:`, e);
-      // Try to provide a more specific error message if it's a known Firebase error for undefined values
+      if (e.message && e.message.toLowerCase().includes("permission")) {
+        return { success: false, message: `Failed to ${input.action} invoice due to a permissions error. This may indicate a problem with Firestore security rules or the server's authentication context.` };
+      }
       if (e.message && e.message.toLowerCase().includes("unsupported field value") && e.message.toLowerCase().includes("undefined")) {
         return { success: false, message: `Failed to ${input.action} invoice: One or more fields had an invalid (undefined) value. This can happen if the AI couldn't extract all necessary details or if some optional fields were not correctly handled. Please check the invoice details or try rephrasing your request.` };
       }
@@ -229,5 +231,3 @@ export const manageInvoiceTool = ai.defineTool(
     }
   }
 );
-
-    

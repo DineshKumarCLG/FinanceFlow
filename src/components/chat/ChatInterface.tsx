@@ -131,7 +131,7 @@ export function ChatInterface() {
       toast({ variant: "destructive", title: "Company ID Missing", description: "Please select a company before chatting with the AI." });
       return;
     }
-    if (!currentUser) {
+    if (!currentUser?.uid) {
       toast({ variant: "destructive", title: "User Not Authenticated", description: "Please ensure you are logged in." });
       return;
     }
@@ -145,7 +145,10 @@ export function ChatInterface() {
       timestamp: new Date(),
       attachments: attachedFiles.map(f => ({ name: f.name, type: f.type }))
     };
-    setMessages((prev) => [...prev, userMessage]);
+    
+    // Add user message and set loading state
+    const currentMessages = [...messages, userMessage];
+    setMessages(currentMessages);
     setInput("");
     setIsLoading(true);
 
@@ -154,18 +157,25 @@ export function ChatInterface() {
     setFilePreviews([]);
 
     try {
-      const conversationHistoryForFlow = messages
-        .filter(msg => msg.role === 'user' || msg.role === 'assistant')
-        .map(msg => ({
-          role: msg.role as 'user' | 'assistant',
-          content: msg.content,
-      }));
+      const conversationHistoryForFlow = currentMessages
+        .map(msg => {
+            if (msg.role === 'tool' || msg.role === 'user' || msg.role === 'assistant') {
+                return {
+                    role: msg.role,
+                    content: msg.content,
+                };
+            }
+            return null;
+        })
+        .filter(Boolean);
+
 
       const aiResponse = await chatWithAiAssistant({
         message: userMessageContent,
-        conversationHistory: conversationHistoryForFlow,
+        conversationHistory: conversationHistoryForFlow as any,
         uploadedFiles: fileDataUris,
         companyId: currentCompanyId,
+        creatorUserId: currentUser.uid,
       });
       
       setMessages((prev) => [
