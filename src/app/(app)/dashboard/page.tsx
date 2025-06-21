@@ -3,10 +3,10 @@
 
 import { PageTitle } from "@/components/shared/PageTitle";
 import { SummaryCard } from "@/components/dashboard/SummaryCard";
-import { DollarSign, TrendingUp, TrendingDown, Activity, CalendarDays, Download, AlertCircle, BarChart2, FileText, Bell, Percent, LayoutDashboard } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, Activity, CalendarDays, Download, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState, useEffect, useCallback } from "react";
-import { getJournalEntries, type JournalEntry as StoredJournalEntry } from "@/lib/data-service";
+import { useState, useEffect } from "react";
+import { getJournalEntries, type JournalEntry as StoredJournalEntry, getNotifications, type Notification } from "@/lib/data-service";
 import type { DateRange } from "react-day-picker";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
@@ -15,12 +15,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePathname } from 'next/navigation';
-import { Alert, AlertDescription as AlertDescriptionComponent, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription as AlertDescriptionComponent } from "@/components/ui/alert";
 import { useQuery } from '@tanstack/react-query';
 import { NetIncomeChart } from "@/components/dashboard/NetIncomeChart";
 import { CashFlowChart } from "@/components/dashboard/CashFlowChart";
 import { ExpensesPieChart } from "@/components/dashboard/ExpensesPieChart";
 import { AnalyticsOverview, type AnalyticsKpiData, type ExpenseCategoryData } from "@/components/dashboard/AnalyticsOverview";
+import { QuickActions } from "@/components/dashboard/QuickActions";
+import { NotificationList } from "@/components/dashboard/NotificationList";
+import { UserSpendingList, type UserSpending } from "@/components/dashboard/UserSpendingList";
 
 
 export const incomeKeywords = ['revenue', 'sales', 'income', 'service fee', 'interest received', 'consulting income', 'project revenue', 'deposit', 'commission', 'dividend'];
@@ -39,19 +42,28 @@ export default function DashboardPage() {
   const { toast } = useToast();
   const pathname = usePathname();
 
-  // State for processed data for all components
+  // State for all processed data
   const [summaryData, setSummaryData] = useState({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
   const [netIncomeChartData, setNetIncomeChartData] = useState<{ month: string; netIncome: number }[]>([]);
   const [cashFlowChartData, setCashFlowChartData] = useState<{ month: string; income: number; expense: number; net: number }[]>([]);
   const [expensesPieChartData, setExpensesPieChartData] = useState<{ name: string; total: number }[]>([]);
   const [analyticsKpis, setAnalyticsKpis] = useState<AnalyticsKpiData>({ avgTransactionValue: 0, profitMargin: 0, incomeTransactions: 0, expenseTransactions: 0 });
   const [analyticsExpenseCategories, setAnalyticsExpenseCategories] = useState<ExpenseCategoryData[]>([]);
+  const [userSpendingData, setUserSpendingData] = useState<UserSpending[]>([]);
 
   // Fetch journal entries
   const { data: journalEntriesData, isLoading: isLoadingJournalEntries, error: journalEntriesError } = useQuery<StoredJournalEntry[], Error>({
     queryKey: ['journalEntries', currentCompanyId],
     queryFn: () => getJournalEntries(currentCompanyId!),
     enabled: !!currentUser && !!currentCompanyId,
+  });
+
+  // Fetch notifications
+  const { data: notificationsData, isLoading: isLoadingNotifications } = useQuery<Notification[], Error>({
+    queryKey: ['notifications', currentCompanyId],
+    queryFn: () => getNotifications(currentCompanyId!),
+    enabled: !!currentUser && !!currentCompanyId,
+    refetchInterval: 60000, // Refetch notifications every 60 seconds
   });
 
   useEffect(() => {
@@ -68,7 +80,6 @@ export default function DashboardPage() {
     const dateRangeFrom = dateRange?.from || new Date(0);
     const dateRangeTo = dateRange?.to || new Date();
 
-    // Filter entries based on the date range
     const entriesInDateRange = journalEntriesData.filter(entry => {
         const entryDate = new Date(entry.date);
         return entryDate >= dateRangeFrom && entryDate <= dateRangeTo;
@@ -80,6 +91,7 @@ export default function DashboardPage() {
     let expenseTransactionsCount = 0;
     
     const expensesByCategory: Record<string, number> = {};
+    const userSpending: Record<string, { total: number; displayName: string }> = {};
     
     const monthlyAggregates: Record<string, { income: number; expense: number; monthLabel: string; yearMonth: string }> = {};
     const monthsForCharts = eachMonthOfInterval({ start: dateRangeFrom, end: dateRangeTo });
@@ -108,10 +120,16 @@ export default function DashboardPage() {
           if (monthlyAggregates[yearMonth]) monthlyAggregates[yearMonth].expense += entry.amount;
           const category = entry.debitAccount || "Uncategorized";
           expensesByCategory[category] = (expensesByCategory[category] || 0) + entry.amount;
+
+          // Process user spending
+          const userId = entry.creatorUserId;
+          if (!userSpending[userId]) {
+            userSpending[userId] = { total: 0, displayName: `User ...${userId.slice(-6)}` };
+          }
+          userSpending[userId].total += entry.amount;
       }
     });
 
-    // Set Summary KPIs for Overview Tab
     setSummaryData({
         totalRevenue: calculatedTotalRevenue,
         totalExpenses: calculatedTotalExpenses,
@@ -119,7 +137,6 @@ export default function DashboardPage() {
         transactionCount: entriesInDateRange.length,
     });
     
-    // Set Analytics KPIs
     const totalTransactions = incomeTransactionsCount + expenseTransactionsCount;
     setAnalyticsKpis({
       avgTransactionValue: totalTransactions > 0 ? (calculatedTotalRevenue + calculatedTotalExpenses) / totalTransactions : 0,
@@ -129,7 +146,6 @@ export default function DashboardPage() {
     });
     setAnalyticsExpenseCategories(Object.entries(expensesByCategory).map(([name, total]) => ({name, total})).sort((a,b) => b.total - a.total).slice(0, 7));
 
-    // Prepare data for charts in Overview Tab
     let cumulativeNetIncome = 0;
     const netIncomeForChart: { month: string; netIncome: number }[] = [];
     const cashFlowForChart: { month: string; income: number; expense: number; net: number }[] = [];
@@ -143,6 +159,14 @@ export default function DashboardPage() {
     setCashFlowChartData(cashFlowForChart);
     setExpensesPieChartData(Object.entries(expensesByCategory).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total));
 
+    const processedUserSpending: UserSpending[] = Object.entries(userSpending).map(([userId, data]) => ({
+      userId,
+      displayName: data.displayName,
+      totalSpent: data.total,
+      avatarFallback: data.displayName.substring(0, 2).toUpperCase(),
+    })).sort((a,b) => b.totalSpent - a.totalSpent).slice(0, 5);
+    setUserSpendingData(processedUserSpending);
+
   }, [journalEntriesData, dateRange]);
 
 
@@ -150,7 +174,7 @@ export default function DashboardPage() {
     toast({ title: "Feature In Development", description: "CSV/PDF report downloads are coming soon!" });
   };
 
-  const isLoading = isLoadingJournalEntries;
+  const isLoading = isLoadingJournalEntries || isLoadingNotifications;
 
   if (!currentCompanyId && !isLoading && pathname === '/dashboard') {
     return (
@@ -205,42 +229,42 @@ export default function DashboardPage() {
           </Button>
         </div>
       </div>
+      
+       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <SummaryCard title="Revenue" value={summaryData.totalRevenue} icon={DollarSign} />
+        <SummaryCard title="Burn Rate" value={summaryData.totalExpenses} icon={TrendingDown} />
+        <SummaryCard title="Net Profit" value={summaryData.netProfit} icon={TrendingUp} />
+        <SummaryCard title="Transactions" value={summaryData.transactionCount} icon={Activity} isCurrency={false} />
+      </div>
 
-      {isLoading ? (
-        <div className="grid gap-6">
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28 rounded-lg" />)}
-          </div>
-          <Skeleton className="h-96 rounded-lg" />
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Skeleton className="h-80 rounded-lg" />
-            <Skeleton className="h-80 rounded-lg" />
-          </div>
-          <Skeleton className="h-96 rounded-lg" />
-        </div>
-      ) : (
-        <div className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            <SummaryCard title="Revenue" value={summaryData.totalRevenue} icon={DollarSign} />
-            <SummaryCard title="Burn Rate" value={summaryData.totalExpenses} icon={TrendingDown} />
-            <SummaryCard title="Net Profit" value={summaryData.netProfit} icon={TrendingUp} />
-            <SummaryCard title="Transactions" value={summaryData.transactionCount} icon={Activity} isCurrency={false} />
-          </div>
-
-          <NetIncomeChart data={netIncomeChartData} isLoading={isLoading} />
-          
-          <div className="grid gap-6 lg:grid-cols-5">
-            <div className="lg:col-span-3">
-              <CashFlowChart data={cashFlowChartData} isLoading={isLoading} />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+           {isLoading ? (
+            <div className="space-y-6">
+              <Skeleton className="h-96 rounded-lg" />
+              <div className="grid gap-6 lg:grid-cols-2">
+                <Skeleton className="h-80 rounded-lg" />
+                <Skeleton className="h-80 rounded-lg" />
+              </div>
+              <Skeleton className="h-96 rounded-lg" />
             </div>
-            <div className="lg:col-span-2">
-              <ExpensesPieChart data={expensesPieChartData} isLoading={isLoading} />
-            </div>
-          </div>
-
-          <AnalyticsOverview kpis={analyticsKpis} expenseCategories={analyticsExpenseCategories} isLoading={isLoading} />
+           ) : (
+            <>
+              <NetIncomeChart data={netIncomeChartData} isLoading={isLoadingJournalEntries} />
+              <div className="grid gap-6 md:grid-cols-2">
+                  <CashFlowChart data={cashFlowChartData} isLoading={isLoadingJournalEntries} />
+                  <ExpensesPieChart data={expensesPieChartData} isLoading={isLoadingJournalEntries} />
+              </div>
+              <AnalyticsOverview kpis={analyticsKpis} expenseCategories={analyticsExpenseCategories} isLoading={isLoadingJournalEntries} />
+            </>
+           )}
         </div>
-      )}
+        <div className="lg:col-span-1 space-y-6">
+            <QuickActions />
+            <NotificationList notifications={notificationsData || []} isLoading={isLoadingNotifications} />
+            <UserSpendingList spendingData={userSpendingData} isLoading={isLoadingJournalEntries} />
+        </div>
+      </div>
     </div>
   );
 }
