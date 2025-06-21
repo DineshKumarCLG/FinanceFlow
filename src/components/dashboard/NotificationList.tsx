@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Notification } from "@/lib/data-service";

@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -57,7 +56,7 @@ export function ProfitLossReport({ reportData, isLoading = false }: ProfitLossRe
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Profit & Loss Statement</CardTitle>
+          <CardTitle>Profit &amp; Loss Statement</CardTitle>
            <CardDescription>For the period: {reportData?.formattedDateRange || "selected period"}</CardDescription>
         </CardHeader>
         <CardContent>
@@ -72,7 +71,7 @@ export function ProfitLossReport({ reportData, isLoading = false }: ProfitLossRe
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Profit & Loss Statement</CardTitle>
+        <CardTitle>Profit &amp; Loss Statement</CardTitle>
         <CardDescription>For the period: {formattedDateRange}</CardDescription>
       </CardHeader>
       <CardContent>

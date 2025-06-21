@@ -1,4 +1,3 @@
-
 import type { LucideIcon } from "lucide-react";
 import { LayoutDashboard, BookOpenText, BookCopy, MessageCircle, Settings, PlusCircle, UploadCloud, ListChecks, Landmark, BarChart3, FileText as InvoiceIcon } from "lucide-react";
 

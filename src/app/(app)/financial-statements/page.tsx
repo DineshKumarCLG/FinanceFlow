@@ -1,4 +1,3 @@
-
 import Link from 'next/link';
 import Image from 'next/image';
 import { PageTitle } from "@/components/shared/PageTitle";
@@ -13,21 +12,24 @@ export default function FinancialStatementsPage() {
       description: "View your company's assets, liabilities, and equity at a specific point in time. Understand your financial position.",
       href: "/balance-sheet",
       icon: Landmark,
-      imageUrl: "/assets/images/balance_sheet_illustration.png",
+      imageUrl: "https://placehold.co/600x400.png",
+      aiHint: "balance sheet"
     },
     {
       title: "Trial Balance",
       description: "Review a summary of all ledger accounts and their debit or credit balances. Ensure your books are balanced.",
       href: "/trial-balance",
       icon: ListChecks,
-      imageUrl: "/assets/images/trial_balance_illustration.png",
+      imageUrl: "https://placehold.co/600x400.png",
+      aiHint: "trial balance"
     },
     {
-      title: "Profit & Loss Statement",
+      title: "Profit &amp; Loss Statement",
       description: "Analyze your company's revenues and expenses over a period. Track profitability. (Available on Dashboard)",
       href: "/dashboard?tab=reports#reports",
       icon: PieChart,
-      imageUrl: "/assets/images/profit_loss_illustration.png",
+      imageUrl: "https://placehold.co/600x400.png",
+      aiHint: "profit loss"
     },
   ];
 
@@ -50,20 +52,14 @@ export default function FinancialStatementsPage() {
             </CardHeader>
             <CardContent className="flex-grow">
               <div className="aspect-video bg-muted rounded-md flex items-center justify-center mb-4 relative overflow-hidden">
-                {statement.imageUrl ? (
-                  <Image
-                    src={statement.imageUrl}
-                    alt={`${statement.title} illustration`}
-                    layout="fill"
-                    objectFit="cover"
-                    className="rounded-md"
-                  />
-                ) : (
-                  // Fallback for safety, if an imageUrl was somehow missing
-                  <div className="w-full h-full flex items-center justify-center bg-muted-foreground/10 text-muted-foreground">
-                    Image not available
-                  </div>
-                )}
+                <Image
+                  src={statement.imageUrl}
+                  alt={`${statement.title} illustration`}
+                  layout="fill"
+                  objectFit="cover"
+                  className="rounded-md"
+                  data-ai-hint={statement.aiHint}
+                />
               </div>
             </CardContent>
             <div className="p-6 pt-0">

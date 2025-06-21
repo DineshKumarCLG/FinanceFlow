@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -299,7 +298,7 @@ export default function BalanceSheetPage() {
               </TableBody>
               <TableFooter>
                 <TableRow className="font-bold text-lg bg-muted border-t-2 border-primary">
-                  <TableCell>Total Liabilities & Ending Equity</TableCell>
+                  <TableCell>Total Liabilities &amp; Ending Equity</TableCell>
                   <TableCell className="text-right">{formatCurrency(balanceSheetData.totalLiabilities + balanceSheetData.endingEquity)}</TableCell>
                 </TableRow>
                 {(Math.abs(balanceSheetData.totalAssets - (balanceSheetData.totalLiabilities + balanceSheetData.endingEquity)) > 0.01) && (
@@ -324,5 +323,3 @@ export default function BalanceSheetPage() {
     </div>
   );
 }
-
-    
