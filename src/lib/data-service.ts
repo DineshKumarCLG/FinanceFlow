@@ -1,3 +1,4 @@
+
 // src/lib/data-service.ts
 import { auth, db } from './firebase';
 import {
@@ -260,16 +261,17 @@ export async function addJournalEntry(
     creatorUserId: currentUser.uid,
     companyId: companyId,
     createdAt: serverTimestamp() as Timestamp,
-    taxableAmount: newEntryData.taxableAmount,
-    gstType: newEntryData.gstType,
-    gstRate: newEntryData.gstRate,
-    igstAmount: newEntryData.igstAmount,
-    cgstAmount: newEntryData.cgstAmount,
-    sgstAmount: newEntryData.sgstAmount,
-    vatAmount: newEntryData.vatAmount,
-    hsnSacCode: newEntryData.hsnSacCode,
-    partyGstin: newEntryData.partyGstin,
-    isInterState: newEntryData.isInterState,
+    // Sanitize optional fields to prevent 'undefined' values
+    taxableAmount: newEntryData.taxableAmount ?? null,
+    gstType: newEntryData.gstType ?? null,
+    gstRate: newEntryData.gstRate ?? null,
+    igstAmount: newEntryData.igstAmount ?? null,
+    cgstAmount: newEntryData.cgstAmount ?? null,
+    sgstAmount: newEntryData.sgstAmount ?? null,
+    vatAmount: newEntryData.vatAmount ?? null,
+    hsnSacCode: newEntryData.hsnSacCode ?? null,
+    partyGstin: newEntryData.partyGstin ?? null,
+    isInterState: newEntryData.isInterState ?? null,
   };
 
   try {
@@ -327,16 +329,17 @@ export async function addJournalEntries(
       creatorUserId: currentUser.uid,
       companyId: companyId,
       createdAt: serverTimestamp() as Timestamp,
-      taxableAmount: newData.taxableAmount,
-      gstType: newData.gstType,
-      gstRate: newData.gstRate,
-      igstAmount: newData.igstAmount,
-      cgstAmount: newData.cgstAmount,
-      sgstAmount: newData.sgstAmount,
-      vatAmount: newData.vatAmount,
-      hsnSacCode: newData.hsnSacCode,
-      partyGstin: newData.partyGstin,
-      isInterState: newData.isInterState,
+      // Sanitize optional fields to prevent 'undefined' values
+      taxableAmount: newData.taxableAmount ?? null,
+      gstType: newData.gstType ?? null,
+      gstRate: newData.gstRate ?? null,
+      igstAmount: newData.igstAmount ?? null,
+      cgstAmount: newData.cgstAmount ?? null,
+      sgstAmount: newData.sgstAmount ?? null,
+      vatAmount: newData.vatAmount ?? null,
+      hsnSacCode: newData.hsnSacCode ?? null,
+      partyGstin: newData.partyGstin ?? null,
+      isInterState: newData.isInterState ?? null,
     };
     batch.set(docRef, entryToSave);
     preparedEntries.push({
