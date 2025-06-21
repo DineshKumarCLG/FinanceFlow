@@ -101,10 +101,27 @@ export default function DashboardPage() {
     });
 
     entriesInDateRange.forEach(entry => {
-      // Use the explicit 'type' field first, then fallback to keyword matching for older entries
-      const entryType = entry.type?.toLowerCase();
-      let isIncomeEntry = entryType === 'income' || (entryType !== 'expense' && incomeKeywords.some(keyword => entry.creditAccount?.toLowerCase().includes(keyword)));
-      let isExpenseEntry = entryType === 'expense' || (entryType !== 'income' && expenseKeywords.some(keyword => entry.debitAccount?.toLowerCase().includes(keyword)));
+      // Prioritize keyword matching on account names for accuracy
+      const isIncomeByKeyword = incomeKeywords.some(keyword => entry.creditAccount?.toLowerCase().includes(keyword));
+      const isExpenseByKeyword = expenseKeywords.some(keyword => entry.debitAccount?.toLowerCase().includes(keyword));
+      
+      let isIncomeEntry = false;
+      let isExpenseEntry = false;
+
+      // Determine entry type based on keywords first
+      if (isIncomeByKeyword && !isExpenseByKeyword) {
+          isIncomeEntry = true;
+      } else if (isExpenseByKeyword && !isIncomeByKeyword) {
+          isExpenseEntry = true;
+      } else {
+          // Fallback to using the explicit 'type' field if keywords are ambiguous or not found
+          const entryType = entry.type?.toLowerCase();
+          if (entryType === 'income') {
+              isIncomeEntry = true;
+          } else if (entryType === 'expense') {
+              isExpenseEntry = true;
+          }
+      }
       
       const yearMonth = `${new Date(entry.date).getFullYear()}-${String(new Date(entry.date).getMonth() + 1).padStart(2, '0')}`;
       
