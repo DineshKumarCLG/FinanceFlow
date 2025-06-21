@@ -64,7 +64,7 @@ The document is provided as a data URI:
 For each transaction found, extract:
 - Date of transaction (YYYY-MM-DD).
 - Total transaction amount (including taxes).
-- A clear description of the transaction.
+- A clear description of the transaction. This should include the other party's name if visible.
 - Appropriate Debit and Credit accounts.
 
 Tax Information (GST/VAT) to extract if present in the document:
@@ -74,7 +74,7 @@ Tax Information (GST/VAT) to extract if present in the document:
 - IGST, CGST, SGST, or VAT amounts. If only total GST is available for CGST/SGST type, assume CGST and SGST are each half of that.
 - 'isInterState': Determine if it's inter-state (for IGST) or intra-state (for CGST/SGST) if Indian GST. This might be inferred from addresses or GSTINs if available.
 - HSN/SAC code.
-- Party GSTIN (supplier's or customer's GSTIN).
+- Party GSTIN: This is a critical field. You MUST extract the supplier's or customer's GSTIN if it is visible in the document.
 
 Return the extracted accounting entries in JSON format as an array.
 Each entry should conform to the AccountingEntrySchema.
