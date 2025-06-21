@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * @fileOverview Parses accounting entries from text or voice input and generates double-entry journal entries, including GST details.
@@ -77,9 +76,10 @@ Tax Information (GST/VAT):
 
 **Date Handling Rules (Crucial):**
 1. If the entry text explicitly mentions a specific date (e.g., "on July 15th", "last Tuesday", "2023-10-20"), use that exact date.
-2. If the entry text does NOT mention a specific date, or uses vague terms like "recently" or "a while ago" without a clear date, you MUST use the *current calendar date* (the date this request is being processed).
-3. **Format all dates as YYYY-MM-DD.**
-4. **Do NOT default to a generic past date like "2024-01-01" or the literal string "YYYY-MM-DD" for the date field unless that specific date is explicitly mentioned in the input.**
+2. **If a year is not specified in the entry text (e.g., "July 15th"), assume the current calendar year.**
+3. If the entry text does NOT mention a specific date at all, or uses vague terms like "recently" without a clear date, you MUST use the *current calendar date* (the date this request is being processed).
+4. **Format all dates as YYYY-MM-DD.**
+5. **Do NOT default to a generic past date like "2024-01-01" or the literal string "YYYY-MM-DD" for the date field unless that specific date is explicitly mentioned in the input.**
 
 Ensure that the output is a valid JSON object conforming to the ParseAccountingEntryOutputSchema.
 

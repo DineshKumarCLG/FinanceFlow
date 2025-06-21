@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * @fileOverview Generates structured invoice details from a textual description, including line items, customer details, and payment terms.
@@ -80,10 +79,12 @@ Extract the following information:
 - Status: Default to 'draft' unless specified otherwise.
 
 **Date Handling Rules (Crucial):**
-1. For Invoice Date: If the description explicitly mentions a specific date for the invoice itself (e.g., "invoice dated July 20th"), use that exact date. If no specific invoice date is mentioned, you MUST use the *current calendar date* (the date this request is being processed) as the invoiceDate.
-2. For Due Date: Calculate based on terms from the invoice date. If "Net 30" or "due in 30 days", add 30 days to invoiceDate. If "due end of month", set to the last day of the invoiceDate's month. If no terms, suggest a 30-day due date or leave blank if uncertain.
-3. **Format all dates as YYYY-MM-DD.**
-4. **Do NOT default to a generic past date like "2024-01-01" for dates unless that specific date is explicitly mentioned in the input.**
+1. For Invoice Date: If the description explicitly mentions a specific date for the invoice itself (e.g., "invoice dated July 20th"), use that exact date.
+2. **If a year is not specified in the description (e.g., "invoice dated July 20th"), assume the current calendar year.**
+3. If no specific invoice date is mentioned at all, you MUST use the *current calendar date* (the date this request is being processed) as the invoiceDate.
+4. For Due Date: Calculate based on terms from the invoice date. If "Net 30" or "due in 30 days", add 30 days to invoiceDate. If "due end of month", set to the last day of the invoiceDate's month. If no terms, suggest a 30-day due date or leave blank if uncertain.
+5. **Format all dates as YYYY-MM-DD.**
+6. **Do NOT default to a generic past date like "2024-01-01" for dates unless that specific date is explicitly mentioned in the input.**
 
 **Line Item Rules:**
 - 'unitPrice' should be the price before any taxes.
