@@ -219,4 +219,3 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
     return finalOutput;
   }
 );
-

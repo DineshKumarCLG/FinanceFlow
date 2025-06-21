@@ -155,9 +155,9 @@ export function ChatInterface() {
 
     try {
       const conversationHistoryForFlow = messages
-        .filter(msg => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'tool')
+        .filter(msg => msg.role === 'user' || msg.role === 'assistant')
         .map(msg => ({
-          role: msg.role as 'user' | 'assistant' | 'tool',
+          role: msg.role as 'user' | 'assistant',
           content: msg.content,
       }));
 
@@ -166,7 +166,6 @@ export function ChatInterface() {
         conversationHistory: conversationHistoryForFlow,
         uploadedFiles: fileDataUris,
         companyId: currentCompanyId,
-        creatorUserId: currentUser.uid, // Pass creatorUserId
       });
       
       setMessages((prev) => [
