@@ -79,7 +79,10 @@ export default function DashboardPage() {
     const dateRangeTo = dateRange?.to || new Date();
 
     const entriesInDateRange = journalEntriesData.filter(entry => {
-        const entryDate = new Date(entry.date);
+        if (!entry.date || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) return false;
+        // This constructs the date in the local timezone at midnight, avoiding UTC conversion issues
+        const [year, month, day] = entry.date.split('-').map(Number);
+        const entryDate = new Date(year, month - 1, day);
         return entryDate >= dateRangeFrom && entryDate <= dateRangeTo;
     });
 
@@ -93,10 +96,10 @@ export default function DashboardPage() {
     const monthlyAggregates: Record<string, { income: number; expense: number; monthLabel: string; yearMonth: string }> = {};
     const monthsForCharts = eachMonthOfInterval({ start: dateRangeFrom, end: dateRangeTo });
     monthsForCharts.forEach(d => {
-        const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const yearMonthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
         const monthLabel = d.toLocaleString(currentLocale, { month: 'short', year: '2-digit' });
-        if (!monthlyAggregates[yearMonth]) {
-            monthlyAggregates[yearMonth] = { income: 0, expense: 0, monthLabel, yearMonth };
+        if (!monthlyAggregates[yearMonthKey]) {
+            monthlyAggregates[yearMonthKey] = { income: 0, expense: 0, monthLabel, yearMonth: yearMonthKey };
         }
     });
 
@@ -123,17 +126,18 @@ export default function DashboardPage() {
           }
       }
       
-      const yearMonth = `${new Date(entry.date).getFullYear()}-${String(new Date(entry.date).getMonth() + 1).padStart(2, '0')}`;
+      const [entryYear, entryMonth, ] = entry.date.split('-').map(Number);
+      const yearMonthKey = `${entryYear}-${String(entryMonth).padStart(2, '0')}`;
       
       if (isIncomeEntry) {
           calculatedTotalRevenue += entry.amount;
           incomeTransactionsCount++;
-          if (monthlyAggregates[yearMonth]) monthlyAggregates[yearMonth].income += entry.amount;
+          if (monthlyAggregates[yearMonthKey]) monthlyAggregates[yearMonthKey].income += entry.amount;
       }
       if (isExpenseEntry) {
           calculatedTotalExpenses += entry.amount;
           expenseTransactionsCount++;
-          if (monthlyAggregates[yearMonth]) monthlyAggregates[yearMonth].expense += entry.amount;
+          if (monthlyAggregates[yearMonthKey]) monthlyAggregates[yearMonthKey].expense += entry.amount;
           const category = entry.debitAccount || "Uncategorized";
           expensesByCategory[category] = (expensesByCategory[category] || 0) + entry.amount;
       }
