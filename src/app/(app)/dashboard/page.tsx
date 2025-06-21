@@ -3,10 +3,10 @@
 
 import { PageTitle } from "@/components/shared/PageTitle";
 import { SummaryCard } from "@/components/dashboard/SummaryCard";
-import { DollarSign, TrendingUp, TrendingDown, Activity, CalendarDays, Download, AlertCircle } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, Activity, CalendarDays, Download, AlertCircle, PlusCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState, useEffect } from "react";
-import { getJournalEntries, type JournalEntry as StoredJournalEntry, getNotifications, type Notification } from "@/lib/data-service";
+import { useState, useEffect, useMemo } from "react";
+import { getJournalEntries, type StoredJournalEntry, getNotifications, type Notification } from "@/lib/data-service";
 import type { DateRange } from "react-day-picker";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
@@ -23,10 +23,11 @@ import { ExpensesPieChart } from "@/components/dashboard/ExpensesPieChart";
 import { AnalyticsOverview, type AnalyticsKpiData, type ExpenseCategoryData } from "@/components/dashboard/AnalyticsOverview";
 import { NotificationList } from "@/components/dashboard/NotificationList";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import Link from "next/link";
 
 
 export const incomeKeywords = ['revenue', 'sales', 'income', 'service fee', 'interest received', 'consulting income', 'project revenue', 'deposit', 'commission', 'dividend'];
-export const expenseKeywords = ['expense', 'cost', 'supply', 'rent', 'salary', 'utility', 'utilities', 'purchase', 'advertising', 'maintenance', 'insurance', 'interest paid', 'fee', 'software', 'development', 'services', 'consulting', 'contractor', 'design', 'travel', 'subscription', 'depreciation', 'amortization', 'office supplies', 'postage', 'printing', 'repairs'];
+export const expenseKeywords = ['expense', 'cost', 'supply', 'rent', 'salary', 'utility', 'utilities', 'purchase', 'advertising', 'maintenance', 'insurance', 'interest paid', 'fee', 'software', 'development', 'services', 'consulting', 'contractor', 'design', 'travel', 'subscription', 'depreciation', 'amortization', 'office supplies', 'postage', 'printing', 'repairs', 'cogs', 'cost of goods sold'];
 
 
 export default function DashboardPage() {
@@ -40,14 +41,6 @@ export default function DashboardPage() {
   });
   const { toast } = useToast();
   const pathname = usePathname();
-
-  // State for all processed data
-  const [summaryData, setSummaryData] = useState({ totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 });
-  const [netIncomeChartData, setNetIncomeChartData] = useState<{ month: string; netIncome: number }[]>([]);
-  const [cashFlowChartData, setCashFlowChartData] = useState<{ month: string; income: number; expense: number; net: number }[]>([]);
-  const [expensesPieChartData, setExpensesPieChartData] = useState<{ name: string; total: number }[]>([]);
-  const [analyticsKpis, setAnalyticsKpis] = useState<AnalyticsKpiData>({ avgTransactionValue: 0, profitMargin: 0, incomeTransactions: 0, expenseTransactions: 0 });
-  const [analyticsExpenseCategories, setAnalyticsExpenseCategories] = useState<ExpenseCategoryData[]>([]);
 
   // Fetch journal entries
   const { data: journalEntriesData, isLoading: isLoadingJournalEntries, error: journalEntriesError } = useQuery<StoredJournalEntry[], Error>({
@@ -70,9 +63,18 @@ export default function DashboardPage() {
     }
   }, [journalEntriesError, toast]);
 
-  // Data processing logic
-  useEffect(() => {
-    if (!journalEntriesData) return;
+  // Data processing logic moved to useMemo for efficiency and to fix crash
+  const processedData = useMemo(() => {
+     if (!journalEntriesData) {
+        return {
+            summaryData: { totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0 },
+            netIncomeChartData: [],
+            cashFlowChartData: [],
+            expensesPieChartData: [],
+            analyticsKpis: { avgTransactionValue: 0, profitMargin: 0, incomeTransactions: 0, expenseTransactions: 0 },
+            analyticsExpenseCategories: [],
+        };
+     }
 
     const currentLocale = typeof navigator !== 'undefined' ? (navigator.language || 'en-US') : 'en-US';
     const dateRangeFrom = dateRange?.from || new Date(0);
@@ -80,9 +82,8 @@ export default function DashboardPage() {
 
     const entriesInDateRange = journalEntriesData.filter(entry => {
         if (!entry.date || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) return false;
-        // This constructs the date in the local timezone at midnight, avoiding UTC conversion issues
         const [year, month, day] = entry.date.split('-').map(Number);
-        const entryDate = new Date(year, month - 1, day);
+        const entryDate = new Date(Date.UTC(year, month - 1, day));
         return entryDate >= dateRangeFrom && entryDate <= dateRangeTo;
     });
 
@@ -96,45 +97,28 @@ export default function DashboardPage() {
     const monthlyAggregates: Record<string, { income: number; expense: number; monthLabel: string; yearMonth: string }> = {};
     const monthsForCharts = eachMonthOfInterval({ start: dateRangeFrom, end: dateRangeTo });
     monthsForCharts.forEach(d => {
-        const yearMonthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-        const monthLabel = d.toLocaleString(currentLocale, { month: 'short', year: '2-digit' });
+        const yearMonthKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+        const monthLabel = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth())).toLocaleString(currentLocale, { month: 'short', year: '2-digit', timeZone: 'UTC' });
         if (!monthlyAggregates[yearMonthKey]) {
             monthlyAggregates[yearMonthKey] = { income: 0, expense: 0, monthLabel, yearMonth: yearMonthKey };
         }
     });
 
     entriesInDateRange.forEach(entry => {
-      // Prioritize keyword matching on account names for accuracy
-      const isIncomeByKeyword = incomeKeywords.some(keyword => entry.creditAccount?.toLowerCase().includes(keyword));
-      const isExpenseByKeyword = expenseKeywords.some(keyword => entry.debitAccount?.toLowerCase().includes(keyword));
-      
-      let isIncomeEntry = false;
-      let isExpenseEntry = false;
-
-      // Determine entry type based on keywords first
-      if (isIncomeByKeyword && !isExpenseByKeyword) {
-          isIncomeEntry = true;
-      } else if (isExpenseByKeyword && !isIncomeByKeyword) {
-          isExpenseEntry = true;
-      } else {
-          // Fallback to using the explicit 'type' field if keywords are ambiguous or not found
-          const entryType = entry.type?.toLowerCase();
-          if (entryType === 'income') {
-              isIncomeEntry = true;
-          } else if (entryType === 'expense') {
-              isExpenseEntry = true;
-          }
-      }
+      // Simplified and more robust classification logic
+      const isIncome = incomeKeywords.some(keyword => entry.creditAccount?.toLowerCase().includes(keyword));
+      const isExpense = expenseKeywords.some(keyword => entry.debitAccount?.toLowerCase().includes(keyword));
       
       const [entryYear, entryMonth, ] = entry.date.split('-').map(Number);
       const yearMonthKey = `${entryYear}-${String(entryMonth).padStart(2, '0')}`;
       
-      if (isIncomeEntry) {
+      if (isIncome) {
           calculatedTotalRevenue += entry.amount;
           incomeTransactionsCount++;
           if (monthlyAggregates[yearMonthKey]) monthlyAggregates[yearMonthKey].income += entry.amount;
       }
-      if (isExpenseEntry) {
+      
+      if (isExpense) {
           calculatedTotalExpenses += entry.amount;
           expenseTransactionsCount++;
           if (monthlyAggregates[yearMonthKey]) monthlyAggregates[yearMonthKey].expense += entry.amount;
@@ -143,21 +127,21 @@ export default function DashboardPage() {
       }
     });
 
-    setSummaryData({
+    const summaryData = {
         totalRevenue: calculatedTotalRevenue,
         totalExpenses: calculatedTotalExpenses,
         netProfit: calculatedTotalRevenue - calculatedTotalExpenses,
         transactionCount: entriesInDateRange.length,
-    });
+    };
     
     const totalTransactions = incomeTransactionsCount + expenseTransactionsCount;
-    setAnalyticsKpis({
+    const analyticsKpis = {
       avgTransactionValue: totalTransactions > 0 ? (calculatedTotalRevenue + calculatedTotalExpenses) / totalTransactions : 0,
       profitMargin: calculatedTotalRevenue > 0 ? ( (calculatedTotalRevenue - calculatedTotalExpenses) / calculatedTotalRevenue ) * 100 : 0,
       incomeTransactions: incomeTransactionsCount,
       expenseTransactions: expenseTransactionsCount,
-    });
-    setAnalyticsExpenseCategories(Object.entries(expensesByCategory).map(([name, total]) => ({name, total})).sort((a,b) => b.total - a.total).slice(0, 7));
+    };
+    const analyticsExpenseCategories = Object.entries(expensesByCategory).map(([name, total]) => ({name, total})).sort((a,b) => b.total - a.total).slice(0, 7);
 
     let cumulativeNetIncome = 0;
     const netIncomeForChart: { month: string; netIncome: number }[] = [];
@@ -168,9 +152,16 @@ export default function DashboardPage() {
         netIncomeForChart.push({ month: agg.monthLabel, netIncome: cumulativeNetIncome });
         cashFlowForChart.push({ month: agg.monthLabel, income: agg.income, expense: agg.expense, net: monthlyNet });
     });
-    setNetIncomeChartData(netIncomeForChart);
-    setCashFlowChartData(cashFlowForChart);
-    setExpensesPieChartData(Object.entries(expensesByCategory).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total));
+    const expensesPieChartData = Object.entries(expensesByCategory).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total);
+
+    return {
+        summaryData,
+        netIncomeChartData: netIncomeForChart,
+        cashFlowChartData: cashFlowForChart,
+        expensesPieChartData,
+        analyticsKpis,
+        analyticsExpenseCategories
+    };
 
   }, [journalEntriesData, dateRange]);
 
@@ -236,10 +227,10 @@ export default function DashboardPage() {
       </div>
       
        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <SummaryCard title="Revenue" value={summaryData.totalRevenue} icon={DollarSign} />
-        <SummaryCard title="Burn Rate" value={summaryData.totalExpenses} icon={TrendingDown} />
-        <SummaryCard title="Net Profit" value={summaryData.netProfit} icon={TrendingUp} />
-        <SummaryCard title="Transactions" value={summaryData.transactionCount} icon={Activity} isCurrency={false} />
+        <SummaryCard title="Revenue" value={processedData.summaryData.totalRevenue} icon={DollarSign} />
+        <SummaryCard title="Burn Rate" value={processedData.summaryData.totalExpenses} icon={TrendingDown} />
+        <SummaryCard title="Net Profit" value={processedData.summaryData.netProfit} icon={TrendingUp} />
+        <SummaryCard title="Transactions" value={processedData.summaryData.transactionCount} icon={Activity} isCurrency={false} />
       </div>
 
        <Tabs defaultValue="overview" className="w-full">
@@ -259,12 +250,12 @@ export default function DashboardPage() {
             </div>
           ) : (
             <>
-              <NetIncomeChart data={netIncomeChartData} isLoading={isLoadingJournalEntries} />
+              <NetIncomeChart data={processedData.netIncomeChartData} isLoading={isLoadingJournalEntries} />
               <div className="grid gap-6 md:grid-cols-2">
-                  <CashFlowChart data={cashFlowChartData} isLoading={isLoadingJournalEntries} />
-                  <ExpensesPieChart data={expensesPieChartData} isLoading={isLoadingJournalEntries} />
+                  <CashFlowChart data={processedData.cashFlowChartData} isLoading={isLoadingJournalEntries} />
+                  <ExpensesPieChart data={processedData.expensesPieChartData} isLoading={isLoadingJournalEntries} />
               </div>
-              <AnalyticsOverview kpis={analyticsKpis} expenseCategories={analyticsExpenseCategories} isLoading={isLoadingJournalEntries} />
+              <AnalyticsOverview kpis={processedData.analyticsKpis} expenseCategories={processedData.analyticsExpenseCategories} isLoading={isLoadingJournalEntries} />
             </>
           )}
         </TabsContent>
