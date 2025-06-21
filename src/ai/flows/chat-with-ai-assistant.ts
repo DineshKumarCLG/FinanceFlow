@@ -12,7 +12,7 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import { manageInvoiceTool } from '../tools/manage-invoice-tool';
 import { queryJournalTool } from '../tools/query-journal-tool';
-import { generate, part } from 'genkit/experimental/ai';
+import { part } from 'genkit';
 
 const ChatWithAiAssistantInputSchema = z.object({
   message: z.string().describe('The user message to the AI assistant.'),
@@ -60,7 +60,7 @@ const chatWithAiAssistantFlow = ai.defineFlow(
       });
     }
 
-    const { output } = await generate({
+    const { output } = await ai.generate({
       model: ai.model('googleai/gemini-2.0-flash'),
       tools: [manageInvoiceTool, queryJournalTool],
       history: history,
