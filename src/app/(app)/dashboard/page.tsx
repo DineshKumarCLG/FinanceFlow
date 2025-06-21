@@ -21,7 +21,6 @@ import { NetIncomeChart } from "@/components/dashboard/NetIncomeChart";
 import { CashFlowChart } from "@/components/dashboard/CashFlowChart";
 import { ExpensesPieChart } from "@/components/dashboard/ExpensesPieChart";
 import { AnalyticsOverview, type AnalyticsKpiData, type ExpenseCategoryData } from "@/components/dashboard/AnalyticsOverview";
-import { QuickActions } from "@/components/dashboard/QuickActions";
 import { NotificationList } from "@/components/dashboard/NotificationList";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -220,43 +219,36 @@ export default function DashboardPage() {
         <SummaryCard title="Transactions" value={summaryData.transactionCount} icon={Activity} isCurrency={false} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-           <Tabs defaultValue="overview" className="w-full">
-            <TabsList>
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="notifications">Notifications</TabsTrigger>
-            </TabsList>
-            <TabsContent value="overview" className="mt-4 space-y-6">
-              {isLoading ? (
-                <div className="space-y-6">
-                  <Skeleton className="h-96 rounded-lg" />
-                  <div className="grid gap-6 lg:grid-cols-2">
-                    <Skeleton className="h-80 rounded-lg" />
-                    <Skeleton className="h-80 rounded-lg" />
-                  </div>
-                  <Skeleton className="h-96 rounded-lg" />
-                </div>
-              ) : (
-                <>
-                  <NetIncomeChart data={netIncomeChartData} isLoading={isLoadingJournalEntries} />
-                  <div className="grid gap-6 md:grid-cols-2">
-                      <CashFlowChart data={cashFlowChartData} isLoading={isLoadingJournalEntries} />
-                      <ExpensesPieChart data={expensesPieChartData} isLoading={isLoadingJournalEntries} />
-                  </div>
-                  <AnalyticsOverview kpis={analyticsKpis} expenseCategories={analyticsExpenseCategories} isLoading={isLoadingJournalEntries} />
-                </>
-              )}
-            </TabsContent>
-            <TabsContent value="notifications" className="mt-4">
-                <NotificationList notifications={notificationsData || []} isLoading={isLoadingNotifications} />
-            </TabsContent>
-           </Tabs>
-        </div>
-        <div className="lg:col-span-1 space-y-6">
-            <QuickActions />
-        </div>
-      </div>
+       <Tabs defaultValue="overview" className="w-full">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="notifications">Notifications</TabsTrigger>
+        </TabsList>
+        <TabsContent value="overview" className="mt-4 space-y-6">
+          {isLoading ? (
+            <div className="space-y-6">
+              <Skeleton className="h-96 rounded-lg" />
+              <div className="grid gap-6 lg:grid-cols-2">
+                <Skeleton className="h-80 rounded-lg" />
+                <Skeleton className="h-80 rounded-lg" />
+              </div>
+              <Skeleton className="h-96 rounded-lg" />
+            </div>
+          ) : (
+            <>
+              <NetIncomeChart data={netIncomeChartData} isLoading={isLoadingJournalEntries} />
+              <div className="grid gap-6 md:grid-cols-2">
+                  <CashFlowChart data={cashFlowChartData} isLoading={isLoadingJournalEntries} />
+                  <ExpensesPieChart data={expensesPieChartData} isLoading={isLoadingJournalEntries} />
+              </div>
+              <AnalyticsOverview kpis={analyticsKpis} expenseCategories={analyticsExpenseCategories} isLoading={isLoadingJournalEntries} />
+            </>
+          )}
+        </TabsContent>
+        <TabsContent value="notifications" className="mt-4">
+            <NotificationList notifications={notificationsData || []} isLoading={isLoadingNotifications} />
+        </TabsContent>
+       </Tabs>
     </div>
   );
 }
