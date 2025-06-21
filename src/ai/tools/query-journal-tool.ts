@@ -30,9 +30,9 @@ const QueryJournalInputSchema = z.object({
 export type QueryJournalInput = z.infer<typeof QueryJournalInputSchema>;
 
 const QueryJournalOutputSchema = z.object({
-  querySummary: z.string().describe("A concise textual summary of the query results. For example, 'Found 15 entries totaling $1,234.56 matching your criteria.' or 'No entries found for the specified period.'"),
+  querySummary: z.string().describe("A concise textual summary of the query results. For example, 'Found 15 entries totaling 1234.56 matching your criteria.' or 'No entries found for the specified period.'"),
   matchCount: z.number().describe("The total number of entries matching the query criteria (before any display limits)."),
-  displayedEntriesDescription: z.string().optional().describe("A brief description of up to 'limit' key entries, if any were found. E.g., 'Recent entries: 2024-07-15: Office Supplies ($50); 2024-07-10: Client Payment ($200).'"),
+  displayedEntriesDescription: z.string().optional().describe("A brief description of up to 'limit' key entries, if any were found. E.g., 'Recent entries: 2024-07-15: Office Supplies (50.00); 2024-07-10: Client Payment (200.00).'"),
 });
 export type QueryJournalOutput = z.infer<typeof QueryJournalOutputSchema>;
 
@@ -115,12 +115,12 @@ export const queryJournalTool = ai.defineTool(
       if (matchCount > 0) {
         const entriesToDisplay = filteredEntries.slice(0, input.limit);
         displayedEntriesDescription = "Examples: " + entriesToDisplay.map(e => 
-          `${e.date}: ${e.description.substring(0,30)}... (${e.amount.toLocaleString(undefined, {style: 'currency', currency: 'INR'})})`
+          `${e.date}: ${e.description.substring(0,30)}... (${e.amount.toFixed(2)})`
         ).join('; ');
       }
 
       const querySummary = matchCount > 0
-        ? `Found ${matchCount} journal entr${matchCount === 1 ? 'y' : 'ies'} totaling ${totalAmount.toLocaleString(undefined, {style: 'currency', currency: 'INR'})} matching your criteria.`
+        ? `Found ${matchCount} journal entr${matchCount === 1 ? 'y' : 'ies'} totaling ${totalAmount.toFixed(2)} matching your criteria.`
         : "No journal entries found matching your criteria.";
 
       return {

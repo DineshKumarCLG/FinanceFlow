@@ -1,10 +1,11 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
 import { PageTitle } from "@/components/shared/PageTitle";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
-import { getJournalEntries, type JournalEntry as StoredJournalEntry } from "@/lib/data-service";
+import { getJournalEntries, type JournalEntry as StoredJournalEntry, getCompanySettings, type CompanySettings } from "@/lib/data-service";
 import { useAuth } from "@/contexts/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -24,6 +25,7 @@ export default function TrialBalancePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [clientLocale, setClientLocale] = useState('en-US');
+  const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
 
   useEffect(() => {
     if (typeof navigator !== 'undefined') {
@@ -75,7 +77,13 @@ export default function TrialBalancePage() {
       setIsLoading(true);
       setError(null);
       try {
-        const entries = await getJournalEntries(currentCompanyId);
+        const settingsPromise = getCompanySettings(currentCompanyId);
+        const entriesPromise = getJournalEntries(currentCompanyId);
+        
+        const [settings, entries] = await Promise.all([settingsPromise, entriesPromise]);
+        
+        setCompanySettings(settings);
+
         if (entries.length === 0) {
           setBalances([]);
           setTotalDebits(0);
@@ -95,7 +103,7 @@ export default function TrialBalancePage() {
   }, [currentUser, currentCompanyId, calculateTrialBalance]);
 
   const formatCurrency = (value: number) => {
-    return value.toLocaleString(clientLocale, { style: 'currency', currency: 'INR', minimumFractionDigits: 2 });
+    return value.toLocaleString(clientLocale, { style: 'currency', currency: companySettings?.currency || 'INR', minimumFractionDigits: 2 });
   };
 
   if (!currentCompanyId && !isLoading) {

@@ -15,19 +15,30 @@ interface PrintableInvoiceProps {
 
 const fallbackCompanyDetails: Required<Pick<CompanySettings, 'businessName' | 'companyGstin'>> & Partial<CompanySettings> = {
   businessName: "Your Company Name",
-  address: "123 Business Street, City, Country",
+  companyAddress: "123 Business Street, City, Country",
   companyGstin: "YOUR_GSTIN_HERE",
-  email: "your.email@example.com",
-  phone: "+1234567890",
-  // logoUrl: "", // Removed
+  companyEmail: "your.email@example.com",
+  companyPhone: "+1234567890",
   bankDetails: "Bank: Default Bank\nAccount Name: Your Company\nAccount No: 0000000000\nIFSC: DEFB0000000",
   authorizedSignatory: "Authorized Signatory",
+  currency: "INR",
 };
 
 
 export function PrintableInvoice({ invoice, companyDetails }: PrintableInvoiceProps) {
   const [clientLocale, setClientLocale] = useState('en-US');
-  const [currency, setCurrency] = useState('INR'); 
+  
+  const currentCompanyDetails = {
+    name: companyDetails?.businessName || fallbackCompanyDetails.businessName,
+    address: companyDetails?.companyAddress || fallbackCompanyDetails.companyAddress,
+    gstin: companyDetails?.companyGstin || fallbackCompanyDetails.companyGstin,
+    email: companyDetails?.companyEmail || fallbackCompanyDetails.companyEmail,
+    phone: companyDetails?.companyPhone || fallbackCompanyDetails.companyPhone,
+    bankDetails: companyDetails?.bankDetails || fallbackCompanyDetails.bankDetails,
+    authorizedSignatory: companyDetails?.authorizedSignatory || fallbackCompanyDetails.authorizedSignatory,
+    currency: companyDetails?.currency || fallbackCompanyDetails.currency,
+  };
+
 
   useEffect(() => {
     if (typeof navigator !== 'undefined') {
@@ -35,19 +46,7 @@ export function PrintableInvoice({ invoice, companyDetails }: PrintableInvoicePr
     }
   }, []);
 
-  const currentCompanyDetails = {
-    name: companyDetails?.businessName || fallbackCompanyDetails.businessName,
-    address: companyDetails?.companyAddress || fallbackCompanyDetails.address,
-    gstin: companyDetails?.companyGstin || fallbackCompanyDetails.companyGstin,
-    email: companyDetails?.companyEmail || fallbackCompanyDetails.email,
-    phone: companyDetails?.companyPhone || fallbackCompanyDetails.phone,
-    // logoUrl: companyDetails?.logoUrl, // Removed
-    bankDetails: companyDetails?.bankDetails || fallbackCompanyDetails.bankDetails,
-    authorizedSignatory: companyDetails?.authorizedSignatory || fallbackCompanyDetails.authorizedSignatory,
-  };
-
-
-  const formatCurrency = (value: number | undefined, locale = clientLocale, curr = currency) => {
+  const formatCurrency = (value: number | undefined, locale = clientLocale, curr = currentCompanyDetails.currency) => {
     if (value === undefined || value === null) return "-";
     return new Intl.NumberFormat(locale, { style: "currency", currency: curr, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
   };
@@ -92,10 +91,9 @@ export function PrintableInvoice({ invoice, companyDetails }: PrintableInvoicePr
     <div className="bg-white p-6 sm:p-10 text-sm font-sans printable-card text-gray-800 printable-text">
       <header className="grid grid-cols-2 gap-4 mb-8 items-start">
         <div>
-          {/* Logo display logic removed */}
           <h2 className="text-xl font-bold text-gray-900 mb-3">{currentCompanyDetails.name}</h2>
-          <p className="text-xs text-gray-600 whitespace-pre-line">{currentCompanyDetails.address || fallbackCompanyDetails.address}</p>
-          {currentCompanyDetails.gstin && <p className="text-xs text-gray-600">GSTIN/VAT: {currentCompanyDetails.gstin}</p>}
+          <p className="text-xs text-gray-600 whitespace-pre-line">{currentCompanyDetails.address || fallbackCompanyDetails.companyAddress}</p>
+          {currentCompanyDetails.gstin && <p className="text-xs text-gray-600">GSTIN/VAT ID: {currentCompanyDetails.gstin}</p>}
           {currentCompanyDetails.email && <p className="text-xs text-gray-600">Email: {currentCompanyDetails.email}</p>}
           {currentCompanyDetails.phone && <p className="text-xs text-gray-600">Phone: {currentCompanyDetails.phone}</p>}
         </div>
@@ -120,7 +118,7 @@ export function PrintableInvoice({ invoice, companyDetails }: PrintableInvoicePr
           <p className="font-semibold text-gray-800">{invoice.customerName || "N/A"}</p>
           {invoice.billingAddress && <p className="text-xs text-gray-600 whitespace-pre-line">{invoice.billingAddress}</p>}
           {invoice.customerEmail && <p className="text-xs text-gray-600">Email: {invoice.customerEmail}</p>}
-          {invoice.customerGstin && <p className="text-xs text-gray-600">GSTIN/VAT: {invoice.customerGstin}</p>}
+          {invoice.customerGstin && <p className="text-xs text-gray-600">GSTIN/VAT ID: {invoice.customerGstin}</p>}
         </div>
         {invoice.shippingAddress && (
           <div>
@@ -191,12 +189,12 @@ export function PrintableInvoice({ invoice, companyDetails }: PrintableInvoicePr
             <span className="font-medium">{formatCurrency(subTotal)}</span>
           </div>
           <div className="flex justify-between text-gray-700">
-            <span>Total Tax (GST):</span>
+            <span>Total Tax (GST/VAT):</span>
             <span className="font-medium">{formatCurrency(totalGstAmount)}</span>
           </div>
           <Separator className="my-1 bg-gray-300" />
           <div className="flex justify-between text-lg font-bold text-gray-900">
-            <span>Grand Total:</span>
+            <span>Grand Total ({currentCompanyDetails.currency}):</span>
             <span>{formatCurrency(totalAmount)}</span>
           </div>
         </div>

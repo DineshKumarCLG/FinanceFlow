@@ -33,8 +33,12 @@ const profileFormSchema = z.object({
     message: "Invalid GSTIN format (e.g., 29ABCDE1234F1Z5)",
   }).or(z.literal('')),
   gstRegion: z.enum(["india", "international_other", "none"]).optional(),
-  // logoUrl: z.string().url("Invalid URL for logo.").optional().or(z.literal('')), // Removed
   companyAddress: z.string().optional().or(z.literal('')),
+  companyEmail: z.string().email({ message: "Invalid email address."}).optional().or(z.literal('')),
+  companyPhone: z.string().optional().or(z.literal('')),
+  currency: z.string().optional().or(z.literal('')),
+  bankDetails: z.string().optional().or(z.literal('')),
+  authorizedSignatory: z.string().optional().or(z.literal('')),
   registeredAddress: z.string().optional().or(z.literal('')),
   corporateAddress: z.string().optional().or(z.literal('')),
   billingAddress: z.string().optional().or(z.literal('')),
@@ -58,6 +62,17 @@ const gstRegionOptions = [
   { value: "none", label: "None / Not Applicable" },
 ];
 
+const currencyOptions = [
+    { value: "INR", label: "INR - Indian Rupee" },
+    { value: "USD", label: "USD - United States Dollar" },
+    { value: "EUR", label: "EUR - Euro" },
+    { value: "GBP", label: "GBP - British Pound Sterling" },
+    { value: "JPY", label: "JPY - Japanese Yen" },
+    { value: "AUD", label: "AUD - Australian Dollar" },
+    { value: "CAD", label: "CAD - Canadian Dollar" },
+    { value: "SGD", label: "SGD - Singapore Dollar" },
+];
+
 
 export function ProfileForm() {
   const { user, updateUserProfileName, isLoading: authIsLoading, currentCompanyId } = useAuth();
@@ -78,6 +93,11 @@ export function ProfileForm() {
       registeredAddress: "",
       corporateAddress: "",
       billingAddress: "",
+      companyEmail: "",
+      companyPhone: "",
+      currency: "INR",
+      bankDetails: "",
+      authorizedSignatory: "",
     },
     mode: "onChange",
   });
@@ -99,6 +119,11 @@ export function ProfileForm() {
             registeredAddress: companySettings?.registeredAddress || "",
             corporateAddress: companySettings?.corporateAddress || "",
             billingAddress: companySettings?.billingAddress || "",
+            companyEmail: companySettings?.companyEmail || "",
+            companyPhone: companySettings?.companyPhone || "",
+            currency: companySettings?.currency || "INR",
+            bankDetails: companySettings?.bankDetails || "",
+            authorizedSignatory: companySettings?.authorizedSignatory || "",
           });
         } catch (error) {
           console.error("Failed to load company settings:", error);
@@ -106,38 +131,21 @@ export function ProfileForm() {
           form.reset({
             name: user.displayName || "",
             email: user.email || "",
-            businessName: "",
-            businessType: "",
-            companyGstin: "",
-            gstRegion: "none",
-            companyAddress: "",
-            registeredAddress: "",
-            corporateAddress: "",
-            billingAddress: "",
           });
         } finally {
           setIsFetchingSettings(false);
         }
-      } else if (user) { // User exists but no companyId
+      } else if (user) { 
         form.reset({
           name: user.displayName || "",
           email: user.email || "",
-          businessName: "",
-          businessType: "",
-          companyGstin: "",
-          gstRegion: "none",
-          companyAddress: "",
-          registeredAddress: "",
-          corporateAddress: "",
-          billingAddress: "",
         });
       }
     }
-    if (user) { // Only run if user object is available to prevent resetting form with empty user data during auth loading
+    if (user) { 
       loadProfileAndSettings();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, currentCompanyId]); // form and toast are stable
+  }, [user, currentCompanyId, form, toast]);
 
   async function onSubmit(data: ProfileFormValues) {
     if (!currentCompanyId) {
@@ -159,6 +167,11 @@ export function ProfileForm() {
         registeredAddress: data.registeredAddress || "",
         corporateAddress: data.corporateAddress || "",
         billingAddress: data.billingAddress || "",
+        companyEmail: data.companyEmail || "",
+        companyPhone: data.companyPhone || "",
+        currency: data.currency || "INR",
+        bankDetails: data.bankDetails || "",
+        authorizedSignatory: data.authorizedSignatory || "",
       };
 
       await DataService.saveCompanySettings(currentCompanyId, companySettingsToSave); 
@@ -316,6 +329,55 @@ export function ProfileForm() {
               )}
             />
             <FormField
+                control={form.control}
+                name="currency"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Base Currency</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value ?? "INR"} disabled={isLoadingUiElements}>
+                        <FormControl>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select your base currency" />
+                        </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                        {currencyOptions.map(opt => (
+                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                        </SelectContent>
+                    </Select>
+                    <FormMessage />
+                    <p className="text-xs text-muted-foreground">The primary currency for your financial reports.</p>
+                    </FormItem>
+                )}
+            />
+             <FormField
+              control={form.control}
+              name="companyEmail"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Company Email (for Invoices)</FormLabel>
+                  <FormControl>
+                    <Input type="email" placeholder="contact@yourbusiness.com" {...field} value={field.value ?? ""} disabled={isLoadingUiElements} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+             <FormField
+              control={form.control}
+              name="companyPhone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Company Phone (for Invoices)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="+1-234-567-8900" {...field} value={field.value ?? ""} disabled={isLoadingUiElements} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
               control={form.control}
               name="companyAddress"
               render={({ field }) => (
@@ -331,43 +393,33 @@ export function ProfileForm() {
             />
             <FormField
               control={form.control}
-              name="registeredAddress"
+              name="bankDetails"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Registered Office Address (Optional)</FormLabel>
+                  <FormLabel>Bank Details (for Invoices)</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Official registered address of the company" {...field} value={field.value ?? ""} disabled={isLoadingUiElements} rows={3}/>
+                    <Textarea placeholder={"Bank Name: Example Bank\nAccount Name: Your Business LLC\nAccount No: 123456789\nIFSC/SWIFT: EXAMPL001"} {...field} value={field.value ?? ""} disabled={isLoadingUiElements} rows={4}/>
                   </FormControl>
                   <FormMessage />
+                   <p className="text-xs text-muted-foreground">These details will be shown on invoices for customers to make payments.</p>
                 </FormItem>
               )}
             />
             <FormField
               control={form.control}
-              name="corporateAddress"
+              name="authorizedSignatory"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Corporate Office Address (Optional)</FormLabel>
+                  <FormLabel>Authorized Signatory (for Invoices)</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Primary corporate office, if different from registered" {...field} value={field.value ?? ""} disabled={isLoadingUiElements} rows={3}/>
+                    <Input placeholder="Name or Title" {...field} value={field.value ?? ""} disabled={isLoadingUiElements}/>
                   </FormControl>
                   <FormMessage />
+                  <p className="text-xs text-muted-foreground">Name or title to appear on the signature line of invoices.</p>
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name="billingAddress"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Company's Billing Address (Optional)</FormLabel>
-                  <FormControl>
-                    <Textarea placeholder="Address where your company receives bills" {...field} value={field.value ?? ""} disabled={isLoadingUiElements} rows={3}/>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+
           </CardContent>
           <CardFooter>
             <Button type="submit" disabled={isSaveButtonDisabled}>

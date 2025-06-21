@@ -105,6 +105,7 @@ export interface CompanySettings {
   bankDetails?: string;
   authorizedSignatory?: string;
   updatedAt?: Timestamp;
+  currency?: string; // e.g., "INR", "USD", "EUR"
 }
 
 export interface AiPreferencesSettings {
@@ -731,6 +732,7 @@ export async function getCompanySettings(companyId: string): Promise<CompanySett
         companyPhone: data.companyPhone,
         bankDetails: data.bankDetails,
         authorizedSignatory: data.authorizedSignatory,
+        currency: data.currency,
         updatedAt: data.updatedAt,
       } as CompanySettings;
     } else {
@@ -761,13 +763,14 @@ export async function saveCompanySettings(
   updatePayload.updatedAt = serverTimestamp() as Timestamp;
   
   // Ensure all fields are present, even if empty, to avoid 'undefined' in Firestore
-  const fieldsToEnsure: (keyof CompanySettings)[] = ['businessName', 'businessType', 'companyGstin', 'gstRegion', 'companyAddress', 'registeredAddress', 'corporateAddress', 'billingAddress', 'companyEmail', 'companyPhone', 'bankDetails', 'authorizedSignatory'];
+  const fieldsToEnsure: (keyof CompanySettings)[] = ['businessName', 'businessType', 'companyGstin', 'gstRegion', 'companyAddress', 'registeredAddress', 'corporateAddress', 'billingAddress', 'companyEmail', 'companyPhone', 'bankDetails', 'authorizedSignatory', 'currency'];
   fieldsToEnsure.forEach(field => {
     if (updatePayload[field] === undefined) {
-      updatePayload[field] = ""; // Or null, depending on how you want to treat empty fields
+      updatePayload[field] = ""; 
     }
   });
   if (updatePayload.gstRegion === "") updatePayload.gstRegion = "none";
+  if (updatePayload.currency === "") updatePayload.currency = "INR";
 
 
   try {
