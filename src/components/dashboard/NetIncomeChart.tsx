@@ -5,12 +5,20 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect } from "react";
-import { ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 
 interface NetIncomeChartProps {
   data: { month: string; netIncome: number }[];
   isLoading?: boolean;
 }
+
+const chartConfig = {
+  netIncome: {
+    label: "Net Income",
+    color: "hsl(var(--chart-1))",
+  },
+} satisfies ChartConfig;
+
 
 export function NetIncomeChart({ data = [], isLoading = false }: NetIncomeChartProps) {
   const [clientLocale, setClientLocale] = useState('en-US');
@@ -47,12 +55,12 @@ export function NetIncomeChart({ data = [], isLoading = false }: NetIncomeChartP
                 No data available for the selected period.
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height="100%">
+            <ChartContainer config={chartConfig} className="w-full h-full">
               <AreaChart data={data} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
                 <defs>
                   <linearGradient id="netIncomeGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.4}/>
-                    <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="var(--color-netIncome)" stopOpacity={0.4}/>
+                    <stop offset="95%" stopColor="var(--color-netIncome)" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -67,9 +75,9 @@ export function NetIncomeChart({ data = [], isLoading = false }: NetIncomeChartP
                     />
                   }
                 />
-                <Area type="monotone" dataKey="netIncome" name="Net Income" strokeWidth={2} stroke="hsl(var(--chart-1))" fill="url(#netIncomeGradient)" />
+                <Area type="monotone" dataKey="netIncome" name="Net Income" strokeWidth={2} stroke="var(--color-netIncome)" fill="url(#netIncomeGradient)" />
               </AreaChart>
-            </ResponsiveContainer>
+            </ChartContainer>
           )}
         </div>
       </CardContent>
