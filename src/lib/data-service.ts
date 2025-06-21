@@ -25,6 +25,7 @@ export interface JournalEntry {
   debitAccount: string;
   creditAccount: string;
   amount: number; // This should be the total transaction amount including tax
+  type?: string; // e.g., "income", "expense"
   tags?: string[];
   creatorUserId: string;
   companyId: string;
@@ -213,6 +214,7 @@ export async function getJournalEntries(companyId: string): Promise<JournalEntry
         debitAccount: data.debitAccount,
         creditAccount: data.creditAccount,
         amount: data.amount,
+        type: data.type,
         tags: data.tags || [],
         creatorUserId: data.creatorUserId,
         companyId: data.companyId,
@@ -257,6 +259,7 @@ export async function addJournalEntry(
     debitAccount: newEntryData.debitAccount,
     creditAccount: newEntryData.creditAccount,
     amount: newEntryData.amount,
+    type: newEntryData.type ?? 'other',
     tags: newEntryData.tags || [],
     creatorUserId: currentUser.uid,
     companyId: companyId,
@@ -325,6 +328,7 @@ export async function addJournalEntries(
       debitAccount: newData.debitAccount,
       creditAccount: newData.creditAccount,
       amount: newData.amount, 
+      type: (newData as any).type ?? 'other',
       tags: newData.tags || [],
       creatorUserId: currentUser.uid,
       companyId: companyId,

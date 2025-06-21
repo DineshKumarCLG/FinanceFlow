@@ -127,6 +127,7 @@ export function AddEntryForm() {
         debitAccount: parsedResult.debitAccount,
         creditAccount: parsedResult.creditAccount,
         amount: parsedResult.amount, // Total amount
+        type: parsedResult.type, // Pass the transaction type
         // GST fields from parsedResult
         taxableAmount: parsedResult.taxableAmount,
         gstType: parsedResult.gstType,

@@ -101,8 +101,10 @@ export default function DashboardPage() {
     });
 
     entriesInDateRange.forEach(entry => {
-      let isIncomeEntry = incomeKeywords.some(keyword => entry.creditAccount?.toLowerCase().includes(keyword));
-      let isExpenseEntry = expenseKeywords.some(keyword => entry.debitAccount?.toLowerCase().includes(keyword));
+      // Use the explicit 'type' field first, then fallback to keyword matching for older entries
+      const entryType = entry.type?.toLowerCase();
+      let isIncomeEntry = entryType === 'income' || (entryType !== 'expense' && incomeKeywords.some(keyword => entry.creditAccount?.toLowerCase().includes(keyword)));
+      let isExpenseEntry = entryType === 'expense' || (entryType !== 'income' && expenseKeywords.some(keyword => entry.debitAccount?.toLowerCase().includes(keyword)));
       
       const yearMonth = `${new Date(entry.date).getFullYear()}-${String(new Date(entry.date).getMonth() + 1).padStart(2, '0')}`;
       
