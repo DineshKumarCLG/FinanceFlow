@@ -9,7 +9,7 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 import { getJournalEntries, type JournalEntry as StoredJournalEntry } from '@/lib/data-service';
-import { parseISO, isWithinInterval, isValid } from 'date-fns';
+import { parseISO, isWithinInterval, isValid, type Interval } from 'date-fns';
 
 const QueriedJournalEntrySchema = z.object({
   date: z.string(),
