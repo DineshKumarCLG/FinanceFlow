@@ -117,12 +117,20 @@ const parseAccountingEntryFlow = ai.defineFlow(
     const today = new Date().toISOString().split('T')[0];
 
     const dateMentionRegex = new RegExp(
-      '\\b(\\d{1,2}(?:st|nd|rd|th)?(?: of)? (?:january|february|march|april|may|june|july|august|september|october|november|december)|' +
-      'jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.? (?:\\d{1,2}(?:st|nd|rd|th)?)?|' +
-      '\\d{4}-\\d{2}-\\d{2}|' +
-      '\\d{1,2}/\\d{1,2}/\\d{2,4}|' +
-      'yesterday|today|tomorrow|last week|next month' +
-      ')\\b', 'i'
+      '\\b(' + // Start main capturing group
+        '(?:' + // Non-capturing group for all wordy date formats
+          '(?:' + // Non-capturing group for day-first or month-first
+            '(?:\\d{1,2}(?:st|nd|rd|th)?(?: of)? )?' + // Optional day with suffix and "of"
+            '(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)' + // Month names
+            '[a-z]*\\.?' + // Rest of month name e.g. . in Jan.
+            '(?: \\d{1,2}(?:st|nd|rd|th)?)?' + // Optional day at the end
+          ')' +
+        ')' +
+        '|\\d{4}-\\d{2}-\\d{2}' + // YYYY-MM-DD format
+        '|\\d{1,2}/\\d{1,2}/\\d{2,4}' + // D/M/Y format
+        '|yesterday|today|tomorrow|last week|next month' +
+      ')\\b', // End main capturing group
+      'i'
     );
     const noDateExplicitlyMentioned = !dateMentionRegex.test(input.entryText.toLowerCase());
 
