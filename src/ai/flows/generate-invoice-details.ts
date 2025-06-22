@@ -27,7 +27,7 @@ const LineItemSchema = z.object({
 
 const GenerateInvoiceDetailsOutputSchema = z.object({
   customerName: z.string().optional().describe('The name of the customer or client.'),
-  customerEmail: z.string().email().optional().describe("The customer's email address."),
+  customerEmail: z.string().optional().describe("The customer's email address."),
   billingAddress: z.string().optional().describe("The customer's billing address."),
   shippingAddress: z.string().optional().describe("The customer's shipping address (if different from billing)."),
   
@@ -207,3 +207,5 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
     return finalOutput;
   }
 );
+
+    
