@@ -31,7 +31,7 @@ export const SummaryCard = React.memo(function SummaryCard({
   }, []);
 
   const formattedValue = isCurrency 
-    ? value.toLocaleString(clientLocale, { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 })
+    ? value.toLocaleString(clientLocale, { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : value.toLocaleString(clientLocale);
 
   return (

@@ -76,39 +76,52 @@ export default function DashboardPage() {
     };
     if (!journalEntriesData) return defaultData;
 
-    // 1. Establish the date range for all calculations directly from the state
-    const rangeStart = dateRange?.from || startOfMonth(subMonths(new Date(), 5));
-    const rangeEnd = dateRange?.to || endOfMonth(new Date());
+    // A. Fix the Date Range Logic
+    const isFilterActive = journalEntriesData.length >= ENTRIES_THRESHOLD_FOR_FILTERING;
+    setIsFilterBypassed(!isFilterActive);
 
-    // 2. Create a full historical ledger of cash movements, sorted by date
+    let effectiveDateRange: { from: Date; to: Date };
+    if (isFilterActive && dateRange?.from) {
+      // Use user-selected range if filter is active and a range is selected
+      effectiveDateRange = {
+        from: dateRange.from,
+        to: dateRange.to || endOfMonth(new Date()),
+      };
+    } else {
+      // Otherwise (filter bypassed or no date selected), use all-time range from the data
+      if (journalEntriesData && journalEntriesData.length > 0) {
+        const allDates = journalEntriesData.map(e => parseISO(e.date));
+        effectiveDateRange = {
+          from: new Date(Math.min(...allDates.map(d => d.getTime()))),
+          to: new Date(Math.max(...allDates.map(d => d.getTime()))),
+        };
+      } else {
+        // Default fallback if no entries exist
+        effectiveDateRange = {
+          from: startOfMonth(subMonths(new Date(), 5)),
+          to: endOfMonth(new Date()),
+        };
+      }
+    }
+    const { from: rangeStart, to: rangeEnd } = effectiveDateRange;
+    const inclusiveEndDate = new Date(rangeEnd.getFullYear(), rangeEnd.getMonth(), rangeEnd.getDate(), 23, 59, 59);
+
+    // B. Calculate Cash-Based Metrics using the corrected date range
     const allTimeCashMovements = journalEntriesData
         .map(entry => {
             if (!entry.date || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) return null;
             const isCashIn = cashAccountKeywords.some(k => entry.debitAccount.toLowerCase().includes(k));
             const isCashOut = cashAccountKeywords.some(k => entry.creditAccount.toLowerCase().includes(k));
             if (!isCashIn && !isCashOut) return null;
-            
             try {
-                return {
-                    date: parseISO(entry.date),
-                    amount: isCashIn ? entry.amount : -entry.amount,
-                    debitAccount: entry.debitAccount, // For expense categorization
-                };
-            } catch (e) {
-                return null;
-            }
+                return { date: parseISO(entry.date), amount: isCashIn ? entry.amount : -entry.amount };
+            } catch (e) { return null; }
         })
         .filter((item): item is NonNullable<typeof item> => item !== null)
         .sort((a, b) => a.date.getTime() - b.date.getTime());
 
-    // 3. Filter this ledger for the selected date range to get period-specific data
-    const periodCashMovements = allTimeCashMovements.filter(m => m.date >= rangeStart && m.date <= rangeEnd);
-    
-    // This logic to show an "all time" alert is now separate from the data filtering logic
-    const isFilterBypassed = journalEntriesData.length < ENTRIES_THRESHOLD_FOR_FILTERING;
-    setIsFilterBypassed(isFilterBypassed);
+    const periodCashMovements = allTimeCashMovements.filter(m => m.date >= rangeStart && m.date <= inclusiveEndDate);
 
-    // 4. Calculate summary cards from period-specific data
     const summaryTotalCashIn = periodCashMovements.filter(m => m.amount > 0).reduce((sum, m) => sum + m.amount, 0);
     const summaryTotalCashOut = periodCashMovements.filter(m => m.amount < 0).reduce((sum, m) => sum + Math.abs(m.amount), 0);
     const summaryData = {
@@ -117,17 +130,13 @@ export default function DashboardPage() {
         netCashFlow: summaryTotalCashIn - summaryTotalCashOut,
         transactionCount: periodCashMovements.length,
     };
-    
-    // 5. Calculate monthly aggregates for the Cash Flow Chart (Bar/Line) from period-specific data
+
     const monthlyCash: Record<string, { income: number; expense: number; monthLabel: string; yearMonth: string }> = {};
-    const monthsInRange = eachMonthOfInterval({ start: rangeStart, end: rangeEnd });
-    
+    const monthsInRange = eachMonthOfInterval({ start: rangeStart, end: inclusiveEndDate });
     monthsInRange.forEach(d => {
         const key = format(d, 'yyyy-MM');
-        const label = format(d, 'MMM yy');
-        monthlyCash[key] = { income: 0, expense: 0, monthLabel: label, yearMonth: key };
+        monthlyCash[key] = { income: 0, expense: 0, monthLabel: format(d, 'MMM yy'), yearMonth: key };
     });
-    
     periodCashMovements.forEach(m => {
         const key = format(m.date, 'yyyy-MM');
         if (monthlyCash[key]) {
@@ -135,44 +144,49 @@ export default function DashboardPage() {
             else monthlyCash[key].expense += Math.abs(m.amount);
         }
     });
-    
     const cashFlowChartData = Object.values(monthlyCash).sort((a,b) => a.yearMonth.localeCompare(b.yearMonth)).map(agg => ({
         month: agg.monthLabel,
         income: agg.income,
         expense: agg.expense,
         net: agg.income - agg.expense,
     }));
-
-    // 6. Calculate spending breakdown for the Pie Chart from period-specific data
-    const spendingByCategory: Record<string, number> = {};
-    periodCashMovements.filter(m => m.amount < 0).forEach(m => {
-        const category = m.debitAccount || "Uncategorized";
-        spendingByCategory[category] = (spendingByCategory[category] || 0) + Math.abs(m.amount);
-    });
-    const spendingBreakdownData = Object.entries(spendingByCategory).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total);
     
-    // 7. Calculate Cumulative Cash Flow for the Area Chart using ALL historical data
     let cumulativeNetCash = 0;
     const cumulativeDataPoints = allTimeCashMovements.map(m => {
         cumulativeNetCash += m.amount;
         return { monthDate: startOfMonth(m.date), value: cumulativeNetCash };
     });
-    
     const cumulativeMonthlyCash: Record<string, { month: string; value: number }> = {};
     cumulativeDataPoints.forEach(p => {
         const key = format(p.monthDate, 'yyyy-MM');
         cumulativeMonthlyCash[key] = { month: format(p.monthDate, 'MMM yy'), value: p.value };
     });
-    
     const cumulativeCashFlowData = Object.entries(cumulativeMonthlyCash)
         .map(([key, value]) => ({ key, ...value }))
         .sort((a, b) => a.key.localeCompare(b.key))
         .filter(item => {
             const itemDate = parseISO(item.key + '-01');
-            return itemDate >= startOfMonth(rangeStart) && itemDate <= endOfMonth(rangeEnd);
+            return itemDate >= startOfMonth(rangeStart) && itemDate <= endOfMonth(inclusiveEndDate);
         });
 
-    // 8. The analytics KPIs should also use period-specific data
+    // C. Calculate Spending-Based Metrics (including non-cash/credit purchases)
+    const entriesInPeriod = journalEntriesData.filter(entry => {
+        try {
+            const entryDate = parseISO(entry.date);
+            return entryDate >= rangeStart && entryDate <= inclusiveEndDate;
+        } catch (e) { return false; }
+    });
+
+    const spendingByCategory: Record<string, number> = {};
+    entriesInPeriod.forEach(entry => {
+        // A "spending" transaction is a debit to any account that is not a cash-equivalent account.
+        if (entry.debitAccount && !cashAccountKeywords.some(k => entry.debitAccount.toLowerCase().includes(k))) {
+            spendingByCategory[entry.debitAccount] = (spendingByCategory[entry.debitAccount] || 0) + entry.amount;
+        }
+    });
+    const spendingBreakdownData = Object.entries(spendingByCategory).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total);
+    
+    // D. Finalize Analytics KPIs
     const analyticsKpis = {
         avgTransactionValue: periodCashMovements.length > 0 ? periodCashMovements.reduce((sum, m) => sum + Math.abs(m.amount), 0) / periodCashMovements.length : 0,
         netCashFlow: summaryData.netCashFlow,
@@ -249,7 +263,7 @@ export default function DashboardPage() {
          <Alert variant="default" className="border-primary/50 bg-primary/5">
             <Info className="h-4 w-4 text-primary" />
             <AlertDescriptionComponent className="text-primary">
-              Showing data for the selected date range. Since you have fewer than {ENTRIES_THRESHOLD_FOR_FILTERING} total entries, consider expanding the date range to see all-time data.
+              Showing all-time data because you have fewer than {ENTRIES_THRESHOLD_FOR_FILTERING} total entries. Select a date range to filter.
             </AlertDescriptionComponent>
          </Alert>
        )}
@@ -258,7 +272,7 @@ export default function DashboardPage() {
         <SummaryCard title="Total Cash In" value={processedData.summaryData.totalCashIn} icon={TrendingUp} />
         <SummaryCard title="Total Cash Out" value={processedData.summaryData.totalCashOut} icon={TrendingDown} />
         <SummaryCard title="Net Cash Flow" value={processedData.summaryData.netCashFlow} icon={DollarSign} />
-        <SummaryCard title="Transactions" value={processedData.summaryData.transactionCount} icon={Activity} isCurrency={false} />
+        <SummaryCard title="Cash Transactions" value={processedData.summaryData.transactionCount} icon={Activity} isCurrency={false} />
       </div>
 
        <Tabs defaultValue="overview" className="w-full">
