@@ -264,7 +264,7 @@ export async function addJournalEntry(
     creatorUserId: currentUser.uid,
     companyId: companyId,
     createdAt: serverTimestamp() as Timestamp,
-    // Sanitize optional fields to prevent 'undefined' values
+    // Sanitize optional fields to prevent 'undefined' values by converting to null
     taxableAmount: newEntryData.taxableAmount ?? null,
     gstType: newEntryData.gstType ?? null,
     gstRate: newEntryData.gstRate ?? null,
@@ -281,7 +281,10 @@ export async function addJournalEntry(
     const docRef = await addDoc(collection(db, JOURNAL_COLLECTION), entryToSave);
     const savedEntry: JournalEntry = {
       id: docRef.id,
-      ...entryToSave,
+      ...newEntryData,
+      // Overwrite with sanitized values for consistency if needed, but not strictly required for return type
+      creatorUserId: currentUser.uid,
+      companyId: companyId,
       createdAt: Timestamp.now() 
     };
 
@@ -333,7 +336,7 @@ export async function addJournalEntries(
       creatorUserId: currentUser.uid,
       companyId: companyId,
       createdAt: serverTimestamp() as Timestamp,
-      // Sanitize optional fields to prevent 'undefined' values
+      // Sanitize optional fields to prevent 'undefined' values by converting to null
       taxableAmount: newData.taxableAmount ?? null,
       gstType: newData.gstType ?? null,
       gstRate: newData.gstRate ?? null,
@@ -348,7 +351,9 @@ export async function addJournalEntries(
     batch.set(docRef, entryToSave);
     preparedEntries.push({
       id: docRef.id,
-      ...entryToSave,
+      ...newData,
+      creatorUserId: currentUser.uid,
+      companyId: companyId,
       createdAt: currentTime 
     });
   });
@@ -421,72 +426,64 @@ export type UpdateInvoiceData = Partial<Omit<Invoice, 'id' | 'companyId' | 'crea
 
 export async function addInvoice(
   companyId: string,
-  creatorUserId: string, // Added creatorUserId parameter
+  creatorUserId: string,
   newInvoiceData: NewInvoiceData
 ): Promise<Invoice> {
-  if (!creatorUserId) { // Check passed parameter
+  if (!creatorUserId) {
     throw new Error("Creator User ID is required. Cannot add invoice.");
   }
   if (!companyId) {
     throw new Error("Company ID is required to add an invoice.");
   }
+  
+  // Sanitize line items to remove undefined values, converting them to null
+  const sanitizedLineItems = (newInvoiceData.lineItems || []).map(item => ({
+    ...item,
+    hsnSacCode: item.hsnSacCode ?? null,
+    gstRate: item.gstRate ?? null,
+  }));
 
-  const invoicePayload: Omit<Invoice, 'id' | 'createdAt' | 'updatedAt'> & { createdAt: Timestamp, updatedAt: Timestamp } = {
+  const invoicePayload = {
     invoiceNumber: newInvoiceData.invoiceNumber,
     invoiceDate: newInvoiceData.invoiceDate,
-    dueDate: newInvoiceData.dueDate,
+    dueDate: newInvoiceData.dueDate ?? null,
     customerName: newInvoiceData.customerName,
-    customerGstin: newInvoiceData.customerGstin,
-    customerEmail: newInvoiceData.customerEmail,
-    billingAddress: newInvoiceData.billingAddress,
-    shippingAddress: newInvoiceData.shippingAddress,
-    lineItems: newInvoiceData.lineItems || [],
-    itemsSummary: newInvoiceData.itemsSummary,
+    customerGstin: newInvoiceData.customerGstin ?? null,
+    customerEmail: newInvoiceData.customerEmail ?? null,
+    billingAddress: newInvoiceData.billingAddress ?? null,
+    shippingAddress: newInvoiceData.shippingAddress ?? null,
+    lineItems: sanitizedLineItems,
+    itemsSummary: newInvoiceData.itemsSummary ?? null,
     subTotal: newInvoiceData.subTotal,
     totalGstAmount: newInvoiceData.totalGstAmount,
     totalAmount: newInvoiceData.totalAmount,
-    paymentTerms: newInvoiceData.paymentTerms,
-    notes: newInvoiceData.notes,
+    paymentTerms: newInvoiceData.paymentTerms ?? null,
+    notes: newInvoiceData.notes ?? null,
     status: newInvoiceData.status || 'draft',
     companyId: companyId,
-    creatorUserId: creatorUserId, // Use passed creatorUserId
+    creatorUserId: creatorUserId,
     createdAt: serverTimestamp() as Timestamp,
     updatedAt: serverTimestamp() as Timestamp,
   };
-  
-  const cleanPayload: { [key: string]: any } = {};
-  for (const key in invoicePayload) {
-    if ((invoicePayload as any)[key] !== undefined) {
-      cleanPayload[key] = (invoicePayload as any)[key];
-    }
-  }
 
   try {
-    const docRef = await addDoc(collection(db, INVOICE_COLLECTION), cleanPayload);
+    const docRef = await addDoc(collection(db, INVOICE_COLLECTION), invoicePayload);
+    
+    // Construct the return object based on the originally passed data plus new IDs/timestamps
     const savedInvoice: Invoice = {
       id: docRef.id,
-      ...newInvoiceData, 
-      lineItems: newInvoiceData.lineItems || [], 
-      companyId: companyId,
-      creatorUserId: creatorUserId,
-      createdAt: Timestamp.now(), 
+      ...newInvoiceData,
+      companyId,
+      creatorUserId,
+      createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
-      dueDate: newInvoiceData.dueDate,
-      customerGstin: newInvoiceData.customerGstin,
-      customerEmail: newInvoiceData.customerEmail,
-      billingAddress: newInvoiceData.billingAddress,
-      shippingAddress: newInvoiceData.shippingAddress,
-      itemsSummary: newInvoiceData.itemsSummary,
-      paymentTerms: newInvoiceData.paymentTerms,
-      notes: newInvoiceData.notes,
-      status: newInvoiceData.status || 'draft',
     };
     
     addNotification(
       `Invoice #${savedInvoice.invoiceNumber} for ${savedInvoice.customerName} created.`,
       'invoice_created',
       companyId,
-      creatorUserId, // Pass creatorUserId for notification
+      creatorUserId,
       savedInvoice.id
     ).catch(err => console.error("DataService: Failed to add notification for new invoice:", err));
 
@@ -500,7 +497,7 @@ export async function addInvoice(
 export async function updateInvoice(
   companyId: string,
   invoiceId: string,
-  creatorUserId: string, // Added creatorUserId (even if only for notification consistency)
+  creatorUserId: string,
   invoiceDataToUpdate: UpdateInvoiceData
 ): Promise<Invoice> {
   if (!creatorUserId) { 
@@ -515,37 +512,42 @@ export async function updateInvoice(
 
   const invoiceRef = doc(db, INVOICE_COLLECTION, invoiceId);
   
-  const updatePayloadWithTimestamp: any = {
-    ...invoiceDataToUpdate,
-    updatedAt: serverTimestamp() as Timestamp,
-  };
+  const updatePayload: { [key: string]: any } = { ...invoiceDataToUpdate };
 
-  const cleanUpdatePayload: { [key: string]: any } = {};
-  for (const key in updatePayloadWithTimestamp) {
-    if (updatePayloadWithTimestamp[key] !== undefined) {
-      cleanUpdatePayload[key] = updatePayloadWithTimestamp[key];
-    }
+  // Sanitize line items if they are being updated
+  if (updatePayload.lineItems) {
+    updatePayload.lineItems = updatePayload.lineItems.map((item: any) => ({
+      ...item,
+      hsnSacCode: item.hsnSacCode ?? null,
+      gstRate: item.gstRate ?? null,
+    }));
   }
+
+  // Convert any top-level undefined values to null
+  Object.keys(updatePayload).forEach(key => {
+    if (updatePayload[key] === undefined) {
+      updatePayload[key] = null;
+    }
+  });
+
+  updatePayload.updatedAt = serverTimestamp() as Timestamp;
   
   try {
     const docSnap = await getDoc(invoiceRef);
     if (!docSnap.exists() || docSnap.data().companyId !== companyId) {
         throw new Error("Invoice not found or access denied.");
     }
-    // Check if the updater is the original creator (optional, depending on business logic)
-    // if (docSnap.data().creatorUserId !== creatorUserId) {
-    //   console.warn(`User ${creatorUserId} is updating an invoice not created by them.`);
-    // }
-
-    await updateDoc(invoiceRef, cleanUpdatePayload);
     
-    const updatedInvoiceData = { ...docSnap.data(), ...invoiceDataToUpdate, id: invoiceId, updatedAt: Timestamp.now() } as Invoice;
+    await updateDoc(invoiceRef, updatePayload);
+    
+    const updatedDocSnap = await getDoc(invoiceRef); // Re-fetch to get the server-updated data
+    const updatedInvoiceData = { ...updatedDocSnap.data(), id: invoiceId } as Invoice;
 
     addNotification(
       `Invoice #${updatedInvoiceData.invoiceNumber} updated.`,
       'invoice_updated',
       companyId,
-      creatorUserId, // Pass creatorUserId for notification
+      creatorUserId,
       invoiceId
     ).catch(err => console.error("DataService: Failed to add notification for invoice update:", err));
     
