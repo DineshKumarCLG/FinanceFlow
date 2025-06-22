@@ -131,6 +131,12 @@ export const queryJournalTool = ai.defineTool(
 
     } catch (e: any) {
       console.error("Error in queryJournalTool:", e);
+      if (e.message && e.message.toLowerCase().includes("permission")) {
+        return { 
+          querySummary: "I couldn't access the journal entries due to a permission error. This often means the app's security rules do not allow reading all of a company's entries at once, which is necessary for cross-user reporting. Please check the Firestore security rules to ensure queries on the 'journalEntries' collection are allowed for all members of a company.",
+          matchCount: 0 
+        };
+      }
       return { querySummary: `Error querying journal entries: ${e.message}`, matchCount: 0 };
     }
   }
