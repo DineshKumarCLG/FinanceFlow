@@ -47,6 +47,7 @@ export default function DashboardPage() {
     queryKey: ['journalEntries', currentCompanyId],
     queryFn: () => getJournalEntries(currentCompanyId!),
     enabled: !!currentUser && !!currentCompanyId,
+    refetchInterval: 60000, // Refetch journal entries every 60 seconds to see updates
   });
 
   // Fetch notifications
