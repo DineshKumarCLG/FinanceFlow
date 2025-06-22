@@ -3,14 +3,14 @@
 
 import { PageTitle } from "@/components/shared/PageTitle";
 import { SummaryCard } from "@/components/dashboard/SummaryCard";
-import { DollarSign, TrendingUp, TrendingDown, Activity, CalendarDays, Download, AlertCircle, PlusCircle } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, Activity, CalendarDays, Download, AlertCircle, PlusCircle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect, useMemo } from "react";
 import { getJournalEntries, type StoredJournalEntry, getNotifications, type Notification } from "@/lib/data-service";
 import type { DateRange } from "react-day-picker";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { format, startOfMonth, endOfMonth, subMonths, eachMonthOfInterval } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths, eachMonthOfInterval, parseISO } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,8 +26,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Link from "next/link";
 
 
-// Cash Account Keywords are now the primary driver for dashboard analytics
-export const cashAccountKeywords = ['cash', 'bank', 'company account'];
+// Cash Account Keywords are now more explicit to drive dashboard analytics.
+export const cashAccountKeywords = ['cash', 'bank', 'bank account', 'company account'];
+const ENTRIES_THRESHOLD_FOR_FILTERING = 50;
 
 
 export default function DashboardPage() {
@@ -39,6 +40,7 @@ export default function DashboardPage() {
       to: endOfMonth(today),
     };
   });
+  const [isFilterBypassed, setIsFilterBypassed] = useState(false);
   const { toast } = useToast();
   const pathname = usePathname();
 
@@ -65,40 +67,52 @@ export default function DashboardPage() {
   }, [journalEntriesError, toast]);
 
   const processedData = useMemo(() => {
+    const defaultData = {
+      summaryData: { totalCashIn: 0, totalCashOut: 0, netCashFlow: 0, transactionCount: 0 },
+      cumulativeCashFlowData: [],
+      cashFlowChartData: [],
+      spendingBreakdownData: [],
+      analyticsKpis: { avgTransactionValue: 0, netCashFlow: 0, cashInTransactions: 0, cashOutTransactions: 0 },
+      analyticsExpenseCategories: [],
+    };
+
     if (!journalEntriesData) {
-      // Return default structure if no data
-      return {
-        summaryData: { totalCashIn: 0, totalCashOut: 0, netCashFlow: 0, transactionCount: 0 },
-        cumulativeCashFlowData: [],
-        cashFlowChartData: [],
-        spendingBreakdownData: [],
-        analyticsKpis: { avgTransactionValue: 0, netCashFlow: 0, cashInTransactions: 0, cashOutTransactions: 0 },
-        analyticsExpenseCategories: [],
-      };
+      return defaultData;
     }
 
     const currentLocale = typeof navigator !== 'undefined' ? (navigator.language || 'en-US') : 'en-US';
     
-    // --- Part 1: Filter entries based on the date range picker ---
-    const dateRangeFrom = dateRange?.from || new Date(0);
-    const dateRangeTo = dateRange?.to || new Date();
+    // --- Part 1: Determine which entries to process using "Smart Filtering" ---
+    const bypassFilter = journalEntriesData.length < ENTRIES_THRESHOLD_FOR_FILTERING;
+    setIsFilterBypassed(bypassFilter);
     
-    const entriesInDateRange = journalEntriesData.filter(entry => {
-        if (!entry.date || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) return false;
-        const [year, month, day] = entry.date.split('-').map(Number);
-        const entryDate = new Date(Date.UTC(year, month - 1, day));
-        return entryDate >= dateRangeFrom && entryDate <= dateRangeTo;
-    });
+    let entriesToProcess: StoredJournalEntry[];
 
-    // --- Part 2: Calculate summary data based on cash movements ---
+    if (bypassFilter) {
+      entriesToProcess = journalEntriesData;
+    } else {
+      const dateRangeFrom = dateRange?.from || new Date(0);
+      const dateRangeTo = dateRange?.to || new Date();
+      entriesToProcess = journalEntriesData.filter(entry => {
+          if (!entry.date || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) return false;
+          try {
+            const entryDate = parseISO(entry.date);
+            return entryDate >= dateRangeFrom && entryDate <= dateRangeTo;
+          } catch(e) { return false; }
+      });
+    }
+
+    // --- Part 2: Calculate summary data (Top Cards) ---
     let summaryTotalCashIn = 0;
     let summaryTotalCashOut = 0;
 
-    entriesInDateRange.forEach(entry => {
-      if (cashAccountKeywords.some(k => entry.debitAccount.toLowerCase().includes(k))) {
+    entriesToProcess.forEach(entry => {
+      const debitAccountLower = entry.debitAccount.toLowerCase();
+      const creditAccountLower = entry.creditAccount.toLowerCase();
+      if (cashAccountKeywords.some(k => debitAccountLower.includes(k))) {
         summaryTotalCashIn += entry.amount;
       }
-      if (cashAccountKeywords.some(k => entry.creditAccount.toLowerCase().includes(k))) {
+      if (cashAccountKeywords.some(k => creditAccountLower.includes(k))) {
         summaryTotalCashOut += entry.amount;
       }
     });
@@ -107,70 +121,97 @@ export default function DashboardPage() {
         totalCashIn: summaryTotalCashIn,
         totalCashOut: summaryTotalCashOut,
         netCashFlow: summaryTotalCashIn - summaryTotalCashOut,
-        transactionCount: entriesInDateRange.length,
+        transactionCount: entriesToProcess.length,
     };
 
-    // --- Part 3: Calculate data for charts (spanning full months of selection) ---
-    const chartDateFrom = dateRange?.from ? startOfMonth(dateRange.from) : new Date(0);
-    const chartDateTo = dateRange?.to ? endOfMonth(dateRange.to) : new Date();
+    // --- Part 3: Calculate data for charts & analytics (all based on `entriesToProcess`) ---
+    if (entriesToProcess.length === 0) {
+        return { ...defaultData, summaryData };
+    }
 
-    const chartEntries = journalEntriesData.filter(entry => {
-        if (!entry.date || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) return false;
-        const [year, month, day] = entry.date.split('-').map(Number);
-        const entryDate = new Date(Date.UTC(year, month - 1, day));
-        return entryDate >= chartDateFrom && entryDate <= chartDateTo;
-    });
+    const firstEntryDate = entriesToProcess.reduce((earliest, entry) => {
+        const d = parseISO(entry.date);
+        return d < earliest ? d : earliest;
+    }, new Date());
+
+    const lastEntryDate = entriesToProcess.reduce((latest, entry) => {
+        const d = parseISO(entry.date);
+        return d > latest ? d : latest;
+    }, new Date(0));
+    
+    const chartDateFrom = startOfMonth(firstEntryDate);
+    const chartDateTo = endOfMonth(lastEntryDate);
 
     const monthsForCharts = eachMonthOfInterval({ start: chartDateFrom, end: chartDateTo });
     const spendingByCategory: Record<string, number> = {};
     const monthlyCash: Record<string, { income: number; expense: number; monthLabel: string; yearMonth: string }> = {};
 
     monthsForCharts.forEach(d => {
-        const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-        const label = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth())).toLocaleString(currentLocale, { month: 'short', year: '2-digit', timeZone: 'UTC' });
+        const key = format(d, 'yyyy-MM');
+        const label = format(d, 'MMM yy');
         if (!monthlyCash[key]) monthlyCash[key] = { income: 0, expense: 0, monthLabel: label, yearMonth: key };
     });
 
-    chartEntries.forEach(entry => {
+    entriesToProcess.forEach(entry => {
         const key = entry.date.substring(0, 7); 
+        const debitAccountLower = entry.debitAccount.toLowerCase();
+        const creditAccountLower = entry.creditAccount.toLowerCase();
 
-        // Monthly Cash Flow Logic
         if (monthlyCash[key]) {
-            if (cashAccountKeywords.some(k => entry.debitAccount.toLowerCase().includes(k))) {
+            if (cashAccountKeywords.some(k => debitAccountLower.includes(k))) {
                 monthlyCash[key].income += entry.amount;
             }
-            if (cashAccountKeywords.some(k => entry.creditAccount.toLowerCase().includes(k))) {
+            if (cashAccountKeywords.some(k => creditAccountLower.includes(k))) {
                 monthlyCash[key].expense += entry.amount;
             }
         }
         
-        // Spending Breakdown Logic (all cash out)
-        if (cashAccountKeywords.some(k => entry.creditAccount.toLowerCase().includes(k))) {
+        if (cashAccountKeywords.some(k => creditAccountLower.includes(k))) {
             const category = entry.debitAccount || "Uncategorized";
             spendingByCategory[category] = (spendingByCategory[category] || 0) + entry.amount;
         }
     });
 
-    // --- Part 4: Calculate data for Analytics KPIs (cash based) ---
-    let chartCashIn = Object.values(monthlyCash).reduce((acc, cur) => acc + cur.income, 0);
-    let chartCashOut = Object.values(monthlyCash).reduce((acc, cur) => acc + cur.expense, 0);
-    let cashInTransactions = chartEntries.filter(e => cashAccountKeywords.some(k => e.debitAccount.toLowerCase().includes(k))).length;
-    let cashOutTransactions = chartEntries.filter(e => cashAccountKeywords.some(k => e.creditAccount.toLowerCase().includes(k))).length;
+    // --- Part 4: Calculate data for Analytics KPIs ---
+    let cashInTransactions = entriesToProcess.filter(e => cashAccountKeywords.some(k => e.debitAccount.toLowerCase().includes(k))).length;
+    let cashOutTransactions = entriesToProcess.filter(e => cashAccountKeywords.some(k => e.creditAccount.toLowerCase().includes(k))).length;
     
     const analyticsKpis = {
-      avgTransactionValue: (cashInTransactions + cashOutTransactions > 0) ? (chartCashIn + chartCashOut) / (cashInTransactions + cashOutTransactions) : 0,
-      netCashFlow: chartCashIn - chartCashOut,
+      avgTransactionValue: (cashInTransactions + cashOutTransactions > 0) ? (summaryTotalCashIn + summaryTotalCashOut) / (cashInTransactions + cashOutTransactions) : 0,
+      netCashFlow: summaryData.netCashFlow,
       cashInTransactions: cashInTransactions,
       cashOutTransactions: cashOutTransactions,
     };
     const analyticsExpenseCategories = Object.entries(spendingByCategory).map(([name, total]) => ({name, total})).sort((a,b) => b.total - a.total).slice(0, 7);
 
     // --- Part 5: Finalize data structures for charts ---
+    // Note: Cumulative cash flow should be calculated on ALL historical data for accuracy up to the period.
     let cumulativeNetCash = 0;
-    const cumulativeCashFlowData = Object.values(monthlyCash).sort((a,b) => a.yearMonth.localeCompare(b.yearMonth)).map(agg => {
-        cumulativeNetCash += (agg.income - agg.expense);
-        return { month: agg.monthLabel, value: cumulativeNetCash }; // 'value' is for the chart component
+    const allTimeSortedEntries = [...journalEntriesData].sort((a,b) => parseISO(a.date).getTime() - parseISO(b.date).getTime());
+    const cumulativeMonthlyCash: Record<string, { income: number; expense: number; monthLabel: string }> = {};
+
+    allTimeSortedEntries.forEach(entry => {
+        const key = entry.date.substring(0, 7);
+        if(!cumulativeMonthlyCash[key]) {
+            cumulativeMonthlyCash[key] = { income: 0, expense: 0, monthLabel: format(parseISO(entry.date), 'MMM yy') };
+        }
+        if (cashAccountKeywords.some(k => entry.debitAccount.toLowerCase().includes(k))) {
+            cumulativeMonthlyCash[key].income += entry.amount;
+        }
+        if (cashAccountKeywords.some(k => entry.creditAccount.toLowerCase().includes(k))) {
+            cumulativeMonthlyCash[key].expense += entry.amount;
+        }
     });
+
+    const cumulativeCashFlowData = Object.keys(cumulativeMonthlyCash).sort().map(key => {
+        const monthData = cumulativeMonthlyCash[key];
+        cumulativeNetCash += (monthData.income - monthData.expense);
+        return { month: monthData.monthLabel, value: cumulativeNetCash };
+    }).filter(item => {
+        const itemDate = new Date(item.month.replace(/(\w{3}) (\d{2})/, '$1 1, 20$2'));
+        return itemDate >= chartDateFrom && itemDate <= chartDateTo;
+    });
+
 
     const cashFlowChartData = Object.values(monthlyCash).sort((a,b) => a.yearMonth.localeCompare(b.yearMonth)).map(agg => ({
         month: agg.monthLabel,
@@ -253,6 +294,15 @@ export default function DashboardPage() {
         </div>
       </div>
       
+       {isFilterBypassed && (
+         <Alert variant="default" className="border-primary/50 bg-primary/5">
+            <Info className="h-4 w-4 text-primary" />
+            <AlertDescriptionComponent className="text-primary">
+              Showing all-time data because you have fewer than {ENTRIES_THRESHOLD_FOR_FILTERING} entries. The date filter will activate automatically as you add more data.
+            </AlertDescriptionComponent>
+         </Alert>
+       )}
+
        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <SummaryCard title="Total Cash In" value={processedData.summaryData.totalCashIn} icon={TrendingUp} />
         <SummaryCard title="Total Cash Out" value={processedData.summaryData.totalCashOut} icon={TrendingDown} />
