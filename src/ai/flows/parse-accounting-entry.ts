@@ -121,48 +121,89 @@ const parseAccountingEntryFlow = ai.defineFlow(
 
     // Step 1: Call the AI model with the defined prompt and the user's input (the entry text).
     const {output} = await prompt(input);
+    let finalOutput = { ...output };
     
-    // Step 2: Perform robust post-processing on the AI's output.
+    // Step 2: Code-based post-processing "safety net" for account classification.
+    // This block inspects the original text and overrides the AI's classification if necessary,
+    // ensuring key rules are always followed for more reliable dashboard reporting.
+    const lowerEntryText = input.entryText.toLowerCase();
+
+    // Rule for purchases/payments (affects the credit account)
+    const purchaseKeywords = ['paid', 'bought', 'spent', 'purchased', 'buy'];
+    const isPurchase = purchaseKeywords.some(kw => lowerEntryText.includes(kw));
+    if (isPurchase) {
+      const bankKeywords = ['bank', 'company account', 'account'];
+      const cashKeywords = ['cash'];
+      
+      if (bankKeywords.some(kw => lowerEntryText.includes(kw))) {
+        finalOutput.creditAccount = 'Bank Account'; // Standardize
+      } else if (cashKeywords.some(kw => lowerEntryText.includes(kw))) {
+        finalOutput.creditAccount = 'Cash'; // Standardize
+      } else if (!finalOutput.creditAccount || !finalOutput.creditAccount.toLowerCase().includes('payable')) {
+        // If no payment method is mentioned, and the AI didn't already determine it's on credit,
+        // check if it's a known payment type. If not, default to Accounts Payable.
+        const creditLower = finalOutput.creditAccount.toLowerCase();
+        if (!creditLower.includes('cash') && !creditLower.includes('bank')) {
+           finalOutput.creditAccount = 'Accounts Payable';
+        }
+      }
+    }
+    
+    // Rule for income (affects the debit account)
+    const incomeKeywords = ['received', 'sold', 'earned', 'deposit'];
+    const isIncome = incomeKeywords.some(kw => lowerEntryText.includes(kw));
+    if (isIncome) {
+      const bankKeywords = ['bank', 'company account', 'account'];
+      const cashKeywords = ['cash'];
+
+      if (bankKeywords.some(kw => lowerEntryText.includes(kw))) {
+          finalOutput.debitAccount = 'Bank Account'; // Standardize
+      } else if (cashKeywords.some(kw => lowerEntryText.includes(kw))) {
+          finalOutput.debitAccount = 'Cash'; // Standardize
+      } else if (!finalOutput.debitAccount || !finalOutput.debitAccount.toLowerCase().includes('receivable')) {
+        // If no payment destination is mentioned and AI didn't identify it's on credit,
+        // check if it's a known cash/bank type. If not, default to Accounts Receivable.
+        const debitLower = finalOutput.debitAccount.toLowerCase();
+        if (!debitLower.includes('cash') && !debitLower.includes('bank')) {
+           finalOutput.debitAccount = 'Accounts Receivable';
+        }
+      }
+    }
+
+
+    // Step 3: Perform robust post-processing on the AI's output for dates and taxes.
     // This is a crucial "safety net" to improve data quality.
     // A Python implementation should replicate this business logic.
 
     // Part 1: Date correction.
     // This logic corrects cases where the AI might hallucinate a year (e.g., its training year)
     // when the user didn't specify one. It also handles invalid date formats.
-    let processedDate = output.date;
+    let processedDate = finalOutput.date;
     const today = new Date();
     const todayISO = today.toISOString().split('T')[0];
 
-    // Check if the AI hallucinated the year when it wasn't specified in the input.
     const yearRegex = /\b(19|20)\d{2}\b/;
     const yearMentionedInInput = yearRegex.test(input.entryText);
-    const aiYear = output.date ? parseInt(output.date.substring(0, 4), 10) : null;
+    const aiYear = finalOutput.date ? parseInt(finalOutput.date.substring(0, 4), 10) : null;
     const currentYear = today.getFullYear();
     
     const isValidDateString = (dateStr: string) => /^\d{4}-\d{2}-\d{2}$/.test(dateStr) && !isNaN(new Date(dateStr).getTime());
 
     if (aiYear && aiYear !== currentYear && !yearMentionedInInput) {
-        // AI likely hallucinated a year (e.g., its training year '2024') when none was provided.
-        // Correct it to the current year.
         try {
-            const dateWithCurrentYear = new Date(output.date);
+            const dateWithCurrentYear = new Date(finalOutput.date);
             dateWithCurrentYear.setFullYear(currentYear);
             processedDate = dateWithCurrentYear.toISOString().split('T')[0];
         } catch(e) {
-            console.warn(`Could not correct year for date '${output.date}'. Defaulting to today.`);
             processedDate = todayISO;
         }
     } else if (!processedDate || !isValidDateString(processedDate)) {
-        // If the date is invalid, a placeholder, or not provided, default to today.
-        console.warn(`AI returned invalid date '${output.date}' for input: "${input.entryText}". Defaulting to today: ${todayISO}.`);
         processedDate = todayISO;
     }
     
-    let finalOutput = { ...output, date: processedDate };
+    finalOutput.date = processedDate;
 
     // Part 2: GST and Taxable Amount calculations.
-    // This ensures that if the AI provides a rate and taxable amount, the tax components are calculated.
-    // It also calculates the taxable amount if it's missing but can be derived.
     if (finalOutput.gstType === 'cgst-sgst' && finalOutput.gstRate && finalOutput.taxableAmount) {
         const totalGstOnTaxable = finalOutput.taxableAmount * (finalOutput.gstRate / 100);
         if (!finalOutput.cgstAmount && !finalOutput.sgstAmount && (finalOutput.igstAmount === undefined || finalOutput.igstAmount === 0)) {
@@ -179,18 +220,19 @@ const parseAccountingEntryFlow = ai.defineFlow(
         }
     }
     
-    // Ensure taxable amount is sensible
     if (!finalOutput.taxableAmount && finalOutput.amount && finalOutput.gstRate && finalOutput.gstType !== 'none') {
         finalOutput.taxableAmount = parseFloat((finalOutput.amount / (1 + finalOutput.gstRate / 100)).toFixed(2));
     } else if (!finalOutput.taxableAmount && finalOutput.amount) {
-        finalOutput.taxableAmount = finalOutput.amount; // Assume amount is taxable if no tax info
+        finalOutput.taxableAmount = finalOutput.amount;
     }
     if (finalOutput.gstType === 'none' || !finalOutput.gstRate) {
         finalOutput.taxableAmount = finalOutput.amount;
     }
 
-    // Step 3: Return the cleaned-up, processed entry data.
+    // Step 4: Return the cleaned-up, processed entry data.
     return finalOutput;
     // PYTHON_REPLACE_END
   }
 );
+
+    
