@@ -9,7 +9,7 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import { z } from 'genkit';
 
 const ParseAccountingEntryInputSchema = z.object({
   entryText: z

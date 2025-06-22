@@ -10,7 +10,7 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import { z } from 'genkit';
 
 const SuggestLedgerTagsInputSchema = z.object({
   entryDescription: z.string().describe('The description of the ledger entry.'),

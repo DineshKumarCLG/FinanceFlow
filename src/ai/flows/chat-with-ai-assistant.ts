@@ -9,7 +9,7 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import { z } from 'genkit';
 import { manageInvoiceTool } from '../tools/manage-invoice-tool';
 import { queryJournalTool } from '../tools/query-journal-tool';
 import { part } from 'genkit';

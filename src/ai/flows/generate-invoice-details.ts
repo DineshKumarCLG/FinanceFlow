@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview Generates structured invoice details from a textual description, including line items, customer details, and payment terms.
@@ -8,7 +9,7 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z}from 'genkit';
+import { z } from 'genkit';
 
 const GenerateInvoiceDetailsInputSchema = z.object({
   description: z.string().describe('A textual description of the invoice, e.g., "Invoice Client Corp for 10 hours of consulting at $50/hour and 2 licenses for Product X at $100 each, due in 30 days, project XYZ. Send to client@example.com, billing address: 123 Main St, Anytown. Shipping to 456 Oak Ave."'),
