@@ -72,7 +72,7 @@ Extract the following information:
 - Customer GSTIN: The customer's GSTIN, if mentioned.
 - Invoice Number: If an invoice number is mentioned.
 - Invoice Date: The date the invoice is issued. If no date is mentioned, use today's date. Format as YYYY-MM-DD.
-- Due Date: The date the payment is due. If terms like "Net 30", "due in 15 days", or "payment by end of month" are mentioned, calculate this relative to the invoice date. Format as YYYY-MM-DD. If no due date or terms are mentioned, you can leave this blank or suggest a common term like "Net 30".
+- Due Date: The date the payment is due. You MUST calculate this if terms like "Net 30", "due in 15 days", or "payment by end of month" are mentioned, relative to the invoice date. Format as YYYY-MM-DD. If no due date or terms are mentioned, you can leave this blank or suggest a common term like "Net 30".
 - Payment Terms: Any payment terms mentioned (e.g., "Net 30", "Due upon receipt").
 - Line Items: If the description contains clear itemization, extract each as a structured line item.
 - Items Summary: Use this only as a fallback if line items cannot be extracted.
@@ -88,7 +88,7 @@ Extract the following information:
 1. For Invoice Date: If the description explicitly mentions a specific date for the invoice itself (e.g., "invoice dated July 20th, 2025"), use that exact date.
 2. **If a year is not specified in the description (e.g., "invoice dated July 20th"), assume the current calendar year.**
 3. If no specific invoice date is mentioned at all, you MUST use the *current calendar date* (the date this request is being processed) as the invoiceDate.
-4. For Due Date: Calculate based on terms from the invoice date. If "Net 30" or "due in 30 days", add 30 days to invoiceDate. If "due end of month", set to the last day of the invoiceDate's month. If no terms, suggest a 30-day due date or leave blank if uncertain.
+4. For Due Date: You MUST calculate this based on terms from the invoice date. If "Net 30" or "due in 30 days", add 30 days to invoiceDate. If "due end of month", set to the last day of the invoiceDate's month. If no terms, suggest a 30-day due date or leave blank if uncertain.
 5. **Format all dates as YYYY-MM-DD.**
 6. **Do NOT default to a generic past date like "2024-01-01" for dates unless that specific date is explicitly mentioned in the input.**
 
