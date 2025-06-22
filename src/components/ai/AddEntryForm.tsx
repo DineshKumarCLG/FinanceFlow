@@ -22,12 +22,14 @@ import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { addJournalEntry } from "@/lib/data-service";
 import { useAuth } from "@/contexts/AuthContext"; // Import useAuth
+import { useQueryClient } from "@tanstack/react-query";
 
 const formSchema = z.object({
   entryText: z.string().min(5, { message: "Please describe the transaction in a few words." }),
 });
 
 export function AddEntryForm() {
+  const queryClient = useQueryClient();
   const { currentCompanyId } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [parsedResult, setParsedResult] = useState<ParseAccountingEntryOutput | null>(null);
@@ -143,6 +145,7 @@ export function AddEntryForm() {
       };
       await addJournalEntry(currentCompanyId, entryToSave);
       toast({ title: "Entry Saved!", description: "The accounting entry has been successfully recorded." });
+      queryClient.invalidateQueries({ queryKey: ['journalEntries', currentCompanyId] });
       setParsedResult(null);
       form.reset();
     } catch (e: any) {

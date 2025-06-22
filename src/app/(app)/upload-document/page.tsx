@@ -12,9 +12,11 @@ import { extractAccountingData, type ExtractAccountingDataOutput, type ExtractAc
 import { useToast } from '@/hooks/use-toast';
 import { addJournalEntries, type JournalEntry } from '@/lib/data-service';
 import { useAuth } from "@/contexts/AuthContext";
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function UploadDocumentPage() {
   const { currentCompanyId } = useAuth();
+  const queryClient = useQueryClient();
   const [isProcessingAi, setIsProcessingAi] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [extractedData, setExtractedData] = useState<ExtractAccountingDataOutput | null>(null);
@@ -93,6 +95,7 @@ export default function UploadDocumentPage() {
       }));
       await addJournalEntries(currentCompanyId, entriesToSave);
       toast({ title: "Entries Saved!", description: "The extracted accounting entries have been recorded." });
+      queryClient.invalidateQueries({ queryKey: ['journalEntries', currentCompanyId] });
       setExtractedData(null);
       setCurrentFile(null);
     } catch (e: any)      {
