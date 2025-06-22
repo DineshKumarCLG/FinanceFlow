@@ -59,52 +59,53 @@ const prompt = ai.definePrompt({
   name: 'generateInvoiceDetailsPrompt',
   input: {schema: GenerateInvoiceDetailsInputSchema},
   output: {schema: GenerateInvoiceDetailsOutputSchema},
-  prompt: `You are an expert assistant that helps create invoices from textual descriptions. Your goal is to be extremely thorough and extract every piece of information provided in the user's text to populate the invoice fields. Do not miss any details.
+  prompt: `You are a meticulous data extraction bot. Your sole purpose is to convert a text description of an invoice into a structured JSON object. You must follow all rules precisely and not miss any detail.
 
-Given the following invoice description:
+Analyze the following invoice description:
 "{{{description}}}"
 
-Extract the following information:
-- Customer Name: The name of the client or company being invoiced.
-- Customer Email: The customer's email address.
-- Billing Address: The full billing address for the customer.
-- Shipping Address: The full shipping address, if different from billing.
-- Customer GSTIN: The customer's GSTIN, if mentioned.
-- Invoice Number: If an invoice number is mentioned.
-- Invoice Date: The date the invoice is issued. If no date is mentioned, use today's date. Format as YYYY-MM-DD.
-- Due Date: The date the payment is due. You MUST calculate this if terms like "Net 30", "due in 15 days", or "payment by end of month" are mentioned, relative to the invoice date. Format as YYYY-MM-DD. If no due date or terms are mentioned, you can leave this blank or suggest a common term like "Net 30".
-- Payment Terms: Any payment terms mentioned (e.g., "Net 30", "Due upon receipt").
-- Line Items: If the description contains clear itemization, extract each as a structured line item.
-- Items Summary: Use this only as a fallback if line items cannot be extracted.
-- Total Amount: Only if explicitly stated and line items cannot be broken down.
-- Notes: Any other relevant notes for the invoice. This includes project names, reference numbers, or any other context provided.
-- Status: Default to 'draft' unless specified otherwise.
+Now, extract the information according to these steps and rules.
 
-**Tax Handling Rules (Important):**
-- If a global tax rate (e.g., "GST: 18%", "VAT at 20%") is mentioned for the entire invoice, you MUST apply this rate to the 'gstRate' field of *every single line item* unless a line item has its own specific rate mentioned.
-- Do not ignore tax information provided in the text.
+**Step 1: Customer & Address Information**
+- \`customerName\`: The name of the client or company being invoiced.
+- \`customerEmail\`: The customer's primary email address for billing.
+- \`customerGstin\`: The customer's GSTIN, if mentioned.
+- \`billingAddress\`: The full billing address for the customer.
+- \`shippingAddress\`: The full shipping address, if different from billing.
 
-**Date Handling Rules (Crucial):**
-1. For Invoice Date: If the description explicitly mentions a specific date for the invoice itself (e.g., "invoice dated July 20th, 2025"), use that exact date.
-2. **If a year is not specified in the description (e.g., "invoice dated July 20th"), assume the current calendar year.**
-3. If no specific invoice date is mentioned at all, you MUST use the *current calendar date* (the date this request is being processed) as the invoiceDate.
-4. For Due Date: You MUST calculate this based on terms from the invoice date. If "Net 30" or "due in 30 days", add 30 days to invoiceDate. If "due end of month", set to the last day of the invoiceDate's month. If no terms, suggest a 30-day due date or leave blank if uncertain.
-5. **Format all dates as YYYY-MM-DD.**
-6. **Do NOT default to a generic past date like "2024-01-01" for dates unless that specific date is explicitly mentioned in the input.**
+**Step 2: Invoice Metadata**
+- \`invoiceNumber\`: Extract any invoice number mentioned (e.g., "INV-2024-001").
+- \`invoiceDate\`: The date the invoice is issued. Format as YYYY-MM-DD.
+- \`status\`: Default to 'draft' unless specified otherwise.
 
-**CRITICAL LINE ITEM INSTRUCTIONS:**
-- You MUST prioritize extracting structured 'lineItems' over using 'itemsSummary'.
-- If a description lists multiple services or products, create a separate line item for each one.
-- For each item, you MUST attempt to extract 'description', 'quantity', and 'unitPrice'.
-- If 'quantity' is not mentioned, you MUST default it to 1.
-- If 'unitPrice' is not mentioned, but a total for that item is, use that total as the 'amount' and set 'unitPrice' to be equal to 'amount' (assuming quantity is 1).
-- The 'amount' field for each line item should be the taxable value (quantity * unitPrice). You MUST calculate this and include it if possible.
-- Only use 'itemsSummary' as a last resort if it is absolutely impossible to break down the description into structured items.
+**Step 3: Line Items (CRITICAL)**
+- You MUST prioritize creating structured \`lineItems\`.
+- For each distinct product or service, create a separate line item object.
+- For each item, extract:
+  - \`description\`: The name of the service or product.
+  - \`quantity\`: How many units. Default to 1 if not specified.
+  - \`unitPrice\`: The cost per unit, before tax. Ignore currency symbols like '₹' or 'USD'.
+  - \`hsnSacCode\`: The HSN or SAC code, if available.
+- The \`amount\` field will be calculated later, so focus on quantity and unitPrice.
+- Only use \`itemsSummary\` as a last resort if structured items are impossible to extract.
 
-Ensure the output is a valid JSON object conforming to the GenerateInvoiceDetailsOutputSchema.
-If a field cannot be determined, omit it from the output or set to null/empty array where appropriate based on the schema.
-Prioritize extracting structured 'lineItems' over 'itemsSummary'. If 'lineItems' are successfully extracted, 'itemsSummary' can be omitted or be a very brief overall title.
-The main 'totalAmount' field in the output schema should ideally be left for the application to calculate from line items. Only populate it if the input description provides a grand total and line items are not extractable.
+**Step 4: Financial & Payment Details**
+- \`dueDate\`: The date payment is due. You MUST calculate this from the \`invoiceDate\` if terms like "Net 15", "due in 30 days" are mentioned. Format as YYYY-MM-DD.
+- \`paymentTerms\`: Capture the full payment terms text (e.g., "Net 15 days from invoice date. Late payments will incur a 2% monthly interest.").
+- **Tax Handling:** If a global tax rate (e.g., "GST @18%") is mentioned, you MUST apply this percentage to the \`gstRate\` field of *every single line item*.
+
+**Step 5: Notes & Miscellaneous Information**
+- \`notes\`: This is a catch-all for important information. You MUST place the following details here if they appear in the text:
+    - **Bank Details:** Account number, IFSC/SWIFT codes, bank name, UPI IDs.
+    - **Project Details:** Project names, codes, or reference numbers.
+    - **Additional Contacts:** Any secondary contact information mentioned for queries.
+
+**Final Date Handling Rules (Crucial):**
+1.  For \`invoiceDate\`: Use the date mentioned in the text. If a year is not specified, assume the current calendar year. If no date is mentioned at all, use today's date.
+2.  For \`dueDate\`: Calculate it based on \`invoiceDate\` and terms.
+3.  **Format all dates as YYYY-MM-DD.**
+
+Produce a valid JSON object conforming to the output schema. Be thorough.
 `,
 });
 
@@ -215,5 +216,3 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
     return finalOutput;
   }
 );
-
-    
