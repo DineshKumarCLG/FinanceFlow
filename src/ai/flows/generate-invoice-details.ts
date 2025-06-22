@@ -39,11 +39,8 @@ const GenerateInvoiceDetailsOutputSchema = z.object({
   itemsSummary: z.string().optional().describe('A brief textual summary of the items or services being invoiced. Provide this if structured line items cannot be reliably extracted.'),
   lineItems: z.array(LineItemSchema).optional().describe('An array of structured line items for the invoice. Populate this if the description allows for clear itemization.'),
   
-  // subTotal, totalGstAmount, and totalAmount will be calculated by the application based on lineItems.
-  // The AI can optionally provide a totalAmount if it's explicitly stated and no line items can be discerned.
   totalAmount: z.number().optional().describe('The total amount of the invoice, if explicitly mentioned and line items cannot be broken down. Prefer calculation from line items.'), 
   notes: z.string().optional().describe("Any additional notes or comments mentioned for the invoice."),
-  // Added for consistency with manageInvoiceTool, though AI might not populate it directly
   customerGstin: z.string().optional().describe("The customer's GSTIN, if discernible."),
   status: z.enum(['draft', 'sent', 'paid', 'overdue', 'void']).optional().default('draft').describe("The status of the invoice."),
 
@@ -59,53 +56,39 @@ const prompt = ai.definePrompt({
   name: 'generateInvoiceDetailsPrompt',
   input: {schema: GenerateInvoiceDetailsInputSchema},
   output: {schema: GenerateInvoiceDetailsOutputSchema},
-  prompt: `You are a meticulous data extraction bot. Your sole purpose is to convert a text description of an invoice into a structured JSON object. You must follow all rules precisely and not miss any detail.
+  prompt: `You are a highly precise data extraction AI. Your task is to convert the following user-provided text into a structured JSON object. Every detail is important.
 
-Analyze the following invoice description:
+**USER TEXT:**
 "{{{description}}}"
 
-Now, extract the information according to these steps and rules.
+**JSON FIELD MAPPING RULES:**
 
-**Step 1: Customer & Address Information**
-- \`customerName\`: The name of the client or company being invoiced.
-- \`customerEmail\`: The customer's primary email address for billing.
-- \`customerGstin\`: The customer's GSTIN, if mentioned.
-- \`billingAddress\`: The full billing address for the customer.
-- \`shippingAddress\`: The full shipping address, if different from billing.
+- \`customerName\`: The name of the client being invoiced.
+- \`customerEmail\`: The primary billing email address for the customer (e.g., accounts@... or contact@...).
+- \`billingAddress\`: The customer's full billing address.
+- \`shippingAddress\`: The customer's full shipping address.
+- \`customerGstin\`: The customer's GSTIN.
 
-**Step 2: Invoice Metadata**
-- \`invoiceNumber\`: Extract any invoice number mentioned (e.g., "INV-2024-001").
-- \`invoiceDate\`: The date the invoice is issued. Format as YYYY-MM-DD.
-- \`status\`: Default to 'draft' unless specified otherwise.
+- \`invoiceNumber\`: The unique invoice identifier.
+- \`invoiceDate\`: The date the invoice was issued (Format: YYYY-MM-DD). If no year is given, use the current year. If no date, use today.
+- \`dueDate\`: The payment due date (Format: YYYY-MM-DD). You MUST calculate this from \`invoiceDate\` if terms like "Net 15" or "due in 15 days" are present.
+- \`status\`: Default to 'draft'.
 
-**Step 3: Line Items (CRITICAL)**
-- You MUST prioritize creating structured \`lineItems\`.
-- For each distinct product or service, create a separate line item object.
-- For each item, extract:
-  - \`description\`: The name of the service or product.
-  - \`quantity\`: How many units. Default to 1 if not specified.
-  - \`unitPrice\`: The cost per unit, before tax. Ignore currency symbols like '₹' or 'USD'.
-  - \`hsnSacCode\`: The HSN or SAC code, if available.
-- The \`amount\` field will be calculated later, so focus on quantity and unitPrice.
-- Only use \`itemsSummary\` as a last resort if structured items are impossible to extract.
+- **\`lineItems\` (CRITICAL):**
+  - This MUST be an array of objects.
+  - Create one object for EACH distinct product/service.
+  - Each object needs \`description\`, \`quantity\`, and \`unitPrice\`.
+  - \`unitPrice\` should be a number; you MUST strip currency symbols like '₹' or '$'.
+  - If a global tax rate is mentioned (e.g., "GST @18%"), set the \`gstRate\` field for ALL line items to that number (e.g., 18).
 
-**Step 4: Financial & Payment Details**
-- \`dueDate\`: The date payment is due. You MUST calculate this from the \`invoiceDate\` if terms like "Net 15", "due in 30 days" are mentioned. Format as YYYY-MM-DD.
-- \`paymentTerms\`: Capture the full payment terms text (e.g., "Net 15 days from invoice date. Late payments will incur a 2% monthly interest.").
-- **Tax Handling:** If a global tax rate (e.g., "GST @18%") is mentioned, you MUST apply this percentage to the \`gstRate\` field of *every single line item*.
+- \`paymentTerms\`: The full text of the payment terms, including any late fee policies.
+- **\`notes\` (CRITICAL CATCH-ALL):**
+  - This field MUST contain all of the following if present in the text:
+    - **All Bank Details:** A/C No, IFSC, Bank Name, UPI IDs.
+    - **Project Details:** Project names or reference numbers.
+    - **Other Contacts:** Any query or secondary contact information.
 
-**Step 5: Notes & Miscellaneous Information**
-- \`notes\`: This is a catch-all for important information. You MUST place the following details here if they appear in the text:
-    - **Bank Details:** Account number, IFSC/SWIFT codes, bank name, UPI IDs.
-    - **Project Details:** Project names, codes, or reference numbers.
-    - **Additional Contacts:** Any secondary contact information mentioned for queries.
-
-**Final Date Handling Rules (Crucial):**
-1.  For \`invoiceDate\`: Use the date mentioned in the text. If a year is not specified, assume the current calendar year. If no date is mentioned at all, use today's date.
-2.  For \`dueDate\`: Calculate it based on \`invoiceDate\` and terms.
-3.  **Format all dates as YYYY-MM-DD.**
-
-Produce a valid JSON object conforming to the output schema. Be thorough.
+Now, generate the complete JSON object based on these rules. Do not omit any extractable information.
 `,
 });
 
@@ -122,7 +105,6 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
     const today = new Date();
     const todayISO = today.toISOString().split('T')[0];
 
-    // Check if the AI hallucinated the year when it wasn't specified in the input.
     const yearRegex = /\b(19|20)\d{2}\b/;
     const yearMentionedInInput = yearRegex.test(input.description);
     const aiYear = output.invoiceDate ? parseInt(output.invoiceDate.substring(0, 4), 10) : null;
@@ -131,8 +113,6 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
     const isValidDateString = (dateStr: string | undefined): dateStr is string => !!dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr) && !isNaN(new Date(dateStr).getTime());
 
     if (aiYear && aiYear !== currentYear && !yearMentionedInInput) {
-        // AI likely hallucinated a year (e.g., its training year '2024') when none was provided.
-        // Correct it to the current year.
         try {
             const dateWithCurrentYear = new Date(output.invoiceDate!);
             dateWithCurrentYear.setFullYear(currentYear);
@@ -142,14 +122,12 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
             processedInvoiceDate = todayISO;
         }
     } else if (!isValidDateString(processedInvoiceDate)) {
-        // If the date is invalid, a placeholder, or not provided, default to today.
         console.warn(`AI returned invalid invoiceDate '${output.invoiceDate}' for input: "${input.description}". Defaulting to today: ${todayISO}.`);
         processedInvoiceDate = todayISO;
     }
     
     let finalOutput = { ...output, invoiceDate: processedInvoiceDate };
 
-    // Ensure all optional string fields that AI might return as "" or null are actually undefined if empty/null.
     const stringFieldsToClean: (keyof GenerateInvoiceDetailsOutput)[] = ['customerName', 'customerEmail', 'billingAddress', 'shippingAddress', 'invoiceNumber', 'paymentTerms', 'itemsSummary', 'notes', 'customerGstin'];
     stringFieldsToClean.forEach(field => {
         if (finalOutput[field] === "" || finalOutput[field] === null) {
@@ -165,7 +143,7 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
             description: item.description || "N/A",
             quantity: quantity,
             unitPrice: unitPrice,
-            amount: parseFloat((quantity * unitPrice).toFixed(2)), // Recalculate amount as quantity * unitPrice
+            amount: parseFloat((quantity * unitPrice).toFixed(2)),
             hsnSacCode: item.hsnSacCode,
             gstRate: item.gstRate,
         };
@@ -175,9 +153,8 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
     }
 
 
-    // Basic due date calculation if invoice date is now set
     if (finalOutput.invoiceDate && !finalOutput.dueDate) {
-        const invDate = new Date(finalOutput.invoiceDate + 'T00:00:00Z'); // Ensure parsing as UTC to avoid timezone shifts
+        const invDate = new Date(finalOutput.invoiceDate + 'T00:00:00Z');
         if (input.description.match(/\b(Net ?30|due in 30 days)\b/i)) {
             invDate.setDate(invDate.getDate() + 30);
             finalOutput.dueDate = invDate.toISOString().split('T')[0];
@@ -189,7 +166,6 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
             finalOutput.dueDate = lastDay.toISOString().split('T')[0];
         }
     }
-    // Ensure due date is also YYYY-MM-DD if present and valid
     if (finalOutput.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(finalOutput.dueDate)) {
         try {
              const parsedDueDate = new Date(finalOutput.dueDate);
@@ -206,10 +182,10 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
     }
     
     if (finalOutput.status === null || finalOutput.status === "") {
-        (finalOutput as any).status = undefined; // Ensure status is undefined if empty/null
+        (finalOutput as any).status = undefined;
     }
-    if (!finalOutput.status) { // If undefined or now explicitly undefined
-        finalOutput.status = 'draft'; // Set default status if not provided by AI
+    if (!finalOutput.status) {
+        finalOutput.status = 'draft';
     }
 
 
