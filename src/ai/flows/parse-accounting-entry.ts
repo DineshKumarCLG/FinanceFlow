@@ -44,14 +44,25 @@ const ParseAccountingEntryOutputSchema = z.object({
 
 export type ParseAccountingEntryOutput = z.infer<typeof ParseAccountingEntryOutputSchema>;
 
+// PYTHON_REPLACE_START
+// This is the main exported function that the frontend calls.
+// In a Python backend, this would be an API endpoint that accepts a text string (e.g., from voice or text input).
+// It processes the string and returns a structured journal entry.
 export async function parseAccountingEntry(input: ParseAccountingEntryInput): Promise<ParseAccountingEntryOutput> {
   return parseAccountingEntryFlow(input);
 }
+// PYTHON_REPLACE_END
+
 
 const prompt = ai.definePrompt({
   name: 'parseAccountingEntryPrompt',
   input: {schema: ParseAccountingEntryInputSchema},
   output: {schema: ParseAccountingEntryOutputSchema},
+  // PYTHON_REPLACE_START
+  // This is the core instruction given to the AI model.
+  // It tells the AI how to analyze the user's text and extract specific accounting details.
+  // The `output.schema` above ensures the AI returns the data in a structured JSON format.
+  // A Python implementation would need to construct a similar prompt for the Gemini API.
   prompt: `You are an expert accounting assistant. Your task is to parse accounting entries from user input and generate the corresponding double-entry journal entries, including tax information (GST/VAT).
 Assume Indian GST context (IGST for inter-state, CGST & SGST for intra-state) unless specified otherwise or if the currency/details clearly indicate a different region for VAT.
 
@@ -89,6 +100,7 @@ Tax Information (GST/VAT):
 
 Ensure that the output is a valid JSON object conforming to the ParseAccountingEntryOutputSchema.
 `,
+  // PYTHON_REPLACE_END
 });
 
 const parseAccountingEntryFlow = ai.defineFlow(
@@ -98,8 +110,20 @@ const parseAccountingEntryFlow = ai.defineFlow(
     outputSchema: ParseAccountingEntryOutputSchema,
   },
   async input => {
+    // PYTHON_REPLACE_START
+    // This is the core logic of the entry parsing flow.
+    // In Python, this would be the function that handles the request to the parsing endpoint.
+
+    // Step 1: Call the AI model with the defined prompt and the user's input (the entry text).
     const {output} = await prompt(input);
     
+    // Step 2: Perform robust post-processing on the AI's output.
+    // This is a crucial "safety net" to improve data quality.
+    // A Python implementation should replicate this business logic.
+
+    // Part 1: Date correction.
+    // This logic corrects cases where the AI might hallucinate a year (e.g., its training year)
+    // when the user didn't specify one. It also handles invalid date formats.
     let processedDate = output.date;
     const today = new Date();
     const todayISO = today.toISOString().split('T')[0];
@@ -129,9 +153,11 @@ const parseAccountingEntryFlow = ai.defineFlow(
         processedDate = todayISO;
     }
     
-    // Post-process to calculate CGST/SGST if gstType is 'cgst-sgst' and individual amounts are missing but total GST can be inferred
     let finalOutput = { ...output, date: processedDate };
 
+    // Part 2: GST and Taxable Amount calculations.
+    // This ensures that if the AI provides a rate and taxable amount, the tax components are calculated.
+    // It also calculates the taxable amount if it's missing but can be derived.
     if (finalOutput.gstType === 'cgst-sgst' && finalOutput.gstRate && finalOutput.taxableAmount) {
         const totalGstOnTaxable = finalOutput.taxableAmount * (finalOutput.gstRate / 100);
         if (!finalOutput.cgstAmount && !finalOutput.sgstAmount && (finalOutput.igstAmount === undefined || finalOutput.igstAmount === 0)) {
@@ -158,7 +184,8 @@ const parseAccountingEntryFlow = ai.defineFlow(
         finalOutput.taxableAmount = finalOutput.amount;
     }
 
-
+    // Step 3: Return the cleaned-up, processed entry data.
     return finalOutput;
+    // PYTHON_REPLACE_END
   }
 );

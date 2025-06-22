@@ -54,7 +54,10 @@ const ManageInvoiceOutputSchema = z.object({
 export type ManageInvoiceOutput = z.infer<typeof ManageInvoiceOutputSchema>;
 
 
-// Helper function to map GenerateInvoiceDetailsOutput to NewInvoiceData/UpdateInvoiceData
+// PYTHON_REPLACE_START
+// This is a helper function that translates the data structure received from the AI
+// into the data structure required by the database service (`data-service.ts`).
+// A Python implementation would need a similar mapping function to prepare data for the database.
 const mapAiOutputToInvoiceData = (
   aiOutput: GenerateInvoiceDetailsOutput,
   currentInvoiceNumber?: string // For updates, preserve existing invoice number if not changed by AI
@@ -80,6 +83,7 @@ const mapAiOutputToInvoiceData = (
      return lineItemForDb;
   });
 
+  // Calculate totals based on the line items.
   let subTotal = 0;
   let totalGstAmount = 0;
   lineItems.forEach(item => {
@@ -93,6 +97,7 @@ const mapAiOutputToInvoiceData = (
   totalGstAmount = parseFloat(totalGstAmount.toFixed(2));
   const totalAmount = parseFloat((subTotal + totalGstAmount).toFixed(2));
 
+  // Validate and format dates.
   const today = new Date();
   let finalInvoiceDate = aiOutput.invoiceDate;
   if (!finalInvoiceDate || !/^\d{4}-\d{2}-\d{2}$/.test(finalInvoiceDate)) {
@@ -117,6 +122,7 @@ const mapAiOutputToInvoiceData = (
   }
 
 
+  // Return the final, cleaned data object ready for the database.
   return {
     invoiceNumber: aiOutput.invoiceNumber || currentInvoiceNumber || `INV-${Date.now()}`, 
     customerName: aiOutput.customerName || 'N/A',
@@ -136,6 +142,7 @@ const mapAiOutputToInvoiceData = (
     notes: aiOutput.notes || undefined,
   };
 };
+// PYTHON_REPLACE_END
 
 
 export const manageInvoiceTool = ai.defineTool(
@@ -146,8 +153,12 @@ export const manageInvoiceTool = ai.defineTool(
     outputSchema: ManageInvoiceOutputSchema,
   },
   async (input: ManageInvoiceInput): Promise<ManageInvoiceOutput> => {
-    let structuredDetails: GenerateInvoiceDetailsOutput;
-
+    // PYTHON_REPLACE_START
+    // This is the core logic for the invoice management tool.
+    // In a Python backend, this function would be called when the AI decides to use the "manageInvoiceTool".
+    // It would orchestrate parsing the user's text, preparing the data, and calling the database service.
+    
+    // Step 1: Validate required system-provided inputs.
     if (!input.companyId) {
       return { success: false, message: "Error: Company ID is required to manage an invoice. This should be provided by the system." };
     }
@@ -155,21 +166,25 @@ export const manageInvoiceTool = ai.defineTool(
       return { success: false, message: "Error: User ID is required to manage an invoice. This should be provided by the system." };
     }
 
-    // 1. Determine structured details
+    let structuredDetails: GenerateInvoiceDetailsOutput;
+
+    // Step 2: Determine the invoice details.
+    // If the user provided a text description, parse it using the `generateInvoiceDetails` flow.
     if (input.textDescription) {
       try {
         const genInput: GenerateInvoiceDetailsInput = { description: input.textDescription };
+        // This is a key interaction: this tool calls another AI flow to do the parsing.
         structuredDetails = await generateInvoiceDetails(genInput);
 
+        // If the user also provided some structured details, merge them.
+        // Explicit details from the user take precedence over AI-parsed details.
         if (input.invoiceDetails) {
-          // Merge: explicit invoiceDetails can override or supplement AI parsed details.
-          // For lineItems, if explicit details are provided, they take precedence.
           structuredDetails = {
-            ...structuredDetails, // Start with AI parsed
-            ...input.invoiceDetails, // Override with explicit details
+            ...structuredDetails,
+            ...input.invoiceDetails,
             lineItems: input.invoiceDetails.lineItems && input.invoiceDetails.lineItems.length > 0
-                       ? input.invoiceDetails.lineItems // If explicit line items exist, use them
-                       : structuredDetails.lineItems, // Otherwise, use AI parsed line items
+                       ? input.invoiceDetails.lineItems
+                       : structuredDetails.lineItems,
           };
         }
       } catch (e: any) {
@@ -177,8 +192,8 @@ export const manageInvoiceTool = ai.defineTool(
         return { success: false, message: `Failed to parse invoice description: ${e.message}` };
       }
     } else if (input.invoiceDetails) {
-      structuredDetails = input.invoiceDetails as GenerateInvoiceDetailsOutput; // Cast as it fits the shape
-       // Ensure invoiceDate has a default if not provided explicitly (and no text description was given)
+      // If no text description was provided, use the structured details directly.
+      structuredDetails = input.invoiceDetails as GenerateInvoiceDetailsOutput;
        if (!structuredDetails.invoiceDate) {
           structuredDetails.invoiceDate = format(new Date(), "yyyy-MM-dd");
        }
@@ -186,15 +201,20 @@ export const manageInvoiceTool = ai.defineTool(
       return { success: false, message: "Either textDescription or structured invoiceDetails must be provided." };
     }
 
+    // Add a safety check to ensure the AI extracted something meaningful.
     if (!structuredDetails.customerName && !structuredDetails.itemsSummary && !(structuredDetails.lineItems && structuredDetails.lineItems.length > 0)) {
         return { success: false, message: "Insufficient details provided to create an invoice. Customer name and items are typically required."};
     }
 
 
-    // 2. Perform action
+    // Step 3: Perform the requested action (create or update).
+    // This is where the application interacts with the database.
+    // A Python implementation would replace these calls with its own database logic (e.g., calling a Python-based data service).
     try {
       if (input.action === 'create') {
+        // Map the AI output to the database schema.
         const newInvoiceData = mapAiOutputToInvoiceData(structuredDetails);
+        // Call the data service to add the new invoice.
         const savedInvoice = await addInvoice(input.companyId, input.creatorUserId, newInvoiceData);
         return {
           success: true,
@@ -206,10 +226,13 @@ export const manageInvoiceTool = ai.defineTool(
         if (!input.invoiceId) {
           return { success: false, message: "Invoice ID is required for updates." };
         }
+        // For updates, get the existing invoice to preserve fields like the invoice number.
         const existingInvoice = await getInvoiceById(input.companyId, input.invoiceId);
         let existingInvoiceNumber = existingInvoice?.invoiceNumber;
 
+        // Map the AI output to the database schema.
         const updatedInvoiceData = mapAiOutputToInvoiceData(structuredDetails, existingInvoiceNumber);
+        // Call the data service to update the invoice.
         const savedInvoice = await updateInvoice(input.companyId, input.invoiceId, input.creatorUserId, updatedInvoiceData);
         return {
           success: true,
@@ -220,6 +243,7 @@ export const manageInvoiceTool = ai.defineTool(
       }
       return { success: false, message: "Invalid action specified." };
     } catch (e: any) {
+      // Handle potential errors from the database service, like permission errors.
       console.error(`Error during invoice ${input.action}:`, e);
       if (e.message && e.message.toLowerCase().includes("permission")) {
         return { success: false, message: `Failed to ${input.action} invoice due to a permissions error. This may indicate a problem with Firestore security rules or the server's authentication context.` };
@@ -229,5 +253,6 @@ export const manageInvoiceTool = ai.defineTool(
       }
       return { success: false, message: `Failed to ${input.action} invoice: ${e.message}` };
     }
+    // PYTHON_REPLACE_END
   }
 );

@@ -44,17 +44,28 @@ export const queryJournalTool = ai.defineTool(
     outputSchema: QueryJournalOutputSchema,
   },
   async (input: QueryJournalInput): Promise<QueryJournalOutput> => {
+    // PYTHON_REPLACE_START
+    // This is the core logic for the journal querying tool.
+    // In a Python backend, this function would be called when the AI decides to use the "queryJournalTool".
+    // It fetches data from the database, filters it, and returns a summary.
+
+    // Step 1: Validate required system-provided inputs.
     if (!input.companyId) {
       return { querySummary: "Error: Company ID is required to query journal entries. This should be provided by the system.", matchCount: 0 };
     }
 
     try {
+      // Step 2: Fetch all journal entries from the database.
+      // A Python implementation would replace this call with its own database query logic.
       const allEntries = await getJournalEntries(input.companyId);
       if (allEntries.length === 0) {
         return { querySummary: "No journal entries found for this company.", matchCount: 0 };
       }
 
       let filteredEntries = allEntries;
+
+      // Step 3: Apply filters based on the AI's request.
+      // This is the core data processing logic of the tool.
 
       // Date filtering
       if (input.dateFrom || input.dateTo) {
@@ -104,9 +115,11 @@ export const queryJournalTool = ai.defineTool(
         );
       }
       
+      // Sort entries by date (most recent first).
       filteredEntries.sort((a,b) => parseISO(b.date).getTime() - parseISO(a.date).getTime());
 
-
+      // Step 4: Summarize the results for the AI.
+      // The goal is to provide a concise summary that the AI can then use to answer the user's question.
       const matchCount = filteredEntries.length;
       let totalAmount = 0;
       filteredEntries.forEach(entry => totalAmount += entry.amount);
@@ -130,6 +143,7 @@ export const queryJournalTool = ai.defineTool(
       };
 
     } catch (e: any) {
+      // Handle potential errors, especially permission errors from the database.
       console.error("Error in queryJournalTool:", e);
       if (e.message && e.message.toLowerCase().includes("permission")) {
         return { 
@@ -139,5 +153,6 @@ export const queryJournalTool = ai.defineTool(
       }
       return { querySummary: `Error querying journal entries: ${e.message}`, matchCount: 0 };
     }
+    // PYTHON_REPLACE_END
   }
 );

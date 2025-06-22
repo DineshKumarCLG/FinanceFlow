@@ -43,18 +43,26 @@ const GenerateInvoiceDetailsOutputSchema = z.object({
 });
 export type GenerateInvoiceDetailsOutput = z.infer<typeof GenerateInvoiceDetailsOutputSchema>;
 
+// PYTHON_REPLACE_START
+// This is the main exported function. In a Python backend, this would likely be an API endpoint
+// that accepts a text description and returns a structured JSON invoice.
 export async function generateInvoiceDetails(input: GenerateInvoiceDetailsInput): Promise<GenerateInvoiceDetailsOutput> {
   return generateInvoiceDetailsFlow(input);
 }
+// PYTHON_REPLACE_END
 
 const prompt = ai.definePrompt({
   name: 'generateInvoiceDetailsPrompt_v3', // Changed to avoid caching issues
-  model: 'googleai/gemini-1.5-flash-latest',
+  model: 'googleai/gemini-1.5-flash-latest', // Using a more powerful model for this complex task.
   input: {schema: GenerateInvoiceDetailsInputSchema},
   output: {
     // A slightly simplified schema for the AI to focus on core extraction
     schema: GenerateInvoiceDetailsOutputSchema.omit({ status: true, itemsSummary: true }),
   },
+  // PYTHON_REPLACE_START
+  // This is the core instruction given to the AI model. It's a "rulebook" style prompt
+  // designed for high accuracy in data extraction. A Python implementation would need to
+  // construct a similar, detailed prompt to send to the Gemini API.
   prompt: `You are an expert data extraction assistant. Your job is to parse the user's text and extract structured invoice information. Be thorough.
 
 **User's Text:**
@@ -86,6 +94,7 @@ If the text is "Invoice Client Corp for 10 hours of consulting at $50/hour, due 
 
 Now, process the user's text and generate the complete JSON object.
 `,
+  // PYTHON_REPLACE_END
 });
 
 
@@ -96,18 +105,30 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
     outputSchema: GenerateInvoiceDetailsOutputSchema,
   },
   async (input: GenerateInvoiceDetailsInput): Promise<GenerateInvoiceDetailsOutput> => {
+    // PYTHON_REPLACE_START
+    // This is the core logic of the invoice generation flow.
+    // In Python, this would be the function that handles the request to the generation endpoint.
+
+    // Step 1: Call the AI model with the defined prompt and the user's input (the text description).
     const {output} = await prompt(input);
     if (!output) {
       throw new Error("AI failed to return any output. Please try rephrasing your description.");
     }
     
+    // Initialize the final output object with a default status.
     let finalOutput = { ...output, status: 'draft' as const, itemsSummary: undefined as (string | undefined) };
     
-    // 1. Date processing
+    // Step 2: Perform robust post-processing on the AI's output.
+    // This is a "safety net" to improve the reliability of the extracted data.
+    // It handles date calculations, number formatting, and default values.
+    // A Python implementation should replicate this business logic to ensure data quality.
+
+    // Part 1: Date processing and validation.
     const today = new Date();
     const todayISO = today.toISOString().split('T')[0];
     
     if (!finalOutput.invoiceDate || !/^\d{4}-\d{2}-\d{2}$/.test(finalOutput.invoiceDate)) {
+        // Try to find a date in the text if the AI missed it.
         const dateMatch = input.description.match(/(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}(?:st|nd|rd|th)?,\s+\d{4}/i);
         if (dateMatch) {
             try {
@@ -120,7 +141,7 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
         }
     }
 
-    // 2. Due Date calculation
+    // Part 2: Due Date calculation based on keywords like "due in X days".
     if (!finalOutput.dueDate || !/^\d{4}-\d{2}-\d{2}$/.test(finalOutput.dueDate)) {
         const invDate = new Date(finalOutput.invoiceDate + 'T00:00:00Z');
         let daysToAdd: number | null = null;
@@ -140,13 +161,14 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
         }
     }
     
-    // 3. Line Item processing
+    // Part 3: Line Item processing. Calculate the 'amount' for each line item and apply global GST if found.
     if (finalOutput.lineItems && finalOutput.lineItems.length > 0) {
       finalOutput.lineItems = finalOutput.lineItems.map(item => {
         const quantity = item.quantity && item.quantity > 0 ? item.quantity : 1;
         const unitPrice = item.unitPrice || 0;
         const amount = parseFloat((quantity * unitPrice).toFixed(2));
         
+        // If a line item doesn't have a GST rate, check for a global GST rate in the description.
         if (item.gstRate === undefined || item.gstRate === null) {
             const gstMatch = input.description.match(/GST\s?@\s?(\d{1,2}(?:\.\d{1,2})?)%/i);
             if (gstMatch) {
@@ -158,7 +180,7 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
       });
     }
     
-    // 4. Fill notes if empty but bank details exist
+    // Part 4: Fallback for notes. If the AI missed bank details, try to find them in the original text.
     if (!finalOutput.notes && input.description.toLowerCase().includes('bank details')) {
       const bankDetailsMatch = input.description.match(/bank details:[\s\S]*/i);
       if(bankDetailsMatch) {
@@ -166,6 +188,8 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
       }
     }
 
+    // Step 3: Return the cleaned-up, processed invoice data.
     return finalOutput;
+    // PYTHON_REPLACE_END
   }
 );

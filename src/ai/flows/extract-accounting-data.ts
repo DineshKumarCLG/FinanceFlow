@@ -46,14 +46,25 @@ const ExtractAccountingDataOutputSchema = z.object({
 });
 export type ExtractAccountingDataOutput = z.infer<typeof ExtractAccountingDataOutputSchema>;
 
+// PYTHON_REPLACE_START
+// This is the main exported function that the frontend calls.
+// In a Python backend, this would be an API endpoint that accepts a document (e.g., as a base64 string).
+// It processes the document and returns structured accounting data.
 export async function extractAccountingData(input: ExtractAccountingDataInput): Promise<ExtractAccountingDataOutput> {
   return extractAccountingDataFlow(input);
 }
+// PYTHON_REPLACE_END
 
 const extractAccountingDataPrompt = ai.definePrompt({
   name: 'extractAccountingDataPrompt',
   input: {schema: ExtractAccountingDataInputSchema},
   output: {schema: ExtractAccountingDataOutputSchema},
+  // PYTHON_REPLACE_START
+  // This is the core instruction given to the AI model.
+  // It tells the AI how to behave and what information to extract from the provided document image.
+  // The `{{media url=documentDataUri}}` part is where the image data is injected into the prompt.
+  // The `output.schema` above tells the model to return the data in a specific JSON format.
+  // A Python implementation would need to construct a similar prompt to send to the Gemini API.
   prompt: `You are an expert accounting assistant. Your task is to extract accounting entries from the provided document (invoice, receipt, bill).
 Assume Indian GST context (IGST for inter-state, CGST & SGST for intra-state) unless specified otherwise or if the document details clearly indicate a different region for VAT.
 
@@ -88,6 +99,7 @@ All monetary amounts should be numbers.
 If a field is not present in the document or cannot be determined, omit it or set to an appropriate default (e.g., gstType: 'none').
 If multiple line items are present that should form separate journal entries, create separate entries for them. If they are part of one single transaction (e.g. multiple items on one bill leading to one payment), consolidate into one entry if appropriate from an accounting perspective, but ensure all HSN/SAC codes are captured if possible, perhaps in the description or as a list if the schema supported arrays for HSN/SAC per entry. For now, one HSN/SAC per entry.
 `,
+  // PYTHON_REPLACE_END
 });
 
 const extractAccountingDataFlow = ai.defineFlow(
@@ -97,11 +109,22 @@ const extractAccountingDataFlow = ai.defineFlow(
     outputSchema: ExtractAccountingDataOutputSchema,
   },
   async input => {
+    // PYTHON_REPLACE_START
+    // This is the core logic of the data extraction flow.
+    // In Python, this would be the function that handles the request to the extraction endpoint.
+
+    // Step 1: Call the AI model with the defined prompt and the user's input (the document URI).
     const {output} = await extractAccountingDataPrompt(input);
-    // Basic post-processing for extracted entries
+
+    // Step 2: Perform post-processing on the AI's output.
+    // This is a "safety net" to improve the reliability of the extracted data.
+    // It calculates missing values (e.g., calculating CGST/SGST from the total GST rate)
+    // and ensures amounts are correctly formatted.
+    // A Python implementation should replicate this business logic to ensure data quality.
     const processedEntries = output.entries.map(entry => {
       let processedEntry = { ...entry };
 
+      // If type is CGST/SGST, but individual amounts are missing, calculate them.
       if (processedEntry.gstType === 'cgst-sgst' && processedEntry.gstRate && processedEntry.taxableAmount) {
         const totalGstOnTaxable = processedEntry.taxableAmount * (processedEntry.gstRate / 100);
         if (!processedEntry.cgstAmount && !processedEntry.sgstAmount && (processedEntry.igstAmount === undefined || processedEntry.igstAmount === 0)) {
@@ -118,6 +141,7 @@ const extractAccountingDataFlow = ai.defineFlow(
         }
       }
       
+      // If taxable amount is missing, calculate it from the total amount and GST rate.
       if (!processedEntry.taxableAmount && processedEntry.amount && processedEntry.gstRate && processedEntry.gstType !== 'none') {
           processedEntry.taxableAmount = parseFloat((processedEntry.amount / (1 + processedEntry.gstRate / 100)).toFixed(2));
       } else if (!processedEntry.taxableAmount && processedEntry.amount) {
@@ -130,6 +154,8 @@ const extractAccountingDataFlow = ai.defineFlow(
       return processedEntry;
     });
 
+    // Step 3: Return the cleaned-up data.
     return { entries: processedEntries };
+    // PYTHON_REPLACE_END
   }
 );

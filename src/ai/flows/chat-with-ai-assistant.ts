@@ -31,9 +31,14 @@ const ChatWithAiAssistantOutputSchema = z.object({
 });
 export type ChatWithAiAssistantOutput = z.infer<typeof ChatWithAiAssistantOutputSchema>;
 
+// PYTHON_REPLACE_START
+// This is the main exported function that the frontend calls.
+// In a Python backend, this would likely be an API endpoint (e.g., a Flask or FastAPI route).
+// It takes the user's message and conversation history and returns the AI's response.
 export async function chatWithAiAssistant(input: ChatWithAiAssistantInput): Promise<ChatWithAiAssistantOutput> {
   return chatWithAiAssistantFlow(input);
 }
+// PYTHON_REPLACE_END
 
 const chatWithAiAssistantFlow = ai.defineFlow(
   {
@@ -42,7 +47,13 @@ const chatWithAiAssistantFlow = ai.defineFlow(
     outputSchema: ChatWithAiAssistantOutputSchema,
   },
   async (input) => {
-    // Convert conversation history to a format suitable for the AI model
+    // PYTHON_REPLACE_START
+    // This is the core logic of the chat flow.
+    // In Python, this would be the function that handles the request to the chat endpoint.
+    // It would call the underlying LLM (e.g., Gemini) with the user's message, history, and any available tools.
+
+    // Step 1: Format the conversation history for the AI model.
+    // The history needs to be converted into a specific format that the Gemini API understands.
     const history = (input.conversationHistory || []).map(msg => {
       if (msg.role === 'tool') {
         return part.toolResponse(msg.content);
@@ -53,6 +64,8 @@ const chatWithAiAssistantFlow = ai.defineFlow(
       };
     });
 
+    // Step 2: Prepare the current user message, including any uploaded files.
+    // Files are passed as data URIs and attached to the user's prompt.
     const userMessageParts = [part.text(input.message)];
     if (input.uploadedFiles) {
       input.uploadedFiles.forEach(dataUri => {
@@ -60,6 +73,10 @@ const chatWithAiAssistantFlow = ai.defineFlow(
       });
     }
 
+    // Step 3: Call the AI model (Gemini).
+    // This is the key part where the LLM is invoked.
+    // The `system` prompt provides overall instructions to the AI assistant.
+    // The `tools` array makes the `manageInvoiceTool` and `queryJournalTool` available for the AI to use.
     const { output } = await ai.generate({
       model: ai.model('googleai/gemini-2.0-flash'),
       tools: [manageInvoiceTool, queryJournalTool],
@@ -78,7 +95,10 @@ Always confirm actions with the user before finalizing, for example, after using
       config: {
         // You can add safety settings or other configurations here if needed.
       },
-      // Augment tool inputs with system-provided data
+      // Step 4: Augment tool inputs with system-provided data.
+      // This is a crucial security and context step. When the AI decides to call a tool,
+      // this function intercepts the request and injects the `companyId` and `creatorUserId`
+      // from the user's session. This prevents the AI from needing to ask the user for this information.
       toolRequest: (toolRequests) => {
         return toolRequests.map(toolRequest => {
           if (toolRequest.toolName === 'manageInvoiceTool' || toolRequest.toolName === 'queryJournalTool') {
@@ -92,6 +112,9 @@ Always confirm actions with the user before finalizing, for example, after using
       },
     });
 
+    // Step 5: Return the AI's textual response.
+    // The `output.text` contains the generated message from the AI.
     return { response: output.text! };
+    // PYTHON_REPLACE_END
   }
 );
