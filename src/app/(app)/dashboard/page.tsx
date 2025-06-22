@@ -49,7 +49,6 @@ export default function DashboardPage() {
     queryKey: ['journalEntries', currentCompanyId],
     queryFn: () => getJournalEntries(currentCompanyId!),
     enabled: !!currentUser && !!currentCompanyId,
-    refetchInterval: 60000, 
   });
 
   // Fetch notifications
@@ -343,3 +342,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
