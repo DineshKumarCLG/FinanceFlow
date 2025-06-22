@@ -20,7 +20,7 @@ const LineItemSchema = z.object({
   description: z.string().describe('Description of the item or service.'),
   quantity: z.coerce.number().min(0.01).optional().default(1).describe('Quantity of the item/service. Default to 1 if not specified.'),
   unitPrice: z.coerce.number().min(0).optional().default(0).describe('Price per unit of the item/service (pre-tax).'),
-  amount: z.coerce.number().min(0).describe('Taxable amount for this line item (quantity * unitPrice). If not derivable, AI may estimate based on context or overall total.'),
+  amount: z.coerce.number().min(0).optional().describe('Taxable amount for this line item (quantity * unitPrice). If not derivable, AI may estimate based on context or overall total.'),
   hsnSacCode: z.string().optional().describe('HSN or SAC code for the item/service, if discernible.'),
   gstRate: z.coerce.number().min(0).max(100).optional().describe('Applicable GST rate for this item as a percentage (e.g., 18 for 18%).'),
 });
@@ -73,9 +73,9 @@ Extract the following information:
 - Invoice Date: The date the invoice is issued. If no date is mentioned, use today's date. Format as YYYY-MM-DD.
 - Due Date: The date the payment is due. If terms like "Net 30", "due in 15 days", or "payment by end of month" are mentioned, calculate this relative to the invoice date. Format as YYYY-MM-DD. If no due date or terms are mentioned, you can leave this blank or suggest a common term like "Net 30".
 - Payment Terms: Any payment terms mentioned (e.g., "Net 30", "Due upon receipt").
-- Line Items: If the description contains clear itemization (e.g., "10 hours of consulting at $50/hour", "2 widgets at $20 each"), extract each as a structured line item with description, quantity, unitPrice (pre-tax), and calculated amount (taxable value: quantity * unitPrice). Attempt to identify HSN/SAC codes or GST rates if mentioned per item.
-- Items Summary: If structured line items cannot be reliably extracted, provide a concise text summary of what is being invoiced (e.g., "Consulting services for Project XYZ", "Sale of 5 widgets").
-- Total Amount: Only if the description explicitly states a total amount and line items cannot be reliably determined, provide this total. Otherwise, it will be calculated from line items.
+- Line Items: If the description contains clear itemization, extract each as a structured line item.
+- Items Summary: Use this only as a fallback if line items cannot be extracted.
+- Total Amount: Only if explicitly stated and line items cannot be broken down.
 - Notes: Any other relevant notes for the invoice.
 - Status: Default to 'draft' unless specified otherwise.
 
@@ -87,11 +87,14 @@ Extract the following information:
 5. **Format all dates as YYYY-MM-DD.**
 6. **Do NOT default to a generic past date like "2024-01-01" for dates unless that specific date is explicitly mentioned in the input.**
 
-**Line Item Rules:**
-- 'unitPrice' should be the price before any taxes.
-- 'amount' for each line item should be calculated as quantity * unitPrice (this is the taxable value for the line).
-- If quantity or unitPrice is not explicitly mentioned for an item but can be inferred, use reasonable defaults (e.g., quantity 1).
-- If the description only provides a total amount and a list of items without individual prices, you can try to create one line item with the total amount and list the items in its description, or provide an itemsSummary. Prioritize structured line items if possible.
+**CRITICAL LINE ITEM INSTRUCTIONS:**
+- You MUST prioritize extracting structured 'lineItems' over using 'itemsSummary'.
+- If a description lists multiple services or products, create a separate line item for each one.
+- For each item, you MUST attempt to extract 'description', 'quantity', and 'unitPrice'.
+- If 'quantity' is not mentioned, you MUST default it to 1.
+- If 'unitPrice' is not mentioned, but a total for that item is, use that total as the 'amount' and set 'unitPrice' to be equal to 'amount' (assuming quantity is 1).
+- The 'amount' field for each line item should be the taxable value (quantity * unitPrice). You MUST calculate this and include it if possible.
+- Only use 'itemsSummary' as a last resort if it is absolutely impossible to break down the description into structured items.
 
 Ensure the output is a valid JSON object conforming to the GenerateInvoiceDetailsOutputSchema.
 If a field cannot be determined, omit it from the output or set to null/empty array where appropriate based on the schema.
