@@ -101,6 +101,9 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
   async (input: GenerateInvoiceDetailsInput) => {
     let {output} = await prompt(input);
     
+    // START: Robust Post-Processing Logic
+    
+    // 1. Date Correction
     let processedInvoiceDate = output.invoiceDate;
     const today = new Date();
     const todayISO = today.toISOString().split('T')[0];
@@ -128,6 +131,7 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
     
     let finalOutput = { ...output, invoiceDate: processedInvoiceDate };
 
+    // 2. Clean empty/null string fields to be undefined
     const stringFieldsToClean: (keyof GenerateInvoiceDetailsOutput)[] = ['customerName', 'customerEmail', 'billingAddress', 'shippingAddress', 'invoiceNumber', 'paymentTerms', 'itemsSummary', 'notes', 'customerGstin'];
     stringFieldsToClean.forEach(field => {
         if (finalOutput[field] === "" || finalOutput[field] === null) {
@@ -135,6 +139,7 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
         }
     });
 
+    // 3. Process Line Items for correctness and calculation
     if (finalOutput.lineItems && finalOutput.lineItems.length > 0) {
       finalOutput.lineItems = finalOutput.lineItems.map(item => {
         const quantity = item.quantity === undefined || item.quantity === null || item.quantity <= 0 ? 1 : item.quantity;
@@ -143,18 +148,19 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
             description: item.description || "N/A",
             quantity: quantity,
             unitPrice: unitPrice,
-            amount: parseFloat((quantity * unitPrice).toFixed(2)),
+            amount: parseFloat((quantity * unitPrice).toFixed(2)), // Recalculate amount for consistency
             hsnSacCode: item.hsnSacCode,
             gstRate: item.gstRate,
         };
       });
+      // If we have structured line items, these summary fields are redundant.
       finalOutput.totalAmount = undefined; 
       finalOutput.itemsSummary = undefined; 
     }
 
-
-    if (finalOutput.invoiceDate && !finalOutput.dueDate) {
-        const invDate = new Date(finalOutput.invoiceDate + 'T00:00:00Z');
+    // 4. Calculate Due Date from terms if not already parsed correctly
+    if (finalOutput.invoiceDate && !isValidDateString(finalOutput.dueDate)) {
+        const invDate = new Date(finalOutput.invoiceDate + 'T00:00:00Z'); // Ensure correct timezone handling
         if (input.description.match(/\b(Net ?30|due in 30 days)\b/i)) {
             invDate.setDate(invDate.getDate() + 30);
             finalOutput.dueDate = invDate.toISOString().split('T')[0];
@@ -164,31 +170,18 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
         }  else if (input.description.match(/\b(due end of month|due by EOM)\b/i)) {
             const lastDay = new Date(invDate.getFullYear(), invDate.getMonth() + 1, 0);
             finalOutput.dueDate = lastDay.toISOString().split('T')[0];
-        }
-    }
-    if (finalOutput.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(finalOutput.dueDate)) {
-        try {
-             const parsedDueDate = new Date(finalOutput.dueDate);
-             if (!isNaN(parsedDueDate.getTime()) && parsedDueDate.getFullYear() > 1970) {
-                finalOutput.dueDate = parsedDueDate.toISOString().split('T')[0];
-             } else {
-                console.warn(`AI returned dueDate '${finalOutput.dueDate}' which is not valid. Removing.`);
-                delete finalOutput.dueDate; 
-             }
-        } catch (e) {
-            console.warn(`Error parsing dueDate '${finalOutput.dueDate}' from AI. Removing. Error: ${e}`);
-            delete finalOutput.dueDate;
+        } else {
+           // If AI provided an invalid date string, clear it.
+           finalOutput.dueDate = undefined;
         }
     }
     
-    if (finalOutput.status === null || finalOutput.status === "") {
-        (finalOutput as any).status = undefined;
-    }
-    if (!finalOutput.status) {
+    // 5. Default status
+    if (finalOutput.status === null || finalOutput.status === "" || !finalOutput.status) {
         finalOutput.status = 'draft';
     }
 
-
     return finalOutput;
+    // END: Robust Post-Processing Logic
   }
 );
