@@ -110,48 +110,34 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
     let {output} = await prompt(input);
     
     let processedInvoiceDate = output.invoiceDate;
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date();
+    const todayISO = today.toISOString().split('T')[0];
 
-    // Enhanced date detection: look for specific keywords related to invoice date.
-    const invoiceDateKeywords = ['invoice date', 'invoice dated', 'dated on', 'date of invoice'];
-    let explicitInvoiceDateMentioned = false;
-    if (input.description) {
-        explicitInvoiceDateMentioned = invoiceDateKeywords.some(keyword => 
-            input.description.toLowerCase().includes(keyword)
-        );
+    // Check if the AI hallucinated the year when it wasn't specified in the input.
+    const yearRegex = /\b(19|20)\d{2}\b/;
+    const yearMentionedInInput = yearRegex.test(input.description);
+    const aiYear = output.invoiceDate ? parseInt(output.invoiceDate.substring(0, 4), 10) : null;
+    const currentYear = today.getFullYear();
+    
+    const isValidDateString = (dateStr: string | undefined): dateStr is string => !!dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr) && !isNaN(new Date(dateStr).getTime());
+
+    if (aiYear && aiYear !== currentYear && !yearMentionedInInput) {
+        // AI likely hallucinated a year (e.g., its training year '2024') when none was provided.
+        // Correct it to the current year.
+        try {
+            const dateWithCurrentYear = new Date(output.invoiceDate!);
+            dateWithCurrentYear.setFullYear(currentYear);
+            processedInvoiceDate = dateWithCurrentYear.toISOString().split('T')[0];
+        } catch(e) {
+            console.warn(`Could not correct year for invoiceDate '${output.invoiceDate}'. Defaulting to today.`);
+            processedInvoiceDate = todayISO;
+        }
+    } else if (!isValidDateString(processedInvoiceDate)) {
+        // If the date is invalid, a placeholder, or not provided, default to today.
+        console.warn(`AI returned invalid invoiceDate '${output.invoiceDate}' for input: "${input.description}". Defaulting to today: ${todayISO}.`);
+        processedInvoiceDate = todayISO;
     }
     
-    const dateMentionRegex = new RegExp(
-      '\\b(?:invoice dated |dated |on )?(\\d{1,2}(?:st|nd|rd|th)?(?: of)? (?:january|february|march|april|may|june|july|august|september|october|november|december)|' +
-      'jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.? (?:\\d{1,2}(?:st|nd|rd|th)?)?|' +
-      '\\d{4}-\\d{2}-\\d{2}|' +
-      '\\d{1,2}/\\d{1,2}/\\d{2,4}' + 
-      '\\b',
-      'i'
-    );
-    // Use more specific check if AI is providing a default/placeholder
-    const aiGavePlaceholderDate = output.invoiceDate === "YYYY-MM-DD" || output.invoiceDate === "current calendar date" || output.invoiceDate === today;
-
-    if (aiGavePlaceholderDate && !explicitInvoiceDateMentioned && !dateMentionRegex.test(input.description.toLowerCase())) {
-      processedInvoiceDate = today;
-    } else if (output.invoiceDate && !/^\d{4}-\d{2}-\d{2}$/.test(output.invoiceDate)) { // If AI provided date is not in YYYY-MM-DD
-      try {
-        const parsedDate = new Date(output.invoiceDate);
-        if (!isNaN(parsedDate.getTime()) && parsedDate.getFullYear() > 1970) { 
-          processedInvoiceDate = parsedDate.toISOString().split('T')[0];
-        } else {
-          console.warn(`AI returned invoiceDate '${output.invoiceDate}' which could not be reliably parsed to YYYY-MM-DD. Input: "${input.description}". Defaulting to today: ${today}.`);
-          processedInvoiceDate = today;
-        }
-      } catch (e) {
-        console.warn(`Error parsing invoiceDate '${output.invoiceDate}' from AI. Input: "${input.description}". Defaulting to today: ${today}. Error: ${e}`);
-        processedInvoiceDate = today;
-      }
-    } else if (!output.invoiceDate && !explicitInvoiceDateMentioned && !dateMentionRegex.test(input.description.toLowerCase())) {
-        processedInvoiceDate = today;
-    }
-
-
     let finalOutput = { ...output, invoiceDate: processedInvoiceDate };
 
     // Ensure all optional string fields that AI might return as "" or null are actually undefined if empty/null.

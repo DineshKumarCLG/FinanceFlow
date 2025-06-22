@@ -114,32 +114,34 @@ const parseAccountingEntryFlow = ai.defineFlow(
   },
   async input => {
     const {output} = await prompt(input);
+    
     let processedDate = output.date;
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date();
+    const todayISO = today.toISOString().split('T')[0];
 
-    const dateMentionRegex = new RegExp(
-      '\\b(' + // Start main capturing group
-        '(?:' + // Non-capturing group for all wordy date formats
-          '(?:' + // Non-capturing group for day-first or month-first
-            '(?:\\d{1,2}(?:st|nd|rd|th)?(?: of)? )?' + // Optional day with suffix and "of"
-            '(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)' + // Month names
-            '[a-z]*\\.?' + // Rest of month name e.g. . in Jan.
-            '(?: \\d{1,2}(?:st|nd|rd|th)?)?' + // Optional day at the end
-          ')' +
-        ')' +
-        '|\\d{4}-\\d{2}-\\d{2}' + // YYYY-MM-DD format
-        '|\\d{1,2}/\\d{1,2}/\\d{2,4}' + // D/M/Y format
-        '|yesterday|today|tomorrow|last week|next month' +
-      ')\\b', // End main capturing group
-      'i'
-    );
-    const noDateExplicitlyMentioned = !dateMentionRegex.test(input.entryText.toLowerCase());
+    // Check if the AI hallucinated the year when it wasn't specified in the input.
+    const yearRegex = /\b(19|20)\d{2}\b/;
+    const yearMentionedInInput = yearRegex.test(input.entryText);
+    const aiYear = output.date ? parseInt(output.date.substring(0, 4), 10) : null;
+    const currentYear = today.getFullYear();
+    
+    const isValidDateString = (dateStr: string) => /^\d{4}-\d{2}-\d{2}$/.test(dateStr) && !isNaN(new Date(dateStr).getTime());
 
-    if (output.date === "YYYY-MM-DD" || (noDateExplicitlyMentioned && output.date === "2024-01-01")) {
-      processedDate = today;
-    } else if (!/^\d{4}-\d{2}-\d{2}$/.test(output.date)) {
-      console.warn(`AI returned date '${output.date}' which is not in YYYY-MM-DD format or is an unexpected value. Input was: "${input.entryText}". Defaulting to today: ${today}.`);
-      processedDate = today;
+    if (aiYear && aiYear !== currentYear && !yearMentionedInInput) {
+        // AI likely hallucinated a year (e.g., its training year '2024') when none was provided.
+        // Correct it to the current year.
+        try {
+            const dateWithCurrentYear = new Date(output.date);
+            dateWithCurrentYear.setFullYear(currentYear);
+            processedDate = dateWithCurrentYear.toISOString().split('T')[0];
+        } catch(e) {
+            console.warn(`Could not correct year for date '${output.date}'. Defaulting to today.`);
+            processedDate = todayISO;
+        }
+    } else if (!processedDate || !isValidDateString(processedDate)) {
+        // If the date is invalid, a placeholder, or not provided, default to today.
+        console.warn(`AI returned invalid date '${output.date}' for input: "${input.entryText}". Defaulting to today: ${todayISO}.`);
+        processedDate = todayISO;
     }
     
     // Post-process to calculate CGST/SGST if gstType is 'cgst-sgst' and individual amounts are missing but total GST can be inferred
