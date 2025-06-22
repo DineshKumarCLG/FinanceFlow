@@ -54,41 +54,43 @@ export async function generateInvoiceDetails(input: GenerateInvoiceDetailsInput)
 
 const prompt = ai.definePrompt({
   name: 'generateInvoiceDetailsPrompt',
+  model: 'googleai/gemini-1.5-flash-latest', // Using a more capable model for this complex task.
   input: {schema: GenerateInvoiceDetailsInputSchema},
   output: {schema: GenerateInvoiceDetailsOutputSchema},
-  prompt: `You are a highly precise data extraction AI. Your task is to convert the following user-provided text into a structured JSON object. Every detail is important.
+  prompt: `You are a meticulous data extraction bot. Your one and only job is to parse the following user text and convert it into a structured JSON object.
 
-**USER TEXT:**
+**USER TEXT TO PARSE:**
 "{{{description}}}"
 
-**JSON FIELD MAPPING RULES:**
+**YOUR TASK: JSON FIELD MAPPING RULEBOOK**
+You must follow these rules precisely.
 
-- \`customerName\`: The name of the client being invoiced.
-- \`customerEmail\`: The primary billing email address for the customer (e.g., accounts@... or contact@...).
-- \`billingAddress\`: The customer's full billing address.
-- \`shippingAddress\`: The customer's full shipping address.
-- \`customerGstin\`: The customer's GSTIN.
+- **Customer Details**:
+  - \`customerName\`: Find the client's full name (e.g., "FutureTech Innovations Pvt Ltd.").
+  - \`customerEmail\`: Find the client's email address (e.g., "accounts@futuretech.in").
+  - \`billingAddress\`: Find the client's full billing address.
+  - \`shippingAddress\`: Find the client's full shipping address. If it's not mentioned, leave the field empty.
 
-- \`invoiceNumber\`: The unique invoice identifier.
-- \`invoiceDate\`: The date the invoice was issued (Format: YYYY-MM-DD). If no year is given, use the current year. If no date, use today.
-- \`dueDate\`: The payment due date (Format: YYYY-MM-DD). You MUST calculate this from \`invoiceDate\` if terms like "Net 15" or "due in 15 days" are present.
-- \`status\`: Default to 'draft'.
+- **Invoice Dates & Number**:
+  - \`invoiceNumber\`: Find the invoice number (e.g., "INV-2024-001").
+  - \`invoiceDate\`: Find the invoice date and format it as YYYY-MM-DD. If no year is mentioned, use the current year. If no date is mentioned, use today's date.
+  - \`dueDate\`: Find the payment due date and format it as YYYY-MM-DD. You MUST calculate this from the \`invoiceDate\` if terms like "Net 15" or "due in 15 days" are present.
 
 - **\`lineItems\` (CRITICAL):**
   - This MUST be an array of objects.
-  - Create one object for EACH distinct product/service.
-  - Each object needs \`description\`, \`quantity\`, and \`unitPrice\`.
-  - \`unitPrice\` should be a number; you MUST strip currency symbols like '₹' or '$'.
-  - If a global tax rate is mentioned (e.g., "GST @18%"), set the \`gstRate\` field for ALL line items to that number (e.g., 18).
+  - You MUST create one object for EACH distinct product or service mentioned (e.g., one for "software development", one for "cloud hosting licenses").
+  - Each object MUST have \`description\`, \`quantity\`, and \`unitPrice\`.
+  - You MUST strip currency symbols like '₹' or '$' from the \`unitPrice\`.
+  - If a global tax rate is mentioned (e.g., "GST @18%"), you MUST set the \`gstRate\` field for ALL line items to that number (e.g., 18).
 
-- \`paymentTerms\`: The full text of the payment terms, including any late fee policies.
-- **\`notes\` (CRITICAL CATCH-ALL):**
-  - This field MUST contain all of the following if present in the text:
+- **\`paymentTerms\` & \`notes\` (CRITICAL CATCH-ALL):**
+  - \`paymentTerms\`: The full text of the payment terms. For example: "Net 15 days from invoice date. Late payments will incur a 2% monthly interest."
+  - \`notes\`: This field MUST contain all of the following if they are present in the text:
     - **All Bank Details:** A/C No, IFSC, Bank Name, UPI IDs.
-    - **Project Details:** Project names or reference numbers.
-    - **Other Contacts:** Any query or secondary contact information.
+    - **Project Details:** Project names or reference numbers (e.g., "Project: Smart Inventory Dashboard Upgrade").
+    - **Other Contacts:** Any secondary contact information, such as "For queries, contact billing@acmesoftware.in."
 
-Now, generate the complete JSON object based on these rules. Do not omit any extractable information.
+Now, generate the complete JSON object based on these strict rules. Do not omit any extractable information.
 `,
 });
 
@@ -185,3 +187,5 @@ const generateInvoiceDetailsFlow = ai.defineFlow(
     // END: Robust Post-Processing Logic
   }
 );
+
+    
