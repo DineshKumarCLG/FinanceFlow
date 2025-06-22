@@ -68,7 +68,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <Sidebar collapsible="icon" className="hidden md:flex md:flex-col">
+      <Sidebar collapsible="icon" className="hidden md:flex">
         <SidebarContentLayout />
       </Sidebar>
       <SidebarInset>
