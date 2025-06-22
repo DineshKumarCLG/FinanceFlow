@@ -77,25 +77,55 @@ export default function DashboardPage() {
      }
 
     const currentLocale = typeof navigator !== 'undefined' ? (navigator.language || 'en-US') : 'en-US';
-    const dateRangeFrom = dateRange?.from || new Date(0);
-    const dateRangeTo = dateRange?.to || new Date();
 
-    const entriesInDateRange = journalEntriesData.filter(entry => {
+    // --- Part 1: Calculations for Summary Cards (Exact Date Range) ---
+    const summaryDateFrom = dateRange?.from || new Date(0);
+    const summaryDateTo = dateRange?.to || new Date();
+    
+    const summaryEntries = journalEntriesData.filter(entry => {
         if (!entry.date || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) return false;
         const [year, month, day] = entry.date.split('-').map(Number);
         const entryDate = new Date(Date.UTC(year, month - 1, day));
-        return entryDate >= dateRangeFrom && entryDate <= dateRangeTo;
+        return entryDate >= summaryDateFrom && entryDate <= summaryDateTo;
     });
 
-    let calculatedTotalRevenue = 0;
-    let calculatedTotalExpenses = 0;
+    let summaryTotalRevenue = 0;
+    let summaryTotalExpenses = 0;
+    
+    summaryEntries.forEach(entry => {
+      const isIncome = incomeKeywords.some(keyword => entry.creditAccount?.toLowerCase().includes(keyword));
+      const isExpense = expenseKeywords.some(keyword => entry.debitAccount?.toLowerCase().includes(keyword));
+      if (isIncome) summaryTotalRevenue += entry.amount;
+      if (isExpense) summaryTotalExpenses += entry.amount;
+    });
+
+    const summaryData = {
+        totalRevenue: summaryTotalRevenue,
+        totalExpenses: summaryTotalExpenses,
+        netProfit: summaryTotalRevenue - summaryTotalExpenses,
+        transactionCount: summaryEntries.length,
+    };
+
+    // --- Part 2: Calculations for Charts & Analytics (Full Month Range) ---
+    const chartDateFrom = dateRange?.from ? startOfMonth(dateRange.from) : new Date(0);
+    const chartDateTo = dateRange?.to ? endOfMonth(dateRange.to) : new Date();
+
+    const chartEntries = journalEntriesData.filter(entry => {
+        if (!entry.date || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) return false;
+        const [year, month, day] = entry.date.split('-').map(Number);
+        const entryDate = new Date(Date.UTC(year, month - 1, day));
+        return entryDate >= chartDateFrom && entryDate <= chartDateTo;
+    });
+    
+    let chartTotalRevenue = 0;
+    let chartTotalExpenses = 0;
     let incomeTransactionsCount = 0;
     let expenseTransactionsCount = 0;
-    
     const expensesByCategory: Record<string, number> = {};
     
     const monthlyAggregates: Record<string, { income: number; expense: number; monthLabel: string; yearMonth: string }> = {};
-    const monthsForCharts = eachMonthOfInterval({ start: dateRangeFrom, end: dateRangeTo });
+    const monthsForCharts = eachMonthOfInterval({ start: chartDateFrom, end: chartDateTo });
+
     monthsForCharts.forEach(d => {
         const yearMonthKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
         const monthLabel = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth())).toLocaleString(currentLocale, { month: 'short', year: '2-digit', timeZone: 'UTC' });
@@ -104,8 +134,7 @@ export default function DashboardPage() {
         }
     });
 
-    entriesInDateRange.forEach(entry => {
-      // Simplified and more robust classification logic
+    chartEntries.forEach(entry => {
       const isIncome = incomeKeywords.some(keyword => entry.creditAccount?.toLowerCase().includes(keyword));
       const isExpense = expenseKeywords.some(keyword => entry.debitAccount?.toLowerCase().includes(keyword));
       
@@ -113,31 +142,24 @@ export default function DashboardPage() {
       const yearMonthKey = `${entryYear}-${String(entryMonth).padStart(2, '0')}`;
       
       if (isIncome) {
-          calculatedTotalRevenue += entry.amount;
+          chartTotalRevenue += entry.amount;
           incomeTransactionsCount++;
           if (monthlyAggregates[yearMonthKey]) monthlyAggregates[yearMonthKey].income += entry.amount;
       }
       
       if (isExpense) {
-          calculatedTotalExpenses += entry.amount;
+          chartTotalExpenses += entry.amount;
           expenseTransactionsCount++;
           if (monthlyAggregates[yearMonthKey]) monthlyAggregates[yearMonthKey].expense += entry.amount;
           const category = entry.debitAccount || "Uncategorized";
           expensesByCategory[category] = (expensesByCategory[category] || 0) + entry.amount;
       }
     });
-
-    const summaryData = {
-        totalRevenue: calculatedTotalRevenue,
-        totalExpenses: calculatedTotalExpenses,
-        netProfit: calculatedTotalRevenue - calculatedTotalExpenses,
-        transactionCount: entriesInDateRange.length,
-    };
     
     const totalTransactions = incomeTransactionsCount + expenseTransactionsCount;
     const analyticsKpis = {
-      avgTransactionValue: totalTransactions > 0 ? (calculatedTotalRevenue + calculatedTotalExpenses) / totalTransactions : 0,
-      profitMargin: calculatedTotalRevenue > 0 ? ( (calculatedTotalRevenue - calculatedTotalExpenses) / calculatedTotalRevenue ) * 100 : 0,
+      avgTransactionValue: totalTransactions > 0 ? (chartTotalRevenue + chartTotalExpenses) / totalTransactions : 0,
+      profitMargin: chartTotalRevenue > 0 ? ( (chartTotalRevenue - chartTotalExpenses) / chartTotalRevenue ) * 100 : 0,
       incomeTransactions: incomeTransactionsCount,
       expenseTransactions: expenseTransactionsCount,
     };
