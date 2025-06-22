@@ -156,7 +156,9 @@ export function JournalTable({ entries = [], onEntryDeleted, companyId }: Journa
                               {entry.gstType === 'vat' && <p>VAT: {formatCurrencyDisplay(entry.vatAmount)}</p>}
                               <p>HSN/SAC: {entry.hsnSacCode || 'N/A'}</p>
                               <p>Party GSTIN: {entry.partyGstin || 'N/A'}</p>
-                              {entry.gstType !== 'vat' && <p>Inter-State: {entry.isInterState ? 'Yes' : 'No'}</p>}
+                              {entry.gstType !== 'vat' && entry.gstType !== 'none' && (
+                                <p>Inter-State: {entry.isInterState === undefined ? 'N/A' : entry.isInterState ? 'Yes' : 'No'}</p>
+                              )}
                             </TooltipContent>
                           </Tooltip>
                         ) : (

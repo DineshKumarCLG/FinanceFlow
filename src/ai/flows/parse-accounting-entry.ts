@@ -27,7 +27,7 @@ const ParseAccountingEntryOutputSchema = z.object({
   purpose: z.string().describe('The purpose of the transaction (e.g., office supplies, rent).'),
   debitAccount: z.string().describe('The debit account for the journal entry.'),
   creditAccount: z.string().describe('The credit account for the journal entry.'),
-  description: z.string().describe('A detailed description of the accounting entry.'),
+  description: z.string().describe('A detailed description of the accounting entry. Crucially, this must include the other party\'s name and their GSTIN if it is mentioned in the entryText.'),
 
   // GST Fields
   taxableAmount: z.number().optional().describe('The amount before tax. If not provided, assume it is the same as `amount` if no tax is specified, or calculate if tax details are present.'),
@@ -64,7 +64,7 @@ Extract the following:
 - Type of transaction (e.g., expense, income).
 - Purpose of the transaction.
 - Debit and Credit accounts.
-- Detailed description: The description should be comprehensive. For example, if the entry says 'Paid to ABC Corp (GSTIN:...)', the description should be 'Payment to ABC Corp (GSTIN:...)'. Do not omit the GSTIN from the description.
+- Detailed description: The description should be comprehensive. For example, if the entry says 'Paid to ABC Corp (GSTIN:...)', the description must be 'Payment to ABC Corp (GSTIN:...)'. Do not omit the GSTIN from the description.
 
 Tax Information (GST/VAT):
 - If GST/VAT is mentioned, determine the taxable amount (amount before tax). If total amount is given and GST rate, calculate taxable amount. If only total amount is given and no GST details, assume total amount is taxable amount and no GST.
@@ -73,7 +73,7 @@ Tax Information (GST/VAT):
 - Calculate IGST, CGST, SGST, or VAT amounts. For 'cgst-sgst', CGST and SGST are typically half of the total GST amount.
 - If it's Indian GST, determine if it's 'isInterState' (for IGST) or intra-state (for CGST/SGST).
 - Extract HSN/SAC code if mentioned.
-- Extract Party GSTIN: This is a crucial field. If a GSTIN is mentioned in the text (e.g., 'GSTIN: 29ABCDE1234F1Z5'), you MUST extract it into the 'partyGstin' field.
+- Extract Party GSTIN: This is a critical field. If a GSTIN is mentioned in the text (e.g., 'GSTIN: 29ABCDE1234F1Z5'), you MUST extract it into the 'partyGstin' field.
 
 **Date Handling Rules (Crucial):**
 1. If the entry text explicitly mentions a specific date (e.g., "on July 15th", "last Tuesday", "2023-10-20"), use that exact date.

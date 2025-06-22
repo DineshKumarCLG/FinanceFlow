@@ -23,7 +23,7 @@ export type ExtractAccountingDataInput = z.infer<typeof ExtractAccountingDataInp
 
 const AccountingEntrySchema = z.object({
   date: z.string().describe('The date of the transaction (YYYY-MM-DD).'),
-  description: z.string().describe('A description of the transaction.'),
+  description: z.string().describe('A description of the transaction. Crucially, this must include the other party\'s name and their GSTIN if it is visible on the document.'),
   debitAccount: z.string().describe('The account to debit.'),
   creditAccount: z.string().describe('The account to credit.'),
   amount: z.number().describe('The total amount of the transaction, including any taxes.'),
@@ -64,7 +64,7 @@ The document is provided as a data URI:
 For each transaction found, extract:
 - Date of transaction (YYYY-MM-DD).
 - Total transaction amount (including taxes).
-- A clear description of the transaction. This should include the other party's name if visible.
+- A clear description of the transaction. This should include the other party's name and GSTIN if visible. Do not summarize or omit the GSTIN from the description.
 - Appropriate Debit and Credit accounts.
 
 Tax Information (GST/VAT) to extract if present in the document:
