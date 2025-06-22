@@ -66,12 +66,19 @@ export function JournalTable({ entries = [], onEntryDeleted, companyId }: Journa
         description: "The journal entry has been successfully deleted.",
       });
       onEntryDeleted();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to delete entry:", error);
+      let errorMessage = "Could not delete the journal entry. Please try again.";
+      // Check for specific Firebase permission error codes or messages
+      if (error.code === 'permission-denied' || (error.message && error.message.toLowerCase().includes("permission"))) {
+        errorMessage = "Permission Denied. You may not have the rights to delete this journal entry. Please check with your company administrator.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
       toast({
         variant: "destructive",
         title: "Deletion Failed",
-        description: "Could not delete the journal entry. Please try again.",
+        description: errorMessage,
       });
     } finally {
       setIsDeleting(null);
