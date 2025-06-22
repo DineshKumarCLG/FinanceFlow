@@ -85,6 +85,16 @@ Tax Information (GST/VAT):
 - If it's Indian GST, determine if it's 'isInterState' (for IGST) or intra-state (for CGST/SGST).
 - Extract HSN/SAC code if mentioned.
 
+**Account Categorization Rules (Very Important):**
+- Your primary goal is to categorize transactions into standard, professional accounting accounts. Do not simply use the literal item name from the user's text as the account name.
+- **Analyze the item/service and map it to a logical, general accounting category.**
+- **Examples:**
+    - If the user says "Bought ESP32 sense", the Debit Account should be "Electronic Components" or "R&D Supplies", NOT "ESP32 sense".
+    - If the user says "Paid for Figma subscription", the Debit Account should be "Software & Subscriptions", NOT "Figma subscription".
+    - If the user says "Paid for office rent", the Debit Account should be "Rent Expense".
+    - If the user says "Bought a new laptop", the Debit Account should be "Computer Equipment" (as it's an asset), NOT "New Laptop".
+- Use your knowledge of accounting to select the most appropriate standard account. This is critical for generating clean and useful financial statements.
+
 **Account Rules (Crucial):**
 - For purchases or payments (e.g., 'paid', 'bought', 'spent'), if a payment source like 'bank', 'cash', or 'company account' is mentioned, it should be the **Credit Account**. The item/service received is the **Debit Account**.
 - For sales or income (e.g., 'received', 'sold', 'earned'), the payment destination ('bank', 'cash') is the **Debit Account**, and the service/product sold is the **Credit Account** (e.g., 'Service Revenue').
