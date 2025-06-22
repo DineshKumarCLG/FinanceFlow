@@ -12,9 +12,9 @@ import { TrendingUp, TrendingDown, DollarSign } from "lucide-react"; // Changed 
 // Define types for the props this component will now receive
 export interface AnalyticsKpiData {
   avgTransactionValue: number;
-  netCashFlow: number; // Changed from profitMargin
-  cashInTransactions: number; // Changed from incomeTransactions
-  cashOutTransactions: number; // Changed from expenseTransactions
+  netFlow: number; // Changed from profitMargin & netCashFlow to be consistent
+  inflowTransactions: number; // Changed from incomeTransactions
+  outflowTransactions: number; // Changed from expenseTransactions
 }
 
 export interface ExpenseCategoryData {
@@ -70,9 +70,9 @@ export function AnalyticsOverview({ kpis, expenseCategories, isLoading = false }
   
   const noDataAvailable = !isLoading && 
                          kpis.avgTransactionValue === 0 && 
-                         kpis.netCashFlow === 0 && 
-                         kpis.cashInTransactions === 0 && 
-                         kpis.cashOutTransactions === 0 && 
+                         kpis.netFlow === 0 && 
+                         kpis.inflowTransactions === 0 && 
+                         kpis.outflowTransactions === 0 && 
                          expenseCategories.length === 0;
 
 
@@ -99,19 +99,19 @@ export function AnalyticsOverview({ kpis, expenseCategories, isLoading = false }
           icon={TrendingUp}
         />
         <SummaryCard 
-          title="Net Cash Flow (Period)" 
-          value={kpis.netCashFlow} 
+          title="Net Flow (Period)" 
+          value={kpis.netFlow} 
           icon={DollarSign} 
         />
         <SummaryCard 
-          title="Cash In Transactions" 
-          value={kpis.cashInTransactions} 
+          title="Inflow Transactions" 
+          value={kpis.inflowTransactions} 
           icon={TrendingUp} 
           isCurrency={false} 
         />
         <SummaryCard 
-          title="Cash Out Transactions" 
-          value={kpis.cashOutTransactions} 
+          title="Outflow Transactions" 
+          value={kpis.outflowTransactions} 
           icon={TrendingDown} 
           isCurrency={false} 
         />
@@ -120,7 +120,7 @@ export function AnalyticsOverview({ kpis, expenseCategories, isLoading = false }
       <Card>
         <CardHeader>
           <CardTitle>Top Spending Categories</CardTitle>
-          <CardDescription>Based on all cash out transactions in the selected period.</CardDescription>
+          <CardDescription>Based on all spending transactions (cash and credit) in the selected period.</CardDescription>
         </CardHeader>
         <CardContent>
           {expenseCategories.length > 0 ? (
@@ -152,3 +152,5 @@ export function AnalyticsOverview({ kpis, expenseCategories, isLoading = false }
     </div>
   );
 }
+
+    

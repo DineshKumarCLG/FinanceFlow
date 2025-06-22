@@ -14,7 +14,7 @@ interface NetIncomeChartProps {
 
 const chartConfig = {
   value: { // Changed from netIncome to 'value'
-    label: "Net Cash Flow",
+    label: "Net Flow",
     color: "hsl(var(--chart-1))",
   },
 } satisfies ChartConfig;
@@ -43,8 +43,8 @@ export function NetIncomeChart({ data = [], isLoading = false }: NetIncomeChartP
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Cumulative Net Cash Flow</CardTitle>
-        <CardDescription>Cumulative cash in vs. cash out over the selected period.</CardDescription>
+        <CardTitle>Cumulative Net Flow</CardTitle>
+        <CardDescription>Cumulative inflow vs. outflow over the selected period.</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="h-[350px]">
@@ -75,7 +75,7 @@ export function NetIncomeChart({ data = [], isLoading = false }: NetIncomeChartP
                     />
                   }
                 />
-                <Area type="monotone" dataKey="value" name="Net Cash Flow" strokeWidth={2} stroke="var(--color-value)" fill="url(#cashFlowGradient)" />
+                <Area type="monotone" dataKey="value" name="Net Flow" strokeWidth={2} stroke="var(--color-value)" fill="url(#cashFlowGradient)" />
               </AreaChart>
             </ChartContainer>
           )}
@@ -84,3 +84,5 @@ export function NetIncomeChart({ data = [], isLoading = false }: NetIncomeChartP
     </Card>
   );
 }
+
+    

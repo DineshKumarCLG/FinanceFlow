@@ -13,11 +13,11 @@ interface CashFlowChartProps {
 
 const chartConfig = {
     income: {
-      label: "Income",
+      label: "Inflow",
       color: "hsl(var(--chart-1))",
     },
     expense: {
-      label: "Expense",
+      label: "Outflow",
       color: "hsl(var(--chart-4))",
     },
     net: {
@@ -48,8 +48,8 @@ export function CashFlowChart({ data = [], isLoading = false }: CashFlowChartPro
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Cash Flow</CardTitle>
-                <CardDescription>Monthly income vs. expenses.</CardDescription>
+                <CardTitle>Monthly Activity Flow</CardTitle>
+                <CardDescription>Monthly inflow (revenue) vs. outflow (spending).</CardDescription>
             </CardHeader>
             <CardContent>
                 <div className="h-[300px]">
@@ -57,7 +57,7 @@ export function CashFlowChart({ data = [], isLoading = false }: CashFlowChartPro
                         <Skeleton className="h-full w-full" />
                     ) : data.length === 0 ? (
                         <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-                            No cash flow data for this period.
+                            No activity data for this period.
                         </div>
                     ) : (
                         <ChartContainer config={chartConfig} className="w-full h-full">
@@ -91,5 +91,7 @@ export function CashFlowChart({ data = [], isLoading = false }: CashFlowChartPro
         </Card>
     );
 }
+
+    
 
     

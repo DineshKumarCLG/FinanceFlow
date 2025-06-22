@@ -26,7 +26,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Link from "next/link";
 
 
-// Cash Account Keywords are now more explicit to drive dashboard analytics.
+// --- Dashboard Data Logic Keywords ---
+// These keywords determine how transactions are categorized for the dashboard's "activity" view.
+export const incomeKeywords = ['revenue', 'sales', 'income', 'service fee', 'interest received', 'consulting income', 'project revenue', 'commission', 'dividend income', 'gain'];
 export const cashAccountKeywords = ['cash', 'bank', 'bank account', 'company account'];
 const ENTRIES_THRESHOLD_FOR_FILTERING = 50;
 
@@ -67,28 +69,26 @@ export default function DashboardPage() {
 
   const processedData = useMemo(() => {
     const defaultData = {
-      summaryData: { totalCashIn: 0, totalCashOut: 0, netCashFlow: 0, transactionCount: 0 },
-      cumulativeCashFlowData: [],
-      cashFlowChartData: [],
+      summaryData: { totalInflow: 0, totalOutflow: 0, netFlow: 0, transactionCount: 0 },
+      cumulativeFlowData: [],
+      monthlyFlowChartData: [],
       spendingBreakdownData: [],
-      analyticsKpis: { avgTransactionValue: 0, netCashFlow: 0, cashInTransactions: 0, cashOutTransactions: 0 },
+      analyticsKpis: { avgTransactionValue: 0, netFlow: 0, inflowTransactions: 0, outflowTransactions: 0 },
       analyticsExpenseCategories: [],
     };
     if (!journalEntriesData) return defaultData;
 
-    // A. Fix the Date Range Logic
+    // A. Determine the effective date range for filtering
     const isFilterActive = journalEntriesData.length >= ENTRIES_THRESHOLD_FOR_FILTERING;
     setIsFilterBypassed(!isFilterActive);
 
     let effectiveDateRange: { from: Date; to: Date };
     if (isFilterActive && dateRange?.from) {
-      // Use user-selected range if filter is active and a range is selected
       effectiveDateRange = {
         from: dateRange.from,
         to: dateRange.to || endOfMonth(new Date()),
       };
     } else {
-      // Otherwise (filter bypassed or no date selected), use all-time range from the data
       if (journalEntriesData && journalEntriesData.length > 0) {
         const allDates = journalEntriesData.map(e => parseISO(e.date));
         effectiveDateRange = {
@@ -96,7 +96,6 @@ export default function DashboardPage() {
           to: new Date(Math.max(...allDates.map(d => d.getTime()))),
         };
       } else {
-        // Default fallback if no entries exist
         effectiveDateRange = {
           from: startOfMonth(subMonths(new Date(), 5)),
           to: endOfMonth(new Date()),
@@ -106,70 +105,6 @@ export default function DashboardPage() {
     const { from: rangeStart, to: rangeEnd } = effectiveDateRange;
     const inclusiveEndDate = new Date(rangeEnd.getFullYear(), rangeEnd.getMonth(), rangeEnd.getDate(), 23, 59, 59);
 
-    // B. Calculate Cash-Based Metrics using the corrected date range
-    const allTimeCashMovements = journalEntriesData
-        .map(entry => {
-            if (!entry.date || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) return null;
-            const isCashIn = cashAccountKeywords.some(k => entry.debitAccount.toLowerCase().includes(k));
-            const isCashOut = cashAccountKeywords.some(k => entry.creditAccount.toLowerCase().includes(k));
-            if (!isCashIn && !isCashOut) return null;
-            try {
-                return { date: parseISO(entry.date), amount: isCashIn ? entry.amount : -entry.amount };
-            } catch (e) { return null; }
-        })
-        .filter((item): item is NonNullable<typeof item> => item !== null)
-        .sort((a, b) => a.date.getTime() - b.date.getTime());
-
-    const periodCashMovements = allTimeCashMovements.filter(m => m.date >= rangeStart && m.date <= inclusiveEndDate);
-
-    const summaryTotalCashIn = periodCashMovements.filter(m => m.amount > 0).reduce((sum, m) => sum + m.amount, 0);
-    const summaryTotalCashOut = periodCashMovements.filter(m => m.amount < 0).reduce((sum, m) => sum + Math.abs(m.amount), 0);
-    const summaryData = {
-        totalCashIn: summaryTotalCashIn,
-        totalCashOut: summaryTotalCashOut,
-        netCashFlow: summaryTotalCashIn - summaryTotalCashOut,
-        transactionCount: periodCashMovements.length,
-    };
-
-    const monthlyCash: Record<string, { income: number; expense: number; monthLabel: string; yearMonth: string }> = {};
-    const monthsInRange = eachMonthOfInterval({ start: rangeStart, end: inclusiveEndDate });
-    monthsInRange.forEach(d => {
-        const key = format(d, 'yyyy-MM');
-        monthlyCash[key] = { income: 0, expense: 0, monthLabel: format(d, 'MMM yy'), yearMonth: key };
-    });
-    periodCashMovements.forEach(m => {
-        const key = format(m.date, 'yyyy-MM');
-        if (monthlyCash[key]) {
-            if (m.amount > 0) monthlyCash[key].income += m.amount;
-            else monthlyCash[key].expense += Math.abs(m.amount);
-        }
-    });
-    const cashFlowChartData = Object.values(monthlyCash).sort((a,b) => a.yearMonth.localeCompare(b.yearMonth)).map(agg => ({
-        month: agg.monthLabel,
-        income: agg.income,
-        expense: agg.expense,
-        net: agg.income - agg.expense,
-    }));
-    
-    let cumulativeNetCash = 0;
-    const cumulativeDataPoints = allTimeCashMovements.map(m => {
-        cumulativeNetCash += m.amount;
-        return { monthDate: startOfMonth(m.date), value: cumulativeNetCash };
-    });
-    const cumulativeMonthlyCash: Record<string, { month: string; value: number }> = {};
-    cumulativeDataPoints.forEach(p => {
-        const key = format(p.monthDate, 'yyyy-MM');
-        cumulativeMonthlyCash[key] = { month: format(p.monthDate, 'MMM yy'), value: p.value };
-    });
-    const cumulativeCashFlowData = Object.entries(cumulativeMonthlyCash)
-        .map(([key, value]) => ({ key, ...value }))
-        .sort((a, b) => a.key.localeCompare(b.key))
-        .filter(item => {
-            const itemDate = parseISO(item.key + '-01');
-            return itemDate >= startOfMonth(rangeStart) && itemDate <= endOfMonth(inclusiveEndDate);
-        });
-
-    // C. Calculate Spending-Based Metrics (including non-cash/credit purchases)
     const entriesInPeriod = journalEntriesData.filter(entry => {
         try {
             const entryDate = parseISO(entry.date);
@@ -177,25 +112,122 @@ export default function DashboardPage() {
         } catch (e) { return false; }
     });
 
+    // B. Process entries in the selected period to calculate dashboard metrics
+    let totalInflow = 0;
+    let totalOutflow = 0;
+    const monthlyFlows: Record<string, { income: number; expense: number; monthLabel: string; yearMonth: string }> = {};
     const spendingByCategory: Record<string, number> = {};
+    const movementsInPeriod: {date: Date, amount: number}[] = [];
+
+    const monthsInRange = eachMonthOfInterval({ start: rangeStart, end: inclusiveEndDate });
+    monthsInRange.forEach(d => {
+        const key = format(d, 'yyyy-MM');
+        monthlyFlows[key] = { income: 0, expense: 0, monthLabel: format(d, 'MMM yy'), yearMonth: key };
+    });
+
     entriesInPeriod.forEach(entry => {
-        // A "spending" transaction is a debit to any account that is not a cash-equivalent account.
-        if (entry.debitAccount && !cashAccountKeywords.some(k => entry.debitAccount.toLowerCase().includes(k))) {
+        const lowerDebit = entry.debitAccount.toLowerCase();
+        const lowerCredit = entry.creditAccount.toLowerCase();
+
+        // Skip internal cash transfers (e.g., Cash -> Bank)
+        const isCashTransfer = cashAccountKeywords.some(k => lowerDebit.includes(k)) && cashAccountKeywords.some(k => lowerCredit.includes(k));
+        if (isCashTransfer) return;
+
+        const movementDate = parseISO(entry.date);
+        
+        // Check for inflow (revenue/income)
+        if (incomeKeywords.some(k => lowerCredit.includes(k))) {
+            totalInflow += entry.amount;
+            movementsInPeriod.push({ date: movementDate, amount: entry.amount });
+            const key = format(movementDate, 'yyyy-MM');
+            if (monthlyFlows[key]) monthlyFlows[key].income += entry.amount;
+        } 
+        // Check for outflow (any debit to a non-cash account is considered spending)
+        else if (!cashAccountKeywords.some(k => lowerDebit.includes(k))) {
+            totalOutflow += entry.amount;
+            movementsInPeriod.push({ date: movementDate, amount: -entry.amount });
             spendingByCategory[entry.debitAccount] = (spendingByCategory[entry.debitAccount] || 0) + entry.amount;
+            const key = format(movementDate, 'yyyy-MM');
+            if (monthlyFlows[key]) monthlyFlows[key].expense += entry.amount;
+        }
+        // Fallback for simple cash payments not otherwise categorized
+        else if (cashAccountKeywords.some(k => lowerCredit.includes(k))) {
+            totalOutflow += entry.amount;
+            movementsInPeriod.push({ date: movementDate, amount: -entry.amount });
+            spendingByCategory[entry.debitAccount] = (spendingByCategory[entry.debitAccount] || 0) + entry.amount;
+            const key = format(movementDate, 'yyyy-MM');
+            if (monthlyFlows[key]) monthlyFlows[key].expense += entry.amount;
         }
     });
-    const spendingBreakdownData = Object.entries(spendingByCategory).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total);
+
+    const summaryData = {
+      totalInflow,
+      totalOutflow,
+      netFlow: totalInflow - totalOutflow,
+      transactionCount: movementsInPeriod.length,
+    };
     
+    const monthlyFlowChartData = Object.values(monthlyFlows).sort((a,b) => a.yearMonth.localeCompare(b.yearMonth)).map(agg => ({
+        month: agg.monthLabel,
+        income: agg.income,
+        expense: agg.expense,
+        net: agg.income - agg.expense,
+    }));
+
+    const spendingBreakdownData = Object.entries(spendingByCategory).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total);
+
+    // C. Process ALL historical entries for the cumulative chart
+    let cumulativeNet = 0;
+    const allMovementsSorted = journalEntriesData.map(entry => {
+        const lowerDebit = entry.debitAccount.toLowerCase();
+        const lowerCredit = entry.creditAccount.toLowerCase();
+        const isCashTransfer = cashAccountKeywords.some(k => lowerDebit.includes(k)) && cashAccountKeywords.some(k => lowerCredit.includes(k));
+        if (isCashTransfer) return null;
+
+        let amount = 0;
+        if (incomeKeywords.some(k => lowerCredit.includes(k))) {
+            amount = entry.amount;
+        } else if (!cashAccountKeywords.some(k => lowerDebit.includes(k))) {
+            amount = -entry.amount;
+        } else if (cashAccountKeywords.some(k => lowerCredit.includes(k))) {
+            amount = -entry.amount;
+        }
+        
+        if (amount === 0) return null;
+        try { return { date: parseISO(entry.date), amount }; } catch(e) { return null; }
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null)
+    .sort((a,b) => a.date.getTime() - b.date.getTime());
+
+    const cumulativeDataPoints = allMovementsSorted.map(m => {
+        cumulativeNet += m.amount;
+        return { monthDate: startOfMonth(m.date), value: cumulativeNet };
+    });
+
+    const cumulativeMonthlyFlows: Record<string, { month: string; value: number }> = {};
+    cumulativeDataPoints.forEach(p => {
+        const key = format(p.monthDate, 'yyyy-MM');
+        cumulativeMonthlyFlows[key] = { month: format(p.monthDate, 'MMM yy'), value: p.value };
+    });
+
+    const cumulativeFlowData = Object.entries(cumulativeMonthlyFlows)
+        .map(([key, value]) => ({ key, ...value }))
+        .sort((a, b) => a.key.localeCompare(b.key))
+        .filter(item => {
+            const itemDate = parseISO(item.key + '-01');
+            return itemDate >= startOfMonth(rangeStart) && itemDate <= endOfMonth(inclusiveEndDate);
+        });
+
     // D. Finalize Analytics KPIs
     const analyticsKpis = {
-        avgTransactionValue: periodCashMovements.length > 0 ? periodCashMovements.reduce((sum, m) => sum + Math.abs(m.amount), 0) / periodCashMovements.length : 0,
-        netCashFlow: summaryData.netCashFlow,
-        cashInTransactions: periodCashMovements.filter(m => m.amount > 0).length,
-        cashOutTransactions: periodCashMovements.filter(m => m.amount < 0).length,
+        avgTransactionValue: movementsInPeriod.length > 0 ? movementsInPeriod.reduce((sum, m) => sum + Math.abs(m.amount), 0) / movementsInPeriod.length : 0,
+        netFlow: summaryData.netFlow,
+        inflowTransactions: movementsInPeriod.filter(m => m.amount > 0).length,
+        outflowTransactions: movementsInPeriod.filter(m => m.amount < 0).length,
     };
     const analyticsExpenseCategories = spendingBreakdownData.slice(0, 7);
 
-    return { summaryData, cumulativeCashFlowData, cashFlowChartData, spendingBreakdownData, analyticsKpis, analyticsExpenseCategories };
+    return { summaryData, cumulativeFlowData, monthlyFlowChartData, spendingBreakdownData, analyticsKpis, analyticsExpenseCategories };
   }, [journalEntriesData, dateRange]);
 
 
@@ -269,10 +301,10 @@ export default function DashboardPage() {
        )}
 
        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <SummaryCard title="Total Cash In" value={processedData.summaryData.totalCashIn} icon={TrendingUp} />
-        <SummaryCard title="Total Cash Out" value={processedData.summaryData.totalCashOut} icon={TrendingDown} />
-        <SummaryCard title="Net Cash Flow" value={processedData.summaryData.netCashFlow} icon={DollarSign} />
-        <SummaryCard title="Cash Transactions" value={processedData.summaryData.transactionCount} icon={Activity} isCurrency={false} />
+        <SummaryCard title="Total Inflow (Revenue)" value={processedData.summaryData.totalInflow} icon={TrendingUp} />
+        <SummaryCard title="Total Outflow (Spending)" value={processedData.summaryData.totalOutflow} icon={TrendingDown} />
+        <SummaryCard title="Net Flow" value={processedData.summaryData.netFlow} icon={DollarSign} />
+        <SummaryCard title="Total Transactions" value={processedData.summaryData.transactionCount} icon={Activity} isCurrency={false} />
       </div>
 
        <Tabs defaultValue="overview" className="w-full">
@@ -292,12 +324,12 @@ export default function DashboardPage() {
             </div>
           ) : (
             <>
-              <NetIncomeChart data={processedData.cumulativeCashFlowData} isLoading={isLoadingJournalEntries} />
+              <NetIncomeChart data={processedData.cumulativeFlowData} isLoading={isLoadingJournalEntries} />
               <div className="grid gap-6 md:grid-cols-2">
-                  <CashFlowChart data={processedData.cashFlowChartData} isLoading={isLoadingJournalEntries} />
+                  <CashFlowChart data={processedData.monthlyFlowChartData} isLoading={isLoadingJournalEntries} />
                   <ExpensesPieChart data={processedData.spendingBreakdownData} isLoading={isLoadingJournalEntries} />
               </div>
-              <AnalyticsOverview kpis={processedData.analyticsKpis} expenseCategories={processedData.analyticsExpenseCategories} isLoading={isLoadingJournalEntries} />
+              <AnalyticsOverview kpis={{...processedData.analyticsKpis, netCashFlow: processedData.summaryData.netFlow}} expenseCategories={processedData.analyticsExpenseCategories} isLoading={isLoadingJournalEntries} />
             </>
           )}
         </TabsContent>
@@ -308,3 +340,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
