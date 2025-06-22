@@ -59,7 +59,8 @@ const prompt = ai.definePrompt({
   name: 'generateInvoiceDetailsPrompt',
   input: {schema: GenerateInvoiceDetailsInputSchema},
   output: {schema: GenerateInvoiceDetailsOutputSchema},
-  prompt: `You are an expert assistant that helps create invoices from textual descriptions.
+  prompt: `You are an expert assistant that helps create invoices from textual descriptions. Your goal is to be extremely thorough and extract every piece of information provided in the user's text to populate the invoice fields. Do not miss any details.
+
 Given the following invoice description:
 "{{{description}}}"
 
@@ -76,11 +77,15 @@ Extract the following information:
 - Line Items: If the description contains clear itemization, extract each as a structured line item.
 - Items Summary: Use this only as a fallback if line items cannot be extracted.
 - Total Amount: Only if explicitly stated and line items cannot be broken down.
-- Notes: Any other relevant notes for the invoice.
+- Notes: Any other relevant notes for the invoice. This includes project names, reference numbers, or any other context provided.
 - Status: Default to 'draft' unless specified otherwise.
 
+**Tax Handling Rules (Important):**
+- If a global tax rate (e.g., "GST: 18%", "VAT at 20%") is mentioned for the entire invoice, you MUST apply this rate to the 'gstRate' field of *every single line item* unless a line item has its own specific rate mentioned.
+- Do not ignore tax information provided in the text.
+
 **Date Handling Rules (Crucial):**
-1. For Invoice Date: If the description explicitly mentions a specific date for the invoice itself (e.g., "invoice dated July 20th"), use that exact date.
+1. For Invoice Date: If the description explicitly mentions a specific date for the invoice itself (e.g., "invoice dated July 20th, 2025"), use that exact date.
 2. **If a year is not specified in the description (e.g., "invoice dated July 20th"), assume the current calendar year.**
 3. If no specific invoice date is mentioned at all, you MUST use the *current calendar date* (the date this request is being processed) as the invoiceDate.
 4. For Due Date: Calculate based on terms from the invoice date. If "Net 30" or "due in 30 days", add 30 days to invoiceDate. If "due end of month", set to the last day of the invoiceDate's month. If no terms, suggest a 30-day due date or leave blank if uncertain.
