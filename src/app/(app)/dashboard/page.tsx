@@ -128,7 +128,7 @@ export default function DashboardPage() {
     });
 
     const monthsForCharts = eachMonthOfInterval({ start: chartDateFrom, end: chartDateTo });
-    const expensesByCategory: Record<string, number> = {};
+    const spendingByCategory: Record<string, number> = {};
     const monthlyPnL: Record<string, { income: number; expense: number; monthLabel: string; yearMonth: string }> = {};
     const monthlyCash: Record<string, { income: number; expense: number; monthLabel: string; yearMonth: string }> = {};
 
@@ -144,15 +144,13 @@ export default function DashboardPage() {
     chartEntries.forEach(entry => {
         const key = entry.date.substring(0, 7); // YYYY-MM
 
-        // P&L Logic for Net Income & Expense Pie charts
+        // P&L Logic for Net Income
         if (monthlyPnL[key]) {
             if (incomeKeywords.some(k => entry.creditAccount?.toLowerCase().includes(k))) {
                 monthlyPnL[key].income += entry.amount;
             }
             if (expenseKeywords.some(k => entry.debitAccount?.toLowerCase().includes(k))) {
                 monthlyPnL[key].expense += entry.amount;
-                const category = entry.debitAccount || "Uncategorized";
-                expensesByCategory[category] = (expensesByCategory[category] || 0) + entry.amount;
             }
         }
 
@@ -164,6 +162,13 @@ export default function DashboardPage() {
             if (cashAccountKeywords.some(k => entry.creditAccount.toLowerCase().includes(k))) {
                 monthlyCash[key].expense += entry.amount; // Cash Out
             }
+        }
+        
+        // Spending Breakdown Logic for Pie Chart
+        // This captures ALL cash outflows, not just P&L expenses
+        if (cashAccountKeywords.some(k => entry.creditAccount.toLowerCase().includes(k))) {
+            const category = entry.debitAccount || "Uncategorized";
+            spendingByCategory[category] = (spendingByCategory[category] || 0) + entry.amount;
         }
     });
 
@@ -179,7 +184,7 @@ export default function DashboardPage() {
       incomeTransactions: pnlIncomeTransactions,
       expenseTransactions: pnlExpenseTransactions,
     };
-    const analyticsExpenseCategories = Object.entries(expensesByCategory).map(([name, total]) => ({name, total})).sort((a,b) => b.total - a.total).slice(0, 7);
+    const analyticsExpenseCategories = Object.entries(spendingByCategory).map(([name, total]) => ({name, total})).sort((a,b) => b.total - a.total).slice(0, 7);
 
     // Build Net Income Chart data from P&L
     let cumulativeNetIncome = 0;
@@ -196,14 +201,14 @@ export default function DashboardPage() {
         net: agg.income - agg.expense,
     }));
 
-    // Build Expenses Pie Chart from P&L expenses
-    const expensesPieChartData = Object.entries(expensesByCategory).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total);
+    // Build Spending Pie Chart data from all cash spending
+    const spendingPieChartData = Object.entries(spendingByCategory).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total);
 
     return {
         summaryData,
         netIncomeChartData: netIncomeForChart,
         cashFlowChartData: cashFlowForChart,
-        expensesPieChartData,
+        expensesPieChartData: spendingPieChartData, // Changed data source
         analyticsKpis,
         analyticsExpenseCategories
     };

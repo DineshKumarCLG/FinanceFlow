@@ -36,7 +36,7 @@ const CustomLegend = (props: any) => {
     }
     
     if (!payload || payload.length === 0) {
-        return <div className="text-sm text-muted-foreground">No expense categories to show.</div>;
+        return <div className="text-sm text-muted-foreground">No spending categories to show.</div>;
     }
 
     return (
@@ -81,14 +81,14 @@ export function ExpensesPieChart({ data = [], isLoading = false }: ExpensesPieCh
         return new Intl.NumberFormat(clientLocale, { style: 'currency', currency: 'INR' }).format(value);
     }
 
-    const totalExpenses = data.reduce((sum, item) => sum + item.total, 0);
+    const totalSpending = data.reduce((sum, item) => sum + item.total, 0);
 
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Expenses Breakdown</CardTitle>
+                <CardTitle>Spending Breakdown</CardTitle>
                 <CardDescription>
-                    Total Expenses: {formatCurrencyTooltip(totalExpenses)}
+                    Total Spending: {formatCurrencyTooltip(totalSpending)}
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -97,7 +97,7 @@ export function ExpensesPieChart({ data = [], isLoading = false }: ExpensesPieCh
                          <Skeleton className="h-full w-full" />
                     ) : data.length === 0 ? (
                          <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-                            No expense data for this period.
+                            No spending data for this period.
                         </div>
                     ) : (
                         <ChartContainer config={chartConfig} className="w-full h-full">
@@ -144,5 +144,3 @@ export function ExpensesPieChart({ data = [], isLoading = false }: ExpensesPieCh
         </Card>
     )
 }
-
-    

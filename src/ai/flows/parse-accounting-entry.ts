@@ -85,6 +85,11 @@ Tax Information (GST/VAT):
 - If it's Indian GST, determine if it's 'isInterState' (for IGST) or intra-state (for CGST/SGST).
 - Extract HSN/SAC code if mentioned.
 
+**Account Rules (Crucial):**
+- For purchases or payments (e.g., 'paid', 'bought', 'spent'), if a payment source like 'bank', 'cash', or 'company account' is mentioned, it should be the **Credit Account**. The item/service received is the **Debit Account**.
+- For sales or income (e.g., 'received', 'sold', 'earned'), the payment destination ('bank', 'cash') is the **Debit Account**, and the service/product sold is the **Credit Account** (e.g., 'Service Revenue').
+- If no payment method is specified for a purchase, assume the credit account is 'Accounts Payable'. If no destination is specified for income, assume the debit account is 'Accounts Receivable'.
+
 **CRITICAL INSTRUCTION: Party GSTIN**
 - You MUST identify if a Goods and Services Tax Identification Number (GSTIN) is present in the input text.
 - If a GSTIN is found (e.g., 'GSTIN: 29ABCDE1234F1Z5'), you MUST extract it and place it in the 'partyGstin' field of the JSON output.
