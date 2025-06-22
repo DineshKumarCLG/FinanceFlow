@@ -64,7 +64,7 @@ Extract the following:
 - Type of transaction (e.g., expense, income).
 - Purpose of the transaction.
 - Debit and Credit accounts.
-- Detailed description: The description should be comprehensive. For example, if the entry says 'Paid to ABC Corp (GSTIN:...)', the description must be 'Payment to ABC Corp (GSTIN:...)'. Do not omit the GSTIN from the description.
+- Detailed description: The description should be comprehensive and include the party's name.
 
 Tax Information (GST/VAT):
 - If GST/VAT is mentioned, determine the taxable amount (amount before tax). If total amount is given and GST rate, calculate taxable amount. If only total amount is given and no GST details, assume total amount is taxable amount and no GST.
@@ -73,7 +73,12 @@ Tax Information (GST/VAT):
 - Calculate IGST, CGST, SGST, or VAT amounts. For 'cgst-sgst', CGST and SGST are typically half of the total GST amount.
 - If it's Indian GST, determine if it's 'isInterState' (for IGST) or intra-state (for CGST/SGST).
 - Extract HSN/SAC code if mentioned.
-- Extract Party GSTIN: This is a critical field. If a GSTIN is mentioned in the text (e.g., 'GSTIN: 29ABCDE1234F1Z5'), you MUST extract it into the 'partyGstin' field.
+
+**CRITICAL INSTRUCTION: Party GSTIN**
+- You MUST identify if a Goods and Services Tax Identification Number (GSTIN) is present in the input text.
+- If a GSTIN is found (e.g., 'GSTIN: 29ABCDE1234F1Z5'), you MUST extract it and place it in the 'partyGstin' field of the JSON output.
+- You MUST also ensure the party's name and their GSTIN are included in the 'description' field for user visibility.
+- Example: For input 'Paid to ABC Corp (GSTIN:...)', the output 'description' should be 'Payment to ABC Corp (GSTIN:...)' AND the 'partyGstin' field must be '...'.
 
 **Date Handling Rules (Crucial):**
 1. If the entry text explicitly mentions a specific date (e.g., "on July 15th", "last Tuesday", "2023-10-20"), use that exact date.
@@ -83,27 +88,7 @@ Tax Information (GST/VAT):
 5. **Do NOT default to a generic past date like "2024-01-01" or the literal string "YYYY-MM-DD" for the date field unless that specific date is explicitly mentioned in the input.**
 
 Ensure that the output is a valid JSON object conforming to the ParseAccountingEntryOutputSchema.
-
-Example of expected output format (replace values as appropriate):
-Output: {
-  "date": "YYYY-MM-DD", // Today's date if not specified in input
-  "amount": 2360.00, // Total amount
-  "type": "expense",
-  "purpose": "office supplies",
-  "debitAccount": "Office Supplies Expense",
-  "creditAccount": "Cash",
-  "description": "Paid for office supplies with 18% GST to XYZ Corp (GSTIN: 29ABCDE1234F1Z5)",
-  "taxableAmount": 2000.00,
-  "gstType": "cgst-sgst", // or "igst" or "vat" or "none"
-  "gstRate": 18,
-  "cgstAmount": 180.00, // if gstType is 'cgst-sgst'
-  "sgstAmount": 180.00, // if gstType is 'cgst-sgst'
-  // "igstAmount": 360.00, // if gstType is 'igst'
-  // "vatAmount": 360.00, // if gstType is 'vat'
-  "hsnSacCode": "998313", // optional
-  "partyGstin": "29ABCDE1234F1Z5", // optional
-  "isInterState": false // optional, relevant for India
-}`,
+`,
 });
 
 const parseAccountingEntryFlow = ai.defineFlow(
