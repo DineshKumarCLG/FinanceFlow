@@ -75,7 +75,13 @@ export function InvoiceList({ invoices = [], companyId, onInvoiceDeleted }: Invo
       onInvoiceDeleted?.();
     } catch (error: any) {
       console.error("Failed to delete invoice:", error);
-      toast({ variant: "destructive", title: "Deletion Failed", description: error.message || "Could not delete the invoice." });
+      let errorMessage = "Could not delete the invoice. Please try again.";
+      if (error.message && error.message.toLowerCase().includes("permission")) {
+        errorMessage = "Permission denied. You may not have the rights to delete this invoice.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      toast({ variant: "destructive", title: "Deletion Failed", description: errorMessage });
     } finally {
       setIsDeleting(null);
     }

@@ -343,7 +343,17 @@ export function InvoiceForm({ mode = 'create', initialInvoiceData }: InvoiceForm
       form.reset(defaultFormValues);
       router.push('/invoices');
     } catch (e: any) {
-      toast({ variant: "destructive", title: "Saving Error", description: e.message || "Could not save the invoice." });
+      let errorMessage = "Could not save the invoice. Please try again.";
+      if (e.message && e.message.toLowerCase().includes("permission")) {
+        errorMessage = `Permission denied. Ensure you have the rights to ${mode === 'create' ? 'create an invoice for' : 'update this invoice in'} company '${currentCompanyId}'. Please check your access rights.`;
+      } else if (e.message) {
+        errorMessage = e.message;
+      }
+      toast({
+        variant: "destructive",
+        title: mode === 'create' ? "Invoice Creation Failed" : "Invoice Update Failed",
+        description: errorMessage,
+      });
     } finally {
       setIsSaving(false);
     }
