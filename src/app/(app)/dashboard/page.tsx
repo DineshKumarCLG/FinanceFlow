@@ -26,8 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Link from "next/link";
 
 
-export const incomeKeywords = ['revenue', 'sales', 'income', 'service fee', 'interest received', 'consulting income', 'project revenue', 'deposit', 'commission', 'dividend'];
-export const expenseKeywords = ['expense', 'cost', 'supply', 'rent', 'salary', 'utility', 'utilities', 'purchase', 'advertising', 'maintenance', 'insurance', 'interest paid', 'fee', 'software', 'development', 'services', 'consulting', 'contractor', 'design', 'travel', 'subscription', 'depreciation', 'amortization', 'office supplies', 'postage', 'printing', 'repairs', 'cogs', 'cost of goods sold'];
+// Cash Account Keywords are now the primary driver for dashboard analytics
 export const cashAccountKeywords = ['cash', 'bank', 'company account'];
 
 
@@ -48,7 +47,7 @@ export default function DashboardPage() {
     queryKey: ['journalEntries', currentCompanyId],
     queryFn: () => getJournalEntries(currentCompanyId!),
     enabled: !!currentUser && !!currentCompanyId,
-    refetchInterval: 60000, // Refetch journal entries every 60 seconds to see updates
+    refetchInterval: 60000, 
   });
 
   // Fetch notifications
@@ -56,7 +55,7 @@ export default function DashboardPage() {
     queryKey: ['notifications', currentCompanyId],
     queryFn: () => getNotifications(currentCompanyId!),
     enabled: !!currentUser && !!currentCompanyId,
-    refetchInterval: 60000, // Refetch notifications every 60 seconds
+    refetchInterval: 60000, 
   });
 
   useEffect(() => {
@@ -67,56 +66,51 @@ export default function DashboardPage() {
 
   const processedData = useMemo(() => {
     if (!journalEntriesData) {
+      // Return default structure if no data
       return {
-        summaryData: { totalRevenue: 0, totalExpenses: 0, netProfit: 0, transactionCount: 0, burnRate: 0 },
-        netIncomeChartData: [],
+        summaryData: { totalCashIn: 0, totalCashOut: 0, netCashFlow: 0, transactionCount: 0 },
+        cumulativeCashFlowData: [],
         cashFlowChartData: [],
-        expensesPieChartData: [],
-        analyticsKpis: { avgTransactionValue: 0, profitMargin: 0, incomeTransactions: 0, expenseTransactions: 0 },
+        spendingBreakdownData: [],
+        analyticsKpis: { avgTransactionValue: 0, netCashFlow: 0, cashInTransactions: 0, cashOutTransactions: 0 },
         analyticsExpenseCategories: [],
       };
     }
 
     const currentLocale = typeof navigator !== 'undefined' ? (navigator.language || 'en-US') : 'en-US';
-
-    // --- Part 1: Calculations for Summary Cards (Exact Date Range) ---
-    const summaryDateFrom = dateRange?.from || new Date(0);
-    const summaryDateTo = dateRange?.to || new Date();
     
-    const summaryEntries = journalEntriesData.filter(entry => {
+    // --- Part 1: Filter entries based on the date range picker ---
+    const dateRangeFrom = dateRange?.from || new Date(0);
+    const dateRangeTo = dateRange?.to || new Date();
+    
+    const entriesInDateRange = journalEntriesData.filter(entry => {
         if (!entry.date || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) return false;
         const [year, month, day] = entry.date.split('-').map(Number);
         const entryDate = new Date(Date.UTC(year, month - 1, day));
-        return entryDate >= summaryDateFrom && entryDate <= summaryDateTo;
+        return entryDate >= dateRangeFrom && entryDate <= dateRangeTo;
     });
 
-    let summaryTotalRevenue = 0;    // P&L
-    let summaryTotalExpenses = 0;   // P&L
-    let summaryCashOut = 0;         // Cash Flow
+    // --- Part 2: Calculate summary data based on cash movements ---
+    let summaryTotalCashIn = 0;
+    let summaryTotalCashOut = 0;
 
-    summaryEntries.forEach(entry => {
-      // P&L Calculation
-      if (incomeKeywords.some(k => entry.creditAccount?.toLowerCase().includes(k))) {
-        summaryTotalRevenue += entry.amount;
+    entriesInDateRange.forEach(entry => {
+      if (cashAccountKeywords.some(k => entry.debitAccount.toLowerCase().includes(k))) {
+        summaryTotalCashIn += entry.amount;
       }
-      if (expenseKeywords.some(k => entry.debitAccount?.toLowerCase().includes(k))) {
-        summaryTotalExpenses += entry.amount;
-      }
-      // Cash Flow Calculation
       if (cashAccountKeywords.some(k => entry.creditAccount.toLowerCase().includes(k))) {
-        summaryCashOut += entry.amount;
+        summaryTotalCashOut += entry.amount;
       }
     });
 
     const summaryData = {
-        totalRevenue: summaryTotalRevenue,
-        totalExpenses: summaryTotalExpenses, // This is P&L expenses for Net Profit calculation
-        netProfit: summaryTotalRevenue - summaryTotalExpenses,
-        transactionCount: summaryEntries.length,
-        burnRate: summaryCashOut, // This is for the "Burn Rate" summary card
+        totalCashIn: summaryTotalCashIn,
+        totalCashOut: summaryTotalCashOut,
+        netCashFlow: summaryTotalCashIn - summaryTotalCashOut,
+        transactionCount: entriesInDateRange.length,
     };
 
-    // --- Part 2: Calculations for Charts & Analytics (Full Month Range) ---
+    // --- Part 3: Calculate data for charts (spanning full months of selection) ---
     const chartDateFrom = dateRange?.from ? startOfMonth(dateRange.from) : new Date(0);
     const chartDateTo = dateRange?.to ? endOfMonth(dateRange.to) : new Date();
 
@@ -129,86 +123,69 @@ export default function DashboardPage() {
 
     const monthsForCharts = eachMonthOfInterval({ start: chartDateFrom, end: chartDateTo });
     const spendingByCategory: Record<string, number> = {};
-    const monthlyPnL: Record<string, { income: number; expense: number; monthLabel: string; yearMonth: string }> = {};
     const monthlyCash: Record<string, { income: number; expense: number; monthLabel: string; yearMonth: string }> = {};
 
-    // Initialize monthly aggregates
     monthsForCharts.forEach(d => {
         const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
         const label = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth())).toLocaleString(currentLocale, { month: 'short', year: '2-digit', timeZone: 'UTC' });
-        if (!monthlyPnL[key]) monthlyPnL[key] = { income: 0, expense: 0, monthLabel: label, yearMonth: key };
         if (!monthlyCash[key]) monthlyCash[key] = { income: 0, expense: 0, monthLabel: label, yearMonth: key };
     });
 
-    // Populate monthly aggregates
     chartEntries.forEach(entry => {
-        const key = entry.date.substring(0, 7); // YYYY-MM
+        const key = entry.date.substring(0, 7); 
 
-        // P&L Logic for Net Income
-        if (monthlyPnL[key]) {
-            if (incomeKeywords.some(k => entry.creditAccount?.toLowerCase().includes(k))) {
-                monthlyPnL[key].income += entry.amount;
-            }
-            if (expenseKeywords.some(k => entry.debitAccount?.toLowerCase().includes(k))) {
-                monthlyPnL[key].expense += entry.amount;
-            }
-        }
-
-        // Cash Flow Logic for Cash Flow Chart
+        // Monthly Cash Flow Logic
         if (monthlyCash[key]) {
             if (cashAccountKeywords.some(k => entry.debitAccount.toLowerCase().includes(k))) {
-                monthlyCash[key].income += entry.amount; // Cash In
+                monthlyCash[key].income += entry.amount;
             }
             if (cashAccountKeywords.some(k => entry.creditAccount.toLowerCase().includes(k))) {
-                monthlyCash[key].expense += entry.amount; // Cash Out
+                monthlyCash[key].expense += entry.amount;
             }
         }
         
-        // Spending Breakdown Logic for Pie Chart
-        // This captures ALL cash outflows, not just P&L expenses
+        // Spending Breakdown Logic (all cash out)
         if (cashAccountKeywords.some(k => entry.creditAccount.toLowerCase().includes(k))) {
             const category = entry.debitAccount || "Uncategorized";
             spendingByCategory[category] = (spendingByCategory[category] || 0) + entry.amount;
         }
     });
 
-    // P&L based analytics KPIs
-    let chartPnlRevenue = Object.values(monthlyPnL).reduce((acc, cur) => acc + cur.income, 0);
-    let chartPnlExpenses = Object.values(monthlyPnL).reduce((acc, cur) => acc + cur.expense, 0);
-    let pnlIncomeTransactions = chartEntries.filter(e => incomeKeywords.some(k => e.creditAccount?.toLowerCase().includes(k))).length;
-    let pnlExpenseTransactions = chartEntries.filter(e => expenseKeywords.some(k => e.debitAccount?.toLowerCase().includes(k))).length;
-
+    // --- Part 4: Calculate data for Analytics KPIs (cash based) ---
+    let chartCashIn = Object.values(monthlyCash).reduce((acc, cur) => acc + cur.income, 0);
+    let chartCashOut = Object.values(monthlyCash).reduce((acc, cur) => acc + cur.expense, 0);
+    let cashInTransactions = chartEntries.filter(e => cashAccountKeywords.some(k => e.debitAccount.toLowerCase().includes(k))).length;
+    let cashOutTransactions = chartEntries.filter(e => cashAccountKeywords.some(k => e.creditAccount.toLowerCase().includes(k))).length;
+    
     const analyticsKpis = {
-      avgTransactionValue: (pnlIncomeTransactions + pnlExpenseTransactions > 0) ? (chartPnlRevenue + chartPnlExpenses) / (pnlIncomeTransactions + pnlExpenseTransactions) : 0,
-      profitMargin: chartPnlRevenue > 0 ? ((chartPnlRevenue - chartPnlExpenses) / chartPnlRevenue) * 100 : 0,
-      incomeTransactions: pnlIncomeTransactions,
-      expenseTransactions: pnlExpenseTransactions,
+      avgTransactionValue: (cashInTransactions + cashOutTransactions > 0) ? (chartCashIn + chartCashOut) / (cashInTransactions + cashOutTransactions) : 0,
+      netCashFlow: chartCashIn - chartCashOut,
+      cashInTransactions: cashInTransactions,
+      cashOutTransactions: cashOutTransactions,
     };
     const analyticsExpenseCategories = Object.entries(spendingByCategory).map(([name, total]) => ({name, total})).sort((a,b) => b.total - a.total).slice(0, 7);
 
-    // Build Net Income Chart data from P&L
-    let cumulativeNetIncome = 0;
-    const netIncomeForChart = Object.values(monthlyPnL).sort((a,b) => a.yearMonth.localeCompare(b.yearMonth)).map(agg => {
-        cumulativeNetIncome += (agg.income - agg.expense);
-        return { month: agg.monthLabel, netIncome: cumulativeNetIncome };
+    // --- Part 5: Finalize data structures for charts ---
+    let cumulativeNetCash = 0;
+    const cumulativeCashFlowData = Object.values(monthlyCash).sort((a,b) => a.yearMonth.localeCompare(b.yearMonth)).map(agg => {
+        cumulativeNetCash += (agg.income - agg.expense);
+        return { month: agg.monthLabel, value: cumulativeNetCash }; // 'value' is for the chart component
     });
 
-    // Build Cash Flow Chart data from Cash Flow
-    const cashFlowForChart = Object.values(monthlyCash).sort((a,b) => a.yearMonth.localeCompare(b.yearMonth)).map(agg => ({
+    const cashFlowChartData = Object.values(monthlyCash).sort((a,b) => a.yearMonth.localeCompare(b.yearMonth)).map(agg => ({
         month: agg.monthLabel,
         income: agg.income,
         expense: agg.expense,
         net: agg.income - agg.expense,
     }));
 
-    // Build Spending Pie Chart data from all cash spending
-    const spendingPieChartData = Object.entries(spendingByCategory).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total);
+    const spendingBreakdownData = Object.entries(spendingByCategory).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total);
 
     return {
         summaryData,
-        netIncomeChartData: netIncomeForChart,
-        cashFlowChartData: cashFlowForChart,
-        expensesPieChartData: spendingPieChartData, // Changed data source
+        cumulativeCashFlowData,
+        cashFlowChartData,
+        spendingBreakdownData,
         analyticsKpis,
         analyticsExpenseCategories
     };
@@ -277,9 +254,9 @@ export default function DashboardPage() {
       </div>
       
        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <SummaryCard title="Revenue" value={processedData.summaryData.totalRevenue} icon={DollarSign} />
-        <SummaryCard title="Burn Rate (Cash Out)" value={processedData.summaryData.burnRate} icon={TrendingDown} />
-        <SummaryCard title="Net Profit (P&L)" value={processedData.summaryData.netProfit} icon={TrendingUp} />
+        <SummaryCard title="Total Cash In" value={processedData.summaryData.totalCashIn} icon={TrendingUp} />
+        <SummaryCard title="Total Cash Out" value={processedData.summaryData.totalCashOut} icon={TrendingDown} />
+        <SummaryCard title="Net Cash Flow" value={processedData.summaryData.netCashFlow} icon={DollarSign} />
         <SummaryCard title="Transactions" value={processedData.summaryData.transactionCount} icon={Activity} isCurrency={false} />
       </div>
 
@@ -300,10 +277,10 @@ export default function DashboardPage() {
             </div>
           ) : (
             <>
-              <NetIncomeChart data={processedData.netIncomeChartData} isLoading={isLoadingJournalEntries} />
+              <NetIncomeChart data={processedData.cumulativeCashFlowData} isLoading={isLoadingJournalEntries} />
               <div className="grid gap-6 md:grid-cols-2">
                   <CashFlowChart data={processedData.cashFlowChartData} isLoading={isLoadingJournalEntries} />
-                  <ExpensesPieChart data={processedData.expensesPieChartData} isLoading={isLoadingJournalEntries} />
+                  <ExpensesPieChart data={processedData.spendingBreakdownData} isLoading={isLoadingJournalEntries} />
               </div>
               <AnalyticsOverview kpis={processedData.analyticsKpis} expenseCategories={processedData.analyticsExpenseCategories} isLoading={isLoadingJournalEntries} />
             </>

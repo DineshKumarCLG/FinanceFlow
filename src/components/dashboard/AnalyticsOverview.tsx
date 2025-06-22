@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -6,14 +7,14 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SummaryCard } from "./SummaryCard";
-import { TrendingUp, TrendingDown, Percent } from "lucide-react"; // Removed Hash as it's not used for KPIs
+import { TrendingUp, TrendingDown, DollarSign } from "lucide-react"; // Changed Percent to DollarSign
 
 // Define types for the props this component will now receive
 export interface AnalyticsKpiData {
   avgTransactionValue: number;
-  profitMargin: number;
-  incomeTransactions: number;
-  expenseTransactions: number;
+  netCashFlow: number; // Changed from profitMargin
+  cashInTransactions: number; // Changed from incomeTransactions
+  cashOutTransactions: number; // Changed from expenseTransactions
 }
 
 export interface ExpenseCategoryData {
@@ -67,12 +68,11 @@ export function AnalyticsOverview({ kpis, expenseCategories, isLoading = false }
     );
   }
   
-  // Check if there's meaningful data to display, not just if journalEntries was empty
   const noDataAvailable = !isLoading && 
                          kpis.avgTransactionValue === 0 && 
-                         kpis.profitMargin === 0 && 
-                         kpis.incomeTransactions === 0 && 
-                         kpis.expenseTransactions === 0 && 
+                         kpis.netCashFlow === 0 && 
+                         kpis.cashInTransactions === 0 && 
+                         kpis.cashOutTransactions === 0 && 
                          expenseCategories.length === 0;
 
 
@@ -96,24 +96,22 @@ export function AnalyticsOverview({ kpis, expenseCategories, isLoading = false }
         <SummaryCard 
           title="Avg. Transaction Value" 
           value={kpis.avgTransactionValue} 
-          icon={TrendingUp} // Consider if TrendingUp is always appropriate
+          icon={TrendingUp}
         />
         <SummaryCard 
-          title="Profit Margin" 
-          value={kpis.profitMargin} 
-          icon={Percent} 
-          isCurrency={false} 
-          change={`${kpis.profitMargin.toFixed(1)}%`} 
+          title="Net Cash Flow (Period)" 
+          value={kpis.netCashFlow} 
+          icon={DollarSign} 
         />
         <SummaryCard 
-          title="Income Transactions" 
-          value={kpis.incomeTransactions} 
+          title="Cash In Transactions" 
+          value={kpis.cashInTransactions} 
           icon={TrendingUp} 
           isCurrency={false} 
         />
         <SummaryCard 
-          title="Expense Transactions" 
-          value={kpis.expenseTransactions} 
+          title="Cash Out Transactions" 
+          value={kpis.cashOutTransactions} 
           icon={TrendingDown} 
           isCurrency={false} 
         />
@@ -121,8 +119,8 @@ export function AnalyticsOverview({ kpis, expenseCategories, isLoading = false }
 
       <Card>
         <CardHeader>
-          <CardTitle>Top Expense Categories</CardTitle>
-          <CardDescription>Based on all recorded journal entries.</CardDescription>
+          <CardTitle>Top Spending Categories</CardTitle>
+          <CardDescription>Based on all cash out transactions in the selected period.</CardDescription>
         </CardHeader>
         <CardContent>
           {expenseCategories.length > 0 ? (
@@ -147,7 +145,7 @@ export function AnalyticsOverview({ kpis, expenseCategories, isLoading = false }
               </ChartContainer>
             </div>
           ) : (
-            <p className="text-muted-foreground">No expense data to display for the chart.</p>
+            <p className="text-muted-foreground">No spending data to display for the chart.</p>
           )}
         </CardContent>
       </Card>

@@ -8,13 +8,13 @@ import { useState, useEffect } from "react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 
 interface NetIncomeChartProps {
-  data: { month: string; netIncome: number }[];
+  data: { month: string; value: number }[]; // Changed netIncome to generic 'value'
   isLoading?: boolean;
 }
 
 const chartConfig = {
-  netIncome: {
-    label: "Net Income",
+  value: { // Changed from netIncome to 'value'
+    label: "Net Cash Flow",
     color: "hsl(var(--chart-1))",
   },
 } satisfies ChartConfig;
@@ -43,8 +43,8 @@ export function NetIncomeChart({ data = [], isLoading = false }: NetIncomeChartP
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Net Income</CardTitle>
-        <CardDescription>Cumulative net income over the selected period.</CardDescription>
+        <CardTitle>Cumulative Net Cash Flow</CardTitle>
+        <CardDescription>Cumulative cash in vs. cash out over the selected period.</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="h-[350px]">
@@ -58,9 +58,9 @@ export function NetIncomeChart({ data = [], isLoading = false }: NetIncomeChartP
             <ChartContainer config={chartConfig} className="w-full h-full">
               <AreaChart data={data} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
                 <defs>
-                  <linearGradient id="netIncomeGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--color-netIncome)" stopOpacity={0.4}/>
-                    <stop offset="95%" stopColor="var(--color-netIncome)" stopOpacity={0}/>
+                  <linearGradient id="cashFlowGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="var(--color-value)" stopOpacity={0.4}/>
+                    <stop offset="95%" stopColor="var(--color-value)" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -75,7 +75,7 @@ export function NetIncomeChart({ data = [], isLoading = false }: NetIncomeChartP
                     />
                   }
                 />
-                <Area type="monotone" dataKey="netIncome" name="Net Income" strokeWidth={2} stroke="var(--color-netIncome)" fill="url(#netIncomeGradient)" />
+                <Area type="monotone" dataKey="value" name="Net Cash Flow" strokeWidth={2} stroke="var(--color-value)" fill="url(#cashFlowGradient)" />
               </AreaChart>
             </ChartContainer>
           )}
@@ -84,5 +84,3 @@ export function NetIncomeChart({ data = [], isLoading = false }: NetIncomeChartP
     </Card>
   );
 }
-
-    
