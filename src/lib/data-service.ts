@@ -399,21 +399,32 @@ export async function deleteJournalEntry(companyId: string, entryId: string): Pr
   if (!currentUser) {
     throw new Error("User not authenticated. Cannot delete entry.");
   }
-   if (!companyId) {
+  if (!companyId) {
     throw new Error("Company ID is required to delete an entry.");
   }
   try {
     const entryRef = doc(db, JOURNAL_COLLECTION, entryId);
-    await deleteDoc(entryRef);
-    const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
-    addNotification(
-      `${userName} deleted journal entry ID: ${entryId.slice(0,8)}...`,
-      'new_entry', 
-      companyId,
-      currentUser.uid,
-      entryId
-    ).catch(err => console.error("DataService: Failed to add notification for entry deletion:", err));
+    const docSnap = await getDoc(entryRef); // Read before write
 
+    if (docSnap.exists()) {
+      const entryData = docSnap.data();
+      // Verify ownership before deleting
+      if (entryData.companyId !== companyId) {
+        throw new Error("Permission denied. The journal entry does not belong to the current company.");
+      }
+
+      await deleteDoc(entryRef);
+      const userName = currentUser.displayName || `User ...${currentUser.uid.slice(-6)}`;
+      addNotification(
+        `${userName} deleted journal entry ID: ${entryId.slice(0, 8)}...`,
+        'new_entry',
+        companyId,
+        currentUser.uid,
+        entryId
+      ).catch(err => console.error("DataService: Failed to add notification for entry deletion:", err));
+    } else {
+      throw new Error("Journal entry not found.");
+    }
   } catch (error) {
     console.error(`DataService: Error deleting journal entry ${entryId} from Firestore for company ${companyId} (User: ${currentUser.uid}):`, error);
     throw error;
@@ -580,10 +591,8 @@ export async function deleteInvoice(companyId: string, invoiceId: string): Promi
       if (invoiceData.companyId !== companyId) {
         throw new Error("Invoice does not belong to the specified company or access denied.");
       }
-      // Ensure only creator can delete, or implement role-based access
-      if (invoiceData.creatorUserId !== currentUser.uid) {
-         throw new Error("User not authorized to delete this invoice.");
-      }
+      // The creatorUserId check has been removed to allow any user in the company to delete.
+      // The backend Firestore security rules should be the source of truth for this permission.
       await deleteDoc(invoiceRef);
 
       addNotification(
