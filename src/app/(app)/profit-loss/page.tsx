@@ -17,7 +17,8 @@ import { CalendarDays } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 
 export const incomeKeywords = ['revenue', 'sales', 'income', 'service fee', 'interest received', 'consulting income', 'project revenue', 'deposit', 'commission', 'dividend'];
-export const expenseKeywords = ['expense', 'cost', 'supply', 'rent', 'salary', 'utility', 'utilities', 'purchase', 'advertising', 'maintenance', 'insurance', 'interest paid', 'fee', 'software', 'development', 'services', 'consulting', 'contractor', 'design', 'travel', 'subscription', 'depreciation', 'amortization', 'office supplies', 'postage', 'printing', 'repairs'];
+export const expenseKeywords = ['expense', 'cost', 'supply', 'rent', 'salary', 'utility', 'utilities', 'purchase', 'advertising', 'maintenance', 'insurance', 'interest paid', 'fee', 'software', 'development', 'services', 'consulting', 'contractor', 'design', 'travel', 'subscription', 'depreciation', 'amortization', 'office supplies', 'postage', 'printing', 'repairs', 'loss', 'cogs', 'cost of goods sold'];
+
 
 export default function ProfitLossPage() {
   const { user: currentUser, currentCompanyId } = useAuth();
@@ -41,10 +42,15 @@ export default function ProfitLossPage() {
 
     const dateRangeFrom = dateRange?.from || new Date(0);
     const dateRangeTo = dateRange?.to || new Date();
+    const inclusiveDateTo = new Date(dateRangeTo.getFullYear(), dateRangeTo.getMonth(), dateRangeTo.getDate(), 23, 59, 59);
 
     const entriesInDateRange = journalEntries.filter(entry => {
-        const entryDate = new Date(entry.date);
-        return entryDate >= dateRangeFrom && entryDate <= dateRangeTo;
+        try {
+            const entryDate = new Date(entry.date);
+            return entryDate >= dateRangeFrom && entryDate <= inclusiveDateTo;
+        } catch(e) {
+            return false;
+        }
     });
 
     let totalRevenue = 0;
@@ -53,10 +59,12 @@ export default function ProfitLossPage() {
     const expenseItems: Record<string, number> = {};
 
     entriesInDateRange.forEach(entry => {
+      // Revenue is recognized from the credit side of an income account
       if (incomeKeywords.some(keyword => entry.creditAccount?.toLowerCase().includes(keyword))) {
         totalRevenue += entry.amount;
         revenueItems[entry.creditAccount] = (revenueItems[entry.creditAccount] || 0) + entry.amount;
       }
+      // Expenses are recognized from the debit side of an expense account
       if (expenseKeywords.some(keyword => entry.debitAccount?.toLowerCase().includes(keyword))) {
         totalExpenses += entry.amount;
         expenseItems[entry.debitAccount] = (expenseItems[entry.debitAccount] || 0) + entry.amount;
