@@ -14,7 +14,7 @@ import { format, parseISO } from 'date-fns';
 // Re-using the schema from generate-invoice-details for consistency, with some additions.
 const InvoiceDetailsForToolSchema = z.object({
   customerName: z.string().optional(),
-  customerEmail: z.string().email().optional(),
+  customerEmail: z.string().optional(),
   billingAddress: z.string().optional(),
   shippingAddress: z.string().optional(),
   customerGstin: z.string().optional(),
