@@ -1,8 +1,8 @@
-
 // src/lib/firebase.ts
 import { initializeApp, getApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getFunctions, type Functions } from 'firebase/functions';
 
 // FirebaseStorage import removed
 
@@ -20,6 +20,7 @@ const firebaseConfig = {
 let app: FirebaseApp;
 let auth: Auth;
 let db: Firestore;
+let functions: Functions;
 // storage variable removed
 
 // Validate that config values are present
@@ -39,6 +40,6 @@ if (!getApps().length) {
 
 auth = getAuth(app);
 db = getFirestore(app);
-// storage initialization removed
+functions = getFunctions(app);
 
-export { app, auth, db }; // storage export removed
+export { app, auth, db, functions };
