@@ -2,8 +2,9 @@ import { PageTitle } from "@/components/shared/PageTitle";
 import { ProfileForm } from "@/components/settings/ProfileForm";
 import { ExportSettings } from "@/components/settings/ExportSettings";
 import { AiPreferences } from "@/components/settings/AiPreferences";
+import { TeamManagement } from "@/components/settings/TeamManagement";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { User, Download, Wand2 } from "lucide-react";
+import { User, Download, Wand2, Users } from "lucide-react";
 
 export default function SettingsPage() {
   return (
@@ -14,9 +15,12 @@ export default function SettingsPage() {
       />
 
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="grid w-full grid-cols-1 md:grid-cols-3 mb-6">
+        <TabsList className="grid w-full grid-cols-1 md:grid-cols-4 mb-6">
           <TabsTrigger value="profile" className="flex items-center gap-2">
             <User className="h-4 w-4" /> Profile
+          </TabsTrigger>
+          <TabsTrigger value="team" className="flex items-center gap-2">
+            <Users className="h-4 w-4" /> Team
           </TabsTrigger>
           <TabsTrigger value="export" className="flex items-center gap-2">
             <Download className="h-4 w-4" /> Data Export
@@ -28,6 +32,9 @@ export default function SettingsPage() {
 
         <TabsContent value="profile">
           <ProfileForm />
+        </TabsContent>
+        <TabsContent value="team">
+          <TeamManagement />
         </TabsContent>
         <TabsContent value="export">
           <ExportSettings />
