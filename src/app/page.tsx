@@ -41,8 +41,12 @@ export default function AuthPage() {
   const [acceptTerms, setAcceptTerms] = useState(false);
 
   useEffect(() => {
-    if (!authIsLoading && isAuthenticated && currentCompanyId) {
-      router.push('/dashboard');
+    if (!authIsLoading) {
+      if (isAuthenticated && currentCompanyId) {
+        router.push('/dashboard');
+      } else if (isAuthenticated && !currentCompanyId) {
+        router.push('/onboarding');
+      }
     }
   }, [isAuthenticated, authIsLoading, currentCompanyId, router]);
 
@@ -65,6 +69,24 @@ export default function AuthPage() {
     }
   };
 
+  const handleEmailSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !password) {
+      setError('Please fill in all fields');
+      return;
+    }
+    
+    setIsLoading(true);
+    setError(null);
+    try {
+      await signInWithEmail(email, password);
+    } catch (e: any) {
+      setError(e.message || 'Failed to sign in');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   if (authIsLoading) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
@@ -74,9 +96,14 @@ export default function AuthPage() {
     );
   }
 
+  // Don't render anything if redirecting
   if (isAuthenticated && !currentCompanyId) {
-    router.push('/onboarding');
-    return null;
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="mt-4 text-muted-foreground">Redirecting to onboarding...</p>
+      </div>
+    );
   }
 
   return (
@@ -126,7 +153,7 @@ export default function AuthPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form className="space-y-4">
+            <form className="space-y-4" onSubmit={handleEmailSignIn}>
               {error && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
