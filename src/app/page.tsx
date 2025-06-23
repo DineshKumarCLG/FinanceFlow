@@ -41,10 +41,10 @@ export default function AuthPage() {
   const [acceptTerms, setAcceptTerms] = useState(false);
 
   useEffect(() => {
-    if (!authIsLoading) {
-      if (isAuthenticated && currentCompanyId) {
+    if (!authIsLoading && isAuthenticated) {
+      if (currentCompanyId) {
         router.push('/dashboard');
-      } else if (isAuthenticated && !currentCompanyId) {
+      } else {
         router.push('/onboarding');
       }
     }
@@ -96,12 +96,14 @@ export default function AuthPage() {
     );
   }
 
-  // Don't render anything if redirecting
-  if (isAuthenticated && !currentCompanyId) {
+  // Don't render anything if authenticated (redirecting)
+  if (!authIsLoading && isAuthenticated) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="mt-4 text-muted-foreground">Redirecting to onboarding...</p>
+        <p className="mt-4 text-muted-foreground">
+          {currentCompanyId ? 'Redirecting to dashboard...' : 'Redirecting to onboarding...'}
+        </p>
       </div>
     );
   }

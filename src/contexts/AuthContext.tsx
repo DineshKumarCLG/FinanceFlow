@@ -73,9 +73,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!isLoading) {
       if (!isAuthenticated && pathname !== '/') {
         router.push('/');
-      } else if (isAuthenticated && !currentCompanyId && pathname !== '/') {
-        router.push('/');
-      } else if (isAuthenticated && currentCompanyId && pathname === '/') {
+      } else if (isAuthenticated && !currentCompanyId && pathname !== '/onboarding') {
+        router.push('/onboarding');
+      } else if (isAuthenticated && currentCompanyId && (pathname === '/' || pathname === '/onboarding')) {
         router.push('/dashboard');
       }
     }
