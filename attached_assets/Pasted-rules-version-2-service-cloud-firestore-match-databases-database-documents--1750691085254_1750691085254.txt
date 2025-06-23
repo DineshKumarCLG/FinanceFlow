@@ -1,0 +1,68 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all access if no other rule matches.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helper Functions ---
+    // Checks if a user is authenticated.
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Checks if the request is creating a new document with required IDs.
+    function isCreatingWithRequiredIds() {
+      return request.resource.data.creatorUserId != null
+          && request.resource.data.companyId != null;
+    }
+
+    // --- Collection Rules ---
+
+    // Rules for 'journalEntries'
+    match /journalEntries/{entryId} {
+      // Any authenticated user can create an entry.
+      allow create: if isAuthenticated() && isCreatingWithRequiredIds();
+      
+      // Any authenticated user can read, update, or delete an entry
+      // within a company. This enables team collaboration.
+      // For stricter control, you could check against a list of company members.
+      allow read, update, delete: if isAuthenticated() && resource.data.companyId != null;
+    }
+
+    // Rules for 'invoices'
+    match /invoices/{invoiceId} {
+      // Any authenticated user can create an invoice.
+      allow create: if isAuthenticated() && isCreatingWithRequiredIds();
+
+      // Any authenticated user can read, update, or delete an invoice
+      // within a company. This enables team collaboration.
+      allow read, update, delete: if isAuthenticated() && resource.data.companyId != null;
+    }
+
+    // Rules for company-level settings.
+    // The document ID for these settings IS the companyId.
+    match /companySettings/{companyId} {
+      // Any authenticated user can read or write settings for any company.
+      // Consider adding a company membership check for stricter security.
+      allow read, write: if isAuthenticated();
+    }
+
+    match /aiPreferencesSettings/{companyId} {
+      // Any authenticated user can read or write settings for any company.
+      // Consider adding a company membership check for stricter security.
+      allow read, write: if isAuthenticated();
+    }
+
+    // Rules for 'notifications'
+    match /notifications/{notificationId} {
+      allow create: if isAuthenticated() && request.resource.data.companyId != null;
+      allow read: if isAuthenticated() && resource.data.companyId != null;
+      // Notifications are immutable once created.
+      allow update, delete: if false;
+    }
+  }
+}
