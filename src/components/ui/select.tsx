@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -146,21 +147,6 @@ const SelectSeparator = React.forwardRef<
 ))
 SelectSeparator.displayName = SelectPrimitive.Separator.displayName
 
-const SelectShortcut = React.forwardRef<
-  React.ElementRef<typeof Command.Shortcut>,
-  React.ComponentPropsWithoutRef<typeof Command.Shortcut>
->(({ className, ...props }, ref) => {
-  return (
-    <span
-      ref={ref}
-      className={cn("ml-auto text-xs tracking-widest opacity-60", className)}
-      {...props}
-    />
-  )
-})
-
-SelectShortcut.displayName = "SelectShortcut"
-
 export {
   Select,
   SelectGroup,
@@ -172,5 +158,4 @@ export {
   SelectSeparator,
   SelectScrollUpButton,
   SelectScrollDownButton,
-  SelectShortcut,
 }

@@ -1,7 +1,4 @@
-The code is modified to fix the Google sign-in issue and ensure correct event handling for the login button.
-```
 
-```replit_final_file
 "use client";
 
 import { useState, useEffect } from 'react';
