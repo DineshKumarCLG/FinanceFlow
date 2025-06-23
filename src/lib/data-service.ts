@@ -886,3 +886,55 @@ export interface UserProfile {
   email: string | null;
   displayName: string | null;
 }
+
+export interface Company {
+  id: string;
+  name: string;
+  businessType?: string;
+  gstin?: string;
+  country?: string;
+  state?: string;
+  logo?: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+const COMPANIES_COLLECTION = 'companies';
+
+export async function getCompany(companyId: string): Promise<Company | null> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    console.warn("DataService: User not authenticated. Cannot fetch company.");
+    return null;
+  }
+  if (!companyId) {
+    console.warn("DataService: Company ID is required to fetch company.");
+    return null;
+  }
+
+  try {
+    const companyRef = doc(db, COMPANIES_COLLECTION, companyId);
+    const docSnap = await getDoc(companyRef);
+
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        name: data.name,
+        businessType: data.businessType,
+        gstin: data.gstin,
+        country: data.country,
+        state: data.state,
+        logo: data.logo,
+        createdBy: data.createdBy,
+        createdAt: data.createdAt,
+      } as Company;
+    } else {
+      console.log(`DataService: No company found with ID ${companyId}.`);
+      return null;
+    }
+  } catch (error) {
+    console.error(`DataService: Error fetching company '${companyId}' (User: ${currentUser.uid}):`, error);
+    throw error;
+  }
+}
