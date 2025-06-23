@@ -67,7 +67,7 @@ export interface Invoice {
   invoiceNumber: string;
   invoiceDate: string; // YYYY-MM-DD
   dueDate?: string; // YYYY-MM-DD
-  
+
   customerName: string;
   customerGstin?: string;
   customerEmail?: string;
@@ -80,11 +80,11 @@ export interface Invoice {
   subTotal: number; // Sum of all lineItem.amount (taxable values)
   totalGstAmount: number; // Sum of GST calculated for each line item
   totalAmount: number; // subTotal + totalGstAmount
-  
+
   paymentTerms?: string;
   notes?: string;
   status: 'draft' | 'sent' | 'paid' | 'overdue' | 'void';
-  
+
   companyId: string;
   creatorUserId: string;
   createdAt: Timestamp | { seconds: number, nanoseconds: number };
@@ -445,7 +445,7 @@ export async function addInvoice(
   if (!companyId) {
     throw new Error("Company ID is required to add an invoice.");
   }
-  
+
   // Sanitize line items to remove undefined values, converting them to null
   const sanitizedLineItems = (newInvoiceData.lineItems || []).map(item => ({
     ...item,
@@ -478,7 +478,7 @@ export async function addInvoice(
 
   try {
     const docRef = await addDoc(collection(db, INVOICE_COLLECTION), invoicePayload);
-    
+
     // Construct the return object based on the originally passed data plus new IDs/timestamps
     const savedInvoice: Invoice = {
       id: docRef.id,
@@ -488,7 +488,7 @@ export async function addInvoice(
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     };
-    
+
     addNotification(
       `Invoice #${savedInvoice.invoiceNumber} for ${savedInvoice.customerName} created.`,
       'invoice_created',
@@ -521,7 +521,7 @@ export async function updateInvoice(
   }
 
   const invoiceRef = doc(db, INVOICE_COLLECTION, invoiceId);
-  
+
   const updatePayload: { [key: string]: any } = { ...invoiceDataToUpdate };
 
   // Sanitize line items if they are being updated
@@ -541,15 +541,15 @@ export async function updateInvoice(
   });
 
   updatePayload.updatedAt = serverTimestamp() as Timestamp;
-  
+
   try {
     const docSnap = await getDoc(invoiceRef);
     if (!docSnap.exists() || docSnap.data().companyId !== companyId) {
         throw new Error("Invoice not found or access denied.");
     }
-    
+
     await updateDoc(invoiceRef, updatePayload);
-    
+
     const updatedDocSnap = await getDoc(invoiceRef); // Re-fetch to get the server-updated data
     const updatedInvoiceData = { ...updatedDocSnap.data(), id: invoiceId } as Invoice;
 
@@ -560,7 +560,7 @@ export async function updateInvoice(
       creatorUserId,
       invoiceId
     ).catch(err => console.error("DataService: Failed to add notification for invoice update:", err));
-    
+
     return updatedInvoiceData;
 
   } catch (error) {
@@ -775,10 +775,10 @@ export async function saveCompanySettings(
   }
 
   const settingsRef = doc(db, COMPANY_SETTINGS_COLLECTION, companyId);
-  
+
   const updatePayload: { [key: string]: any } = { ...settingsData };
   updatePayload.updatedAt = serverTimestamp() as Timestamp;
-  
+
   // Ensure all fields are present, even if empty, to avoid 'undefined' in Firestore
   const fieldsToEnsure: (keyof CompanySettings)[] = ['businessName', 'businessType', 'companyGstin', 'gstRegion', 'companyAddress', 'registeredAddress', 'corporateAddress', 'billingAddress', 'companyEmail', 'companyPhone', 'bankDetails', 'authorizedSignatory', 'currency'];
   fieldsToEnsure.forEach(field => {
@@ -854,7 +854,7 @@ export async function saveAiPreferences(
   }
 
   const prefsRef = doc(db, AI_PREFERENCES_COLLECTION, companyId);
-  
+
   const updatePayload: { [key: string]: any } = {};
   for (const key in preferencesData) {
     const typedKey = key as keyof typeof preferencesData;
@@ -866,7 +866,7 @@ export async function saveAiPreferences(
 
   try {
     await setDoc(prefsRef, updatePayload, { merge: true });
-    
+
     addNotification(
       `AI preferences for ${companyId} updated.`,
       'ai_preferences_updated',

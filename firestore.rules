@@ -23,6 +23,21 @@ service cloud.firestore {
 
     // --- Collection Rules ---
 
+    // Rules for 'companies'
+    match /companies/{companyId} {
+      // Any authenticated user can create a company
+      allow create: if isAuthenticated() && request.resource.data.createdBy == request.auth.uid;
+      
+      // Any authenticated user can read, update, or delete companies
+      // You might want to restrict this to company members only
+      allow read, update, delete: if isAuthenticated();
+      
+      // Rules for team members subcollection
+      match /teamMembers/{memberId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
     // Rules for 'journalEntries'
     match /journalEntries/{entryId} {
       // Any authenticated user can create an entry.
