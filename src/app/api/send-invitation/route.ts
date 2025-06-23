@@ -43,17 +43,57 @@ export async function POST(request: NextRequest) {
 
     // Send actual email using Resend
     if (process.env.RESEND_API_KEY) {
+      console.log('Attempting to send email with Resend...');
+      console.log('API Key exists:', !!process.env.RESEND_API_KEY);
+      console.log('From:', 'onboarding@resend.dev');
+      console.log('To:', email);
+      
       try {
-        const { data, error } = await resend.emails.send({
-          from: 'onboarding@resend.dev', // Using Resend's default verified domain
-          to: email,
-          subject: `Invitation to join ${companyName}`,
-          text: emailBody,
-          html: htmlBody,
-        });
+        // Try multiple sender addresses to find one that works
+        const senderOptions = [
+          'onboarding@resend.dev',
+          'team@resend.dev',
+          'noreply@resend.dev'
+        ];
+
+        let lastError = null;
+        let emailSent = false;
+        let data = null;
+
+        for (const sender of senderOptions) {
+          try {
+            console.log(`Trying sender: ${sender}`);
+            const result = await resend.emails.send({
+              from: sender,
+              to: email,
+              subject: `Invitation to join ${companyName}`,
+              text: emailBody,
+              html: htmlBody,
+            });
+
+            if (result.error) {
+              console.log(`Failed with ${sender}:`, result.error);
+              lastError = result.error;
+              continue;
+            }
+
+            console.log(`Success with ${sender}:`, result.data);
+            data = result.data;
+            emailSent = true;
+            break;
+          } catch (err) {
+            console.log(`Exception with ${sender}:`, err);
+            lastError = err;
+            continue;
+          }
+        }
+
+        if (!emailSent) {
+          throw lastError || new Error('All sender options failed');
+        }
 
         if (error) {
-          console.error('Resend error details:', error);
+          console.error('Resend error details:', JSON.stringify(error, null, 2));
           return NextResponse.json({ 
             success: false, 
             error: 'Failed to send email', 
@@ -61,12 +101,21 @@ export async function POST(request: NextRequest) {
           }, { status: 500 });
         }
 
-        console.log('Email sent successfully:', data);
+        console.log('Email sent successfully:', JSON.stringify(data, null, 2));
 
-        return NextResponse.json({ success: true, message: 'Invitation email sent successfully' });
+        return NextResponse.json({ 
+          success: true, 
+          message: 'Invitation email sent successfully',
+          emailId: data?.id 
+        });
       } catch (error) {
         console.error('Email sending error:', error);
-        return NextResponse.json({ success: false, error: 'Failed to send email' }, { status: 500 });
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        return NextResponse.json({ 
+          success: false, 
+          error: 'Failed to send email',
+          details: error.message || error 
+        }, { status: 500 });
       }
     } else {
       // Fallback for development - log the email
