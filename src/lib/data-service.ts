@@ -4,17 +4,18 @@ import {
   collection,
   addDoc,
   getDocs,
+  doc,
+  getDoc,
+  updateDoc,
+  deleteDoc,
   query,
   where,
   orderBy,
-  Timestamp,
+  limit,
   serverTimestamp,
+  onSnapshot,
   writeBatch,
-  doc,
-  deleteDoc,
-  getDoc,
-  updateDoc,
-  setDoc,
+  type Unsubscribe
 } from 'firebase/firestore';
 
 export interface JournalEntry {
@@ -960,7 +961,7 @@ export async function createCompany(companyData: NewCompanyData): Promise<string
 
   try {
     const docRef = await addDoc(collection(db, COMPANIES_COLLECTION), companyPayload);
-    
+
     addNotification(
       `Company "${companyData.name}" created successfully`,
       'new_entry',
@@ -1014,7 +1015,7 @@ export async function addTeamMembers(teamMembersData: TeamMember[]): Promise<voi
 
   try {
     await batch.commit();
-    
+
     // Add notification for team members added
     for (const member of teamMembersData) {
       addNotification(
