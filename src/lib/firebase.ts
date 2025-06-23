@@ -7,6 +7,14 @@ import { getFunctions, type Functions } from 'firebase/functions';
 // FirebaseStorage import removed
 
 // IMPORTANT: Replace with your actual Firebase project configuration
+// Validate required environment variables
+if (!process.env.NEXT_PUBLIC_FIREBASE_API_KEY) {
+  console.error('Firebase API Key is not configured. Please check your .env file.');
+}
+if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
+  console.error('Firebase Project ID is not configured. Please check your .env file.');
+}
+
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,

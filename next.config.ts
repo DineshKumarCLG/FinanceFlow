@@ -1,8 +1,10 @@
-
-import type {NextConfig} from 'next';
+import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
+  allowedDevOrigins: [
+    'b2bf6082-00ac-46f3-abf2-c2b14ce6677e-00-54hv5zgi9quq.pike.replit.dev'
+  ],
   typescript: {
     ignoreBuildErrors: true,
   },

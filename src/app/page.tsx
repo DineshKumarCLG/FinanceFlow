@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,13 +11,22 @@ import { Separator } from '@/components/ui/separator';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useRouter } from 'next/navigation';
 
 export default function HomePage() {
   const { user, isLoading, signInWithGoogle, setCurrentCompanyId, checkCompanyExists } = useAuth();
+  const router = useRouter();
   const [companyId, setCompanyIdInput] = useState('');
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isCheckingCompany, setIsCheckingCompany] = useState(false);
+
+  useEffect(() => {
+    // If user is already authenticated and has a company ID, redirect to dashboard
+    if (user && localStorage.getItem('financeFlowCurrentCompanyId')) {
+      router.push('/dashboard');
+    }
+  }, [user, router]);
 
   const handleGoogleSignIn = async () => {
     if (!companyId.trim()) {
@@ -81,6 +90,7 @@ export default function HomePage() {
                   alt="FinanceFlow AI"
                   fill
                   className="object-contain"
+                  priority
                 />
               </div>
             </div>
