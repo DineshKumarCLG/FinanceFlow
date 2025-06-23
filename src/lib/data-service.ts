@@ -1,4 +1,3 @@
-
 // src/lib/data-service.ts
 import { auth, db } from './firebase';
 import {

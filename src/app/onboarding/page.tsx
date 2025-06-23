@@ -12,6 +12,7 @@ import { AppLogo } from '@/components/layout/AppLogo';
 import { Loader2, AlertCircle, Upload, Users, CheckCircle, ArrowRight, ArrowLeft } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { createCompany, addTeamMembers } from '@/lib/data-service';
 
 type OnboardingStep = 'company' | 'team' | 'complete';
 
@@ -126,39 +127,40 @@ export default function OnboardingPage() {
       return;
     }
 
+    if (!user?.uid) {
+      setError('User authentication required');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
-      // Create company ID from company name
-      const companyId = companyName.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 10);
-      const newCompanyId = companyId;
-
-      // Set company ID in auth context
-      setCurrentCompanyId(companyId);
-
-      // Save company details (you can implement this in your data service)
+      // Create company data
       const companyData = {
-        name: companyName,
+        name: companyName.trim(),
         businessType,
-        gstin,
+        gstin: gstin.trim(),
         country,
-        state,
-        logo: companyLogo ? URL.createObjectURL(companyLogo) : null,
-        createdBy: user?.uid,
-        createdAt: new Date().toISOString()
+        state: state || '',
+        logoUrl: companyLogo ? URL.createObjectURL(companyLogo) : undefined,
+        createdBy: user.uid,
       };
 
-      // Here you would save to your data service
-      console.log('Company data to save:', companyData);
+      // Save company to Firebase
+      const newCompanyId = await createCompany(companyData);
+
+      // Set company ID in auth context
+      setCurrentCompanyId(newCompanyId);
 
       toast({
         title: "Company Setup Complete",
-        description: `Company "${companyName}" has been created with ID: ${companyId}`,
+        description: `Company "${companyName}" has been created with ID: ${newCompanyId}`,
       });
 
       setCurrentStep('team');
     } catch (error: any) {
+      console.error('Error setting up company:', error);
       setError(error.message || 'Failed to set up company');
     } finally {
       setIsLoading(false);
@@ -170,10 +172,30 @@ export default function OnboardingPage() {
     setError(null);
 
     try {
-      // Save team members (implement in your data service)
-      console.log('Team members to save:', teamMembers);
+      const currentCompanyIdValue = localStorage.getItem('financeFlowCurrentCompanyId');
+      
+      if (!currentCompanyIdValue) {
+        throw new Error('Company ID not found. Please complete company setup first.');
+      }
 
-      // Send invitations via email
+      if (!user?.uid) {
+        throw new Error('User authentication required');
+        return;
+      }
+
+      // Save team members to Firebase if there are any
+      if (teamMembers.length > 0) {
+        const teamMemberData = teamMembers.map(member => ({
+          email: member.email,
+          role: member.role,
+          companyId: currentCompanyIdValue,
+          invitedBy: user.uid,
+          status: 'pending' as const,
+        }));
+
+        await addTeamMembers(teamMemberData);
+
+        // Send invitations via email
         for (const member of teamMembers) {
           console.log(`Sending invitation to ${member.email} as ${member.role}`);
           try {
@@ -185,9 +207,9 @@ export default function OnboardingPage() {
               body: JSON.stringify({
                 email: member.email,
                 role: member.role,
-                companyName: companyData.name,
+                companyName: companyName,
                 inviterName: user?.displayName || 'Team Admin',
-                companyId: newCompanyId
+                companyId: currentCompanyIdValue
               })
             });
 
@@ -199,13 +221,20 @@ export default function OnboardingPage() {
           }
         }
 
-      toast({
-        title: "Team Invitations Sent",
-        description: `Invitations sent to ${teamMembers.length} team members`,
-      });
+        toast({
+          title: "Team Setup Complete",
+          description: `Invitations sent to ${teamMembers.length} team members`,
+        });
+      } else {
+        toast({
+          title: "Team Setup Skipped",
+          description: "You can add team members later in settings",
+        });
+      }
 
       setCurrentStep('complete');
     } catch (error: any) {
+      console.error('Error setting up team:', error);
       setError(error.message || 'Failed to set up team');
     } finally {
       setIsLoading(false);

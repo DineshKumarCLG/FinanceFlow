@@ -16,7 +16,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
 } from 'firebase/auth';
-import { addNotification } from '@/lib/data-service';
+import { addNotification, getCompany } from '@/lib/data-service';
 
 const COMPANY_ID_LOCAL_STORAGE_KEY = "financeFlowCurrentCompanyId";
 
@@ -70,15 +70,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAuthenticated = !!user;
 
   useEffect(() => {
-    if (!isLoading) {
-      if (!isAuthenticated && pathname !== '/') {
-        router.push('/');
-      } else if (isAuthenticated && !currentCompanyId && pathname !== '/onboarding') {
-        router.push('/onboarding');
-      } else if (isAuthenticated && currentCompanyId && (pathname === '/' || pathname === '/onboarding')) {
-        router.push('/dashboard');
+    const handleNavigation = async () => {
+      if (!isLoading) {
+        if (!isAuthenticated && pathname !== '/') {
+          router.push('/');
+        } else if (isAuthenticated && !currentCompanyId && pathname !== '/onboarding') {
+          router.push('/onboarding');
+        } else if (isAuthenticated && currentCompanyId && (pathname === '/' || pathname === '/onboarding')) {
+          // Verify company exists in Firebase before navigating to dashboard
+          try {
+            const company = await getCompany(currentCompanyId);
+            if (company) {
+              router.push('/dashboard');
+            } else {
+              // Company doesn't exist, clear it and go to onboarding
+              setCurrentCompanyId(null);
+              router.push('/onboarding');
+            }
+          } catch (error) {
+            console.error('Error checking company existence:', error);
+            // On error, go to onboarding to be safe
+            setCurrentCompanyId(null);
+            router.push('/onboarding');
+          }
+        }
       }
-    }
+    };
+
+    handleNavigation();
   }, [isAuthenticated, isLoading, currentCompanyId, router, pathname]);
 
 
