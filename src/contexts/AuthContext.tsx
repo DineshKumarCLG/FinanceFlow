@@ -13,8 +13,8 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   getAdditionalUserInfo,
-  // createUserWithEmailAndPassword, // No longer used
-  // signInWithEmailAndPassword, // No longer used
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
 } from 'firebase/auth';
 import { addNotification } from '@/lib/data-service';
 
@@ -27,6 +27,8 @@ interface AuthContextType {
   currentCompanyId: string | null;
   setCurrentCompanyId: (companyId: string | null) => void;
   signInWithGoogle: () => Promise<void>;
+  signUpWithEmail: (email: string, password: string, fullName: string) => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
   updateUserProfileName: (newName: string) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -122,6 +124,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // setIsLoading(false); // Let onAuthStateChanged manage this to avoid potential race conditions
     }
   };
+
+  const signUpWithEmail = async (email: string, password: string, fullName: string) => {
+    setIsLoading(true);
+    try {
+      const result = await createUserWithEmailAndPassword(auth, email, password);
+      
+      if (result.user) {
+        await updateProfile(result.user, {
+          displayName: fullName,
+        });
+        setUser(auth.currentUser ? { ...auth.currentUser } : null);
+      }
+    } catch (error: any) {
+      console.error("Email Sign-Up error:", error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const signInWithEmail = async (email: string, password: string) => {
+    setIsLoading(true);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error: any) {
+      console.error("Email Sign-In error:", error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   const setCurrentCompanyId = (companyId: string | null) => {
     if (companyId) {
@@ -169,7 +202,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading, 
       currentCompanyId, 
       setCurrentCompanyId, 
-      signInWithGoogle, 
+      signInWithGoogle,
+      signUpWithEmail,
+      signInWithEmail,
       updateUserProfileName, 
       logout 
     }}>
