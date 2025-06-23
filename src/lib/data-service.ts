@@ -938,3 +938,94 @@ export async function getCompany(companyId: string): Promise<Company | null> {
     throw error;
   }
 }
+
+export type NewCompanyData = Omit<Company, 'id' | 'createdAt'>;
+
+export async function createCompany(companyData: NewCompanyData): Promise<string> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error("User not authenticated. Cannot create company.");
+  }
+
+  const companyPayload = {
+    name: companyData.name,
+    businessType: companyData.businessType || '',
+    gstin: companyData.gstin || '',
+    country: companyData.country || '',
+    state: companyData.state || '',
+    logo: companyData.logo || '',
+    createdBy: companyData.createdBy,
+    createdAt: new Date().toISOString(),
+  };
+
+  try {
+    const docRef = await addDoc(collection(db, COMPANIES_COLLECTION), companyPayload);
+    
+    addNotification(
+      `Company "${companyData.name}" created successfully`,
+      'new_entry',
+      docRef.id,
+      currentUser.uid,
+      docRef.id
+    ).catch(err => console.error("DataService: Failed to add notification for company creation:", err));
+
+    return docRef.id;
+  } catch (error) {
+    console.error(`DataService: Error creating company (User: ${currentUser.uid}):`, error);
+    throw error;
+  }
+}
+
+export interface TeamMember {
+  email: string;
+  role: string;
+  companyId: string;
+  invitedBy: string;
+  status: 'pending' | 'accepted' | 'declined';
+  invitedAt?: string;
+}
+
+const TEAM_MEMBERS_COLLECTION = 'teamMembers';
+
+export async function addTeamMembers(teamMembersData: TeamMember[]): Promise<void> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error("User not authenticated. Cannot add team members.");
+  }
+
+  if (teamMembersData.length === 0) {
+    return;
+  }
+
+  const batch = writeBatch(db);
+
+  teamMembersData.forEach(memberData => {
+    const docRef = doc(collection(db, TEAM_MEMBERS_COLLECTION));
+    const memberPayload = {
+      email: memberData.email,
+      role: memberData.role,
+      companyId: memberData.companyId,
+      invitedBy: memberData.invitedBy,
+      status: memberData.status,
+      invitedAt: new Date().toISOString(),
+    };
+    batch.set(docRef, memberPayload);
+  });
+
+  try {
+    await batch.commit();
+    
+    // Add notification for team members added
+    for (const member of teamMembersData) {
+      addNotification(
+        `Team member ${member.email} invited as ${member.role}`,
+        'user_joined',
+        member.companyId,
+        currentUser.uid
+      ).catch(err => console.error("DataService: Failed to add notification for team member:", err));
+    }
+  } catch (error) {
+    console.error(`DataService: Error adding team members (User: ${currentUser.uid}):`, error);
+    throw error;
+  }
+}

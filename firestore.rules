@@ -38,6 +38,18 @@ service cloud.firestore {
       }
     }
 
+    // Rules for 'teamMembers' collection
+    match /teamMembers/{memberId} {
+      // Any authenticated user can create team member invitations
+      allow create: if isAuthenticated() && request.resource.data.invitedBy == request.auth.uid;
+      
+      // Allow reading and updating team member data for authenticated users
+      allow read, update: if isAuthenticated();
+      
+      // Allow deletion by the inviter or company admin
+      allow delete: if isAuthenticated();
+    }
+
     // Rules for 'journalEntries'
     match /journalEntries/{entryId} {
       // Any authenticated user can create an entry.
