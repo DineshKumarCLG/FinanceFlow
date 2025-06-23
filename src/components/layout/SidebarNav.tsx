@@ -10,6 +10,7 @@ import {
   SidebarMenuButton,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { FileText, BarChart3, PlusCircle, Upload, MessageSquare, Calculator, Cog, Home, FolderOpen, CreditCard, Receipt, Users } from 'lucide-react';
 
 interface SidebarNavProps {
   items: NavItem[];
@@ -30,7 +31,7 @@ export function SidebarNav({ items, className }: SidebarNavProps) {
         {items.map((item, index) => {
           const Icon = item.icon;
           const isActive = item.href === "/" ? pathname === item.href : pathname.startsWith(item.href);
-          
+
           return (
             <SidebarMenuItem key={index}>
               <SidebarMenuButton
