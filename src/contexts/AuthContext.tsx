@@ -72,24 +72,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const handleNavigation = async () => {
       if (!isLoading) {
+        console.log('AuthContext navigation check:', { isAuthenticated, currentCompanyId, pathname });
+        
         if (!isAuthenticated && pathname !== '/') {
+          console.log('Redirecting to login page');
           router.push('/');
         } else if (isAuthenticated && !currentCompanyId && pathname !== '/onboarding') {
+          console.log('Redirecting to onboarding (no company ID)');
           router.push('/onboarding');
         } else if (isAuthenticated && currentCompanyId && (pathname === '/' || pathname === '/onboarding')) {
           // Verify company exists in Firebase before navigating to dashboard
           try {
+            console.log('Checking if company exists:', currentCompanyId);
             const company = await getCompany(currentCompanyId);
             if (company) {
+              console.log('Company exists, redirecting to dashboard');
               router.push('/dashboard');
             } else {
               // Company doesn't exist, clear it and go to onboarding
+              console.log('Company not found, clearing company ID and redirecting to onboarding');
               setCurrentCompanyId(null);
               router.push('/onboarding');
             }
           } catch (error) {
             console.error('Error checking company existence:', error);
             // On error, go to onboarding to be safe
+            console.log('Error checking company, clearing company ID and redirecting to onboarding');
             setCurrentCompanyId(null);
             router.push('/onboarding');
           }

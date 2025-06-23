@@ -143,7 +143,7 @@ export default function OnboardingPage() {
         gstin: gstin.trim(),
         country,
         state: state || '',
-        logoUrl: companyLogo ? URL.createObjectURL(companyLogo) : undefined,
+        logo: companyLogo ? URL.createObjectURL(companyLogo) : undefined,
         createdBy: user.uid,
       };
 
