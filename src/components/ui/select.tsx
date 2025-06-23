@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import * as SelectPrimitive from "@radix-ui/react-select"
-import { Check, ChevronDown, ChevronUp } from "lucide-react"
+import { Check, ChevronDown, ChevronUp, Command, Key } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -146,6 +146,21 @@ const SelectSeparator = React.forwardRef<
 ))
 SelectSeparator.displayName = SelectPrimitive.Separator.displayName
 
+const SelectShortcut = React.forwardRef<
+  React.ElementRef<typeof Command.Shortcut>,
+  React.ComponentPropsWithoutRef<typeof Command.Shortcut>
+>(({ className, ...props }, ref) => {
+  return (
+    <span
+      ref={ref}
+      className={cn("ml-auto text-xs tracking-widest opacity-60", className)}
+      {...props}
+    />
+  )
+})
+
+SelectShortcut.displayName = "SelectShortcut"
+
 export {
   Select,
   SelectGroup,
@@ -157,4 +172,5 @@ export {
   SelectSeparator,
   SelectScrollUpButton,
   SelectScrollDownButton,
+  SelectShortcut,
 }
