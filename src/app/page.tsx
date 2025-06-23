@@ -1,4 +1,7 @@
+The code is modified to fix the Google sign-in issue and ensure correct event handling for the login button.
+```
 
+```replit_final_file
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -29,13 +32,13 @@ type AuthMode = 'welcome' | 'signin' | 'signup' | 'forgot';
 export default function AuthPage() {
   const { user, isAuthenticated, isLoading: authIsLoading, signInWithGoogle, currentCompanyId } = useAuth();
   const router = useRouter();
-  
+
   const [mode, setMode] = useState<AuthMode>('welcome');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  
+
   // Form states
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -71,7 +74,7 @@ export default function AuthPage() {
 
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       // Redirect to onboarding after successful signup
@@ -87,7 +90,7 @@ export default function AuthPage() {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
-    
+
     try {
       await signInWithEmailAndPassword(auth, email, password);
       // User will be redirected by useEffect after successful sign in
@@ -107,7 +110,7 @@ export default function AuthPage() {
 
     setIsLoading(true);
     setError(null);
-    
+
     try {
       await sendPasswordResetEmail(auth, email);
       setSuccess('Password reset email sent! Check your inbox.');
@@ -118,16 +121,19 @@ export default function AuthPage() {
     }
   };
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     setIsLoading(true);
     setError(null);
+    setSuccess(null);
     try {
       await signInWithGoogle();
     } catch (e: any) {
       if (e.code === 'auth/popup-closed-by-user') {
-        setError("Sign-in process was cancelled. Please try again.");
+        setError('Sign-in process was cancelled. Please try again.');
       } else {
-        setError(e.message || "An unexpected error occurred during Google Sign-In.");
+        setError(e.message || 'An unexpected error occurred during Google Sign-In.');
       }
     } finally {
       setIsLoading(false);
@@ -198,7 +204,7 @@ export default function AuthPage() {
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
-              
+
               <div className="space-y-2">
                 <label htmlFor="fullName" className="text-sm font-medium">Full Name</label>
                 <Input
