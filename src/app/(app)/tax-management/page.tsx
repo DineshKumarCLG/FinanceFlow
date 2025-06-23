@@ -4,18 +4,15 @@
 import { PageTitle } from "@/components/shared/PageTitle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useState, useEffect } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getJournalEntries, type StoredJournalEntry } from "@/lib/data-service";
+import { getJournalEntries, getCompanySettings, type JournalEntry } from "@/lib/data-service";
 import { useQuery } from '@tanstack/react-query';
-import { Calculator, FileText, AlertTriangle, Download, Calendar } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { FileText, AlertTriangle, CheckCircle, Calculator, Download, Calendar } from "lucide-react";
 
 interface TaxCalculation {
   period: string;
@@ -25,7 +22,7 @@ interface TaxCalculation {
   netGst: number;
   incomeTax: number;
   totalTax: number;
-  status: 'draft' | 'filed' | 'overdue';
+  status: 'draft' | 'filed' | 'paid';
   dueDate: string;
 }
 
@@ -40,42 +37,90 @@ interface TaxCompliance {
 export default function TaxManagementPage() {
   const { currentCompanyId } = useAuth();
   const [selectedPeriod, setSelectedPeriod] = useState('2024-Q1');
-  const [taxJurisdiction, setTaxJurisdiction] = useState('IN');
-  const [gstRate, setGstRate] = useState('18');
-  
-  const { data: journalEntries = [] } = useQuery<StoredJournalEntry[], Error>({
+
+  const { data: journalEntries = [], isLoading: entriesLoading } = useQuery<JournalEntry[], Error>({
     queryKey: ['journalEntries', currentCompanyId],
     queryFn: () => getJournalEntries(currentCompanyId!),
     enabled: !!currentCompanyId,
   });
 
+  const { data: companySettings } = useQuery({
+    queryKey: ['companySettings', currentCompanyId],
+    queryFn: () => getCompanySettings(currentCompanyId!),
+    enabled: !!currentCompanyId,
+  });
+
   const calculateTaxLiability = (period: string): TaxCalculation => {
+    // Parse period (e.g., "2024-Q1" -> get entries from Jan-Mar 2024)
+    const [year, quarter] = period.split('-');
+    const quarterNum = parseInt(quarter.replace('Q', ''));
+    
+    let startMonth, endMonth;
+    switch (quarterNum) {
+      case 1: [startMonth, endMonth] = [1, 3]; break;
+      case 2: [startMonth, endMonth] = [4, 6]; break;
+      case 3: [startMonth, endMonth] = [7, 9]; break;
+      case 4: [startMonth, endMonth] = [10, 12]; break;
+      default: [startMonth, endMonth] = [1, 3];
+    }
+
+    const startDate = new Date(parseInt(year), startMonth - 1, 1);
+    const endDate = new Date(parseInt(year), endMonth, 0); // Last day of end month
+
     // Filter entries for the selected period
     const periodEntries = journalEntries.filter(entry => {
       const entryDate = new Date(entry.date);
-      const year = entryDate.getFullYear();
-      const quarter = Math.ceil((entryDate.getMonth() + 1) / 3);
-      return `${year}-Q${quarter}` === period;
+      return entryDate >= startDate && entryDate <= endDate;
     });
 
-    // Calculate taxable income (revenue entries)
-    const taxableIncome = periodEntries
-      .filter(entry => entry.creditAccount.toLowerCase().includes('revenue') || 
-                      entry.creditAccount.toLowerCase().includes('sales') ||
-                      entry.creditAccount.toLowerCase().includes('income'))
-      .reduce((sum, entry) => sum + entry.amount, 0);
+    // Calculate taxable income (revenue - expenses)
+    const revenueEntries = periodEntries.filter(entry => 
+      entry.creditAccount.toLowerCase().includes('revenue') ||
+      entry.creditAccount.toLowerCase().includes('income') ||
+      entry.creditAccount.toLowerCase().includes('sales')
+    );
+    
+    const expenseEntries = periodEntries.filter(entry => 
+      entry.debitAccount.toLowerCase().includes('expense') ||
+      entry.debitAccount.toLowerCase().includes('cost') ||
+      entry.debitAccount.toLowerCase().includes('expenditure')
+    );
 
-    // Calculate GST collected and paid
-    const gstCollected = taxableIncome * (parseFloat(gstRate) / 100);
+    const totalRevenue = revenueEntries.reduce((sum, entry) => sum + entry.amount, 0);
+    const totalExpenses = expenseEntries.reduce((sum, entry) => sum + entry.amount, 0);
+    const taxableIncome = totalRevenue - totalExpenses;
+
+    // Calculate GST collected from sales (using GST fields if available)
+    const gstCollected = periodEntries.reduce((sum, entry) => {
+      if (entry.igstAmount) sum += entry.igstAmount;
+      if (entry.cgstAmount) sum += entry.cgstAmount;
+      if (entry.sgstAmount) sum += entry.sgstAmount;
+      if (entry.vatAmount) sum += entry.vatAmount;
+      return sum;
+    }, 0);
+
+    // Calculate GST paid on purchases
     const gstPaid = periodEntries
-      .filter(entry => entry.debitAccount.toLowerCase().includes('gst') || 
-                      entry.debitAccount.toLowerCase().includes('tax'))
+      .filter(entry => 
+        entry.debitAccount.toLowerCase().includes('gst') || 
+        entry.debitAccount.toLowerCase().includes('input tax') ||
+        entry.debitAccount.toLowerCase().includes('tax paid')
+      )
       .reduce((sum, entry) => sum + entry.amount, 0);
 
     const netGst = gstCollected - gstPaid;
 
-    // Simple income tax calculation (simplified for demo)
-    const incomeTax = taxableIncome > 250000 ? (taxableIncome - 250000) * 0.3 : 0;
+    // Simplified income tax calculation (actual would depend on slab rates)
+    let incomeTax = 0;
+    if (taxableIncome > 250000) {
+      if (taxableIncome <= 500000) {
+        incomeTax = (taxableIncome - 250000) * 0.05;
+      } else if (taxableIncome <= 1000000) {
+        incomeTax = 12500 + (taxableIncome - 500000) * 0.20;
+      } else {
+        incomeTax = 112500 + (taxableIncome - 1000000) * 0.30;
+      }
+    }
 
     return {
       period,
@@ -84,23 +129,65 @@ export default function TaxManagementPage() {
       gstPaid,
       netGst,
       incomeTax,
-      totalTax: netGst + incomeTax,
+      totalTax: Math.max(netGst, 0) + incomeTax,
       status: 'draft',
-      dueDate: '2024-04-30',
+      dueDate: getDueDate(period),
     };
   };
 
-  const taxCalculation = calculateTaxLiability(selectedPeriod);
+  const getDueDate = (period: string): string => {
+    const [year, quarter] = period.split('-');
+    const quarterNum = parseInt(quarter.replace('Q', ''));
+    
+    // GST return due dates are typically:
+    // Q1: April 20, Q2: July 20, Q3: October 20, Q4: January 20 (next year)
+    const dueDates = {
+      1: `${year}-04-20`,
+      2: `${year}-07-20`,
+      3: `${year}-10-20`,
+      4: `${parseInt(year) + 1}-01-20`
+    };
+    
+    return dueDates[quarterNum as keyof typeof dueDates] || `${year}-04-20`;
+  };
+
+  const taxCalculation = useMemo(() => calculateTaxLiability(selectedPeriod), [selectedPeriod, journalEntries]);
 
   const compliance: TaxCompliance = {
-    gstRegistration: true,
-    vatRegistration: false,
+    gstRegistration: !!companySettings?.companyGstin,
+    vatRegistration: companySettings?.gstRegion === 'international_other',
     incomeTaxRegistration: true,
-    nextFilingDate: '2024-04-30',
+    nextFilingDate: taxCalculation.dueDate,
     overdueReturns: 0,
   };
 
-  const taxPeriods = ['2024-Q1', '2024-Q2', '2024-Q3', '2024-Q4', '2023-Q4', '2023-Q3'];
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', { 
+      style: 'currency', 
+      currency: companySettings?.currency || 'INR',
+      minimumFractionDigits: 0 
+    }).format(amount);
+  };
+
+  const taxPeriods = [
+    '2024-Q4', '2024-Q3', '2024-Q2', '2024-Q1', 
+    '2023-Q4', '2023-Q3', '2023-Q2', '2023-Q1'
+  ];
+
+  if (entriesLoading) {
+    return (
+      <div className="space-y-6">
+        <PageTitle
+          title="Tax Management"
+          description="Loading tax data..."
+        />
+        <div className="animate-pulse space-y-4">
+          <div className="h-32 bg-gray-200 rounded"></div>
+          <div className="h-64 bg-gray-200 rounded"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -109,6 +196,7 @@ export default function TaxManagementPage() {
         description="Automated GST/VAT calculations, compliance tracking, and multi-territory support."
       />
 
+      {/* Tax Summary Cards */}
       <div className="grid gap-6 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
@@ -116,7 +204,7 @@ export default function TaxManagementPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              ₹{taxCalculation.gstCollected.toLocaleString()}
+              {formatCurrency(taxCalculation.gstCollected)}
             </div>
             <p className="text-xs text-muted-foreground">Current period</p>
           </CardContent>
@@ -128,7 +216,7 @@ export default function TaxManagementPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">
-              ₹{taxCalculation.gstPaid.toLocaleString()}
+              {formatCurrency(taxCalculation.gstPaid)}
             </div>
             <p className="text-xs text-muted-foreground">Input tax credit</p>
           </CardContent>
@@ -140,7 +228,7 @@ export default function TaxManagementPage() {
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${taxCalculation.netGst >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-              ₹{Math.abs(taxCalculation.netGst).toLocaleString()}
+              {formatCurrency(Math.abs(taxCalculation.netGst))}
             </div>
             <p className="text-xs text-muted-foreground">
               {taxCalculation.netGst >= 0 ? 'Payable' : 'Refundable'}
@@ -150,273 +238,200 @@ export default function TaxManagementPage() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Compliance</CardTitle>
+            <CardTitle className="text-sm font-medium">Income Tax</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center gap-2">
-              <Badge variant={compliance.overdueReturns === 0 ? 'default' : 'destructive'}>
-                {compliance.overdueReturns === 0 ? 'Current' : `${compliance.overdueReturns} Overdue`}
-              </Badge>
+            <div className="text-2xl font-bold text-orange-600">
+              {formatCurrency(taxCalculation.incomeTax)}
             </div>
-            <p className="text-xs text-muted-foreground">Filing status</p>
+            <p className="text-xs text-muted-foreground">Estimated liability</p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>Tax Settings</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="jurisdiction">Tax Jurisdiction</Label>
-              <Select value={taxJurisdiction} onValueChange={setTaxJurisdiction}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="IN">India (GST)</SelectItem>
-                  <SelectItem value="UK">United Kingdom (VAT)</SelectItem>
-                  <SelectItem value="US">United States</SelectItem>
-                  <SelectItem value="AU">Australia (GST)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="gstRate">Default GST Rate (%)</Label>
-              <Select value={gstRate} onValueChange={setGstRate}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="5">5%</SelectItem>
-                  <SelectItem value="12">12%</SelectItem>
-                  <SelectItem value="18">18%</SelectItem>
-                  <SelectItem value="28">28%</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="period">Tax Period</Label>
-              <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {taxPeriods.map(period => (
-                    <SelectItem key={period} value={period}>{period}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Compliance Alerts</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <Alert>
-                <Calendar className="h-4 w-4" />
-                <AlertDescription>
-                  GST Return due: April 30, 2024
-                </AlertDescription>
-              </Alert>
-              <Alert variant="destructive">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>
-                  TDS certificate pending for Q4 2023
-                </AlertDescription>
-              </Alert>
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium">Registration Status</h4>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm">GST Registration</span>
-                  <Badge variant="default">Active</Badge>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm">Income Tax</span>
-                  <Badge variant="default">Active</Badge>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Button className="w-full">
-              <FileText className="mr-2 h-4 w-4" />
-              Generate GST Return
-            </Button>
-            <Button variant="outline" className="w-full">
-              <Calculator className="mr-2 h-4 w-4" />
-              Tax Calculator
-            </Button>
-            <Button variant="outline" className="w-full">
-              <Download className="mr-2 h-4 w-4" />
-              Export for Filing
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Tabs defaultValue="calculations" className="w-full">
+      <Tabs defaultValue="calculations" className="space-y-6">
         <TabsList>
           <TabsTrigger value="calculations">Tax Calculations</TabsTrigger>
-          <TabsTrigger value="returns">Filed Returns</TabsTrigger>
-          <TabsTrigger value="compliance">Compliance Tracking</TabsTrigger>
+          <TabsTrigger value="compliance">Compliance</TabsTrigger>
+          <TabsTrigger value="filings">Tax Filings</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="calculations" className="space-y-4">
+        <TabsContent value="calculations" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Tax Calculation Details - {selectedPeriod}</CardTitle>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Calculator className="h-5 w-5" />
+                    Tax Calculation
+                  </CardTitle>
+                  <CardDescription>
+                    Based on journal entries from {selectedPeriod}
+                  </CardDescription>
+                </div>
+                <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {taxPeriods.map(period => (
+                      <SelectItem key={period} value={period}>{period}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Tax Rate</TableHead>
-                    <TableHead>Tax Amount</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow>
-                    <TableCell>Taxable Revenue</TableCell>
-                    <TableCell>₹{taxCalculation.taxableIncome.toLocaleString()}</TableCell>
-                    <TableCell>{gstRate}%</TableCell>
-                    <TableCell>₹{taxCalculation.gstCollected.toLocaleString()}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>Input Tax Credit</TableCell>
-                    <TableCell>-</TableCell>
-                    <TableCell>-</TableCell>
-                    <TableCell>₹{taxCalculation.gstPaid.toLocaleString()}</TableCell>
-                  </TableRow>
-                  <TableRow className="font-medium">
-                    <TableCell>Net GST Payable</TableCell>
-                    <TableCell>-</TableCell>
-                    <TableCell>-</TableCell>
-                    <TableCell>₹{taxCalculation.netGst.toLocaleString()}</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span>Taxable Income:</span>
+                      <span className="font-medium">{formatCurrency(taxCalculation.taxableIncome)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm text-muted-foreground">
+                      <span>Revenue - Expenses</span>
+                      <span>Base for tax calculation</span>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span>Total Tax Liability:</span>
+                      <span className="font-bold text-red-600">{formatCurrency(taxCalculation.totalTax)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm text-muted-foreground">
+                      <span>GST + Income Tax</span>
+                      <span>Due: {taxCalculation.dueDate}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t pt-4">
+                  <h4 className="font-medium mb-2">GST Breakdown:</h4>
+                  <div className="grid gap-2 md:grid-cols-3 text-sm">
+                    <div className="flex justify-between">
+                      <span>Output GST:</span>
+                      <span>{formatCurrency(taxCalculation.gstCollected)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Input GST:</span>
+                      <span>{formatCurrency(taxCalculation.gstPaid)}</span>
+                    </div>
+                    <div className="flex justify-between font-medium">
+                      <span>Net GST:</span>
+                      <span>{formatCurrency(taxCalculation.netGst)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="returns" className="space-y-4">
+        <TabsContent value="compliance" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Filed Tax Returns</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <CheckCircle className="h-5 w-5" />
+                Compliance Status
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span>GST Registration</span>
+                    <Badge variant={compliance.gstRegistration ? "default" : "destructive"}>
+                      {compliance.gstRegistration ? "Active" : "Not Registered"}
+                    </Badge>
+                  </div>
+                  {companySettings?.companyGstin && (
+                    <p className="text-sm text-muted-foreground">
+                      GSTIN: {companySettings.companyGstin}
+                    </p>
+                  )}
+                  
+                  <div className="flex items-center justify-between">
+                    <span>Income Tax Registration</span>
+                    <Badge variant="default">Active</Badge>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <span>VAT Registration</span>
+                    <Badge variant={compliance.vatRegistration ? "default" : "secondary"}>
+                      {compliance.vatRegistration ? "Active" : "N/A"}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span>Next Filing Date</span>
+                    <Badge variant="outline">
+                      {compliance.nextFilingDate}
+                    </Badge>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <span>Overdue Returns</span>
+                    <Badge variant={compliance.overdueReturns > 0 ? "destructive" : "default"}>
+                      {compliance.overdueReturns}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="filings" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Tax Filing History
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Period</TableHead>
-                    <TableHead>Return Type</TableHead>
-                    <TableHead>Filed Date</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Due Date</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  <TableRow>
-                    <TableCell>2023-Q4</TableCell>
-                    <TableCell>GST Return</TableCell>
-                    <TableCell>2024-01-20</TableCell>
-                    <TableCell>
-                      <Badge variant="default">Filed</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Button size="sm" variant="outline">View</Button>
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>2023-Q3</TableCell>
-                    <TableCell>GST Return</TableCell>
-                    <TableCell>2023-10-25</TableCell>
-                    <TableCell>
-                      <Badge variant="default">Filed</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Button size="sm" variant="outline">View</Button>
-                    </TableCell>
-                  </TableRow>
+                  {taxPeriods.slice(0, 4).map(period => {
+                    const calc = calculateTaxLiability(period);
+                    return (
+                      <TableRow key={period}>
+                        <TableCell>{period}</TableCell>
+                        <TableCell>GST Return</TableCell>
+                        <TableCell>{formatCurrency(calc.totalTax)}</TableCell>
+                        <TableCell>{calc.dueDate}</TableCell>
+                        <TableCell>
+                          <Badge variant={calc.status === 'filed' ? 'default' : 'secondary'}>
+                            {calc.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Button size="sm" variant="outline">
+                            <Download className="h-4 w-4 mr-1" />
+                            Generate
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="compliance" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Compliance Calendar</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center p-2 border rounded">
-                    <div>
-                      <div className="font-medium">GST Return</div>
-                      <div className="text-sm text-muted-foreground">Monthly filing</div>
-                    </div>
-                    <Badge variant="destructive">Due: 20th</Badge>
-                  </div>
-                  <div className="flex justify-between items-center p-2 border rounded">
-                    <div>
-                      <div className="font-medium">TDS Return</div>
-                      <div className="text-sm text-muted-foreground">Quarterly filing</div>
-                    </div>
-                    <Badge variant="default">Due: 30th</Badge>
-                  </div>
-                  <div className="flex justify-between items-center p-2 border rounded">
-                    <div>
-                      <div className="font-medium">Income Tax</div>
-                      <div className="text-sm text-muted-foreground">Annual filing</div>
-                    </div>
-                    <Badge variant="secondary">Due: July 31</Badge>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Multi-Territory Setup</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span>India (GST)</span>
-                    <Badge variant="default">Configured</Badge>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span>UK (VAT)</span>
-                    <Badge variant="secondary">Not Setup</Badge>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span>US (Sales Tax)</span>
-                    <Badge variant="secondary">Not Setup</Badge>
-                  </div>
-                  <Button variant="outline" size="sm" className="w-full mt-4">
-                    Add Territory
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
         </TabsContent>
       </Tabs>
     </div>
