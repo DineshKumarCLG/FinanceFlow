@@ -118,10 +118,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // onAuthStateChanged will also trigger, and the main useEffect will handle redirection to dashboard if companyId is set
     } catch (error: any) {
       console.error("Google Sign-In error:", error);
-      // Let onAuthStateChanged handle setIsLoading(false) to ensure consistent state update
+      setIsLoading(false);
       throw error; 
-    } finally {
-      // setIsLoading(false); // Let onAuthStateChanged manage this to avoid potential race conditions
     }
   };
 
