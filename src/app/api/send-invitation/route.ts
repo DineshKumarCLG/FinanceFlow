@@ -49,11 +49,9 @@ export async function POST(request: NextRequest) {
       console.log('To:', email);
       
       try {
-        // Try multiple sender addresses to find one that works
+        // Use verified email address for testing
         const senderOptions = [
-          'onboarding@resend.dev',
-          'team@resend.dev',
-          'noreply@resend.dev'
+          'kenesislabs@gmail.com'  // Your verified email in Resend
         ];
 
         let lastError = null;
@@ -92,14 +90,7 @@ export async function POST(request: NextRequest) {
           throw lastError || new Error('All sender options failed');
         }
 
-        if (error) {
-          console.error('Resend error details:', JSON.stringify(error, null, 2));
-          return NextResponse.json({ 
-            success: false, 
-            error: 'Failed to send email', 
-            details: error 
-          }, { status: 500 });
-        }
+        
 
         console.log('Email sent successfully:', JSON.stringify(data, null, 2));
 
