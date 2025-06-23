@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -52,7 +51,7 @@ export default function OnboardingPage() {
   const { user, isAuthenticated, isLoading: authIsLoading, setCurrentCompanyId } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
-  
+
   const [currentStep, setCurrentStep] = useState<OnboardingStep>('company');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -133,7 +132,8 @@ export default function OnboardingPage() {
     try {
       // Create company ID from company name
       const companyId = companyName.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 10);
-      
+      const newCompanyId = companyId;
+
       // Set company ID in auth context
       setCurrentCompanyId(companyId);
 
@@ -173,10 +173,31 @@ export default function OnboardingPage() {
       // Save team members (implement in your data service)
       console.log('Team members to save:', teamMembers);
 
-      // Send invitations (implement email service)
-      for (const member of teamMembers) {
-        console.log(`Sending invitation to ${member.email} as ${member.role}`);
-      }
+      // Send invitations via email
+        for (const member of teamMembers) {
+          console.log(`Sending invitation to ${member.email} as ${member.role}`);
+          try {
+            const response = await fetch('/api/send-invitation', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                email: member.email,
+                role: member.role,
+                companyName: companyData.name,
+                inviterName: user?.displayName || 'Team Admin',
+                companyId: newCompanyId
+              })
+            });
+
+            if (!response.ok) {
+              console.error(`Failed to send invitation to ${member.email}`);
+            }
+          } catch (error) {
+            console.error(`Error sending invitation to ${member.email}:`, error);
+          }
+        }
 
       toast({
         title: "Team Invitations Sent",
