@@ -987,22 +987,6 @@ export interface TeamMember {
 
 const TEAM_MEMBERS_COLLECTION = 'teamMembers';
 
-export async function getCompany(companyId: string) {
-  try {
-    const companyRef = doc(db, COMPANIES_COLLECTION, companyId);
-    const companySnap = await getDoc(companyRef);
-    
-    if (companySnap.exists()) {
-      return { id: companySnap.id, ...companySnap.data() };
-    } else {
-      return null;
-    }
-  } catch (error) {
-    console.error(`DataService: Error fetching company '${companyId}':`, error);
-    throw error;
-  }
-}
-
 export async function addTeamMembers(teamMembersData: TeamMember[]): Promise<void> {
   const currentUser = auth.currentUser;
   if (!currentUser) {
