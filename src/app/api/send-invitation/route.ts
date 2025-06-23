@@ -1,131 +1,113 @@
-
 import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const { email, role, companyName, inviterName, companyId } = await request.json();
+    const { email, role, companyName, inviterName } = await request.json();
 
-    // For now, using a simple email service approach
-    // In production, you'd integrate with SendGrid, Resend, or similar
-    
-    const invitationLink = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002'}/?companyId=${companyId}&invite=true`;
-    
-    const emailBody = `
-      Hello!
-      
-      ${inviterName} has invited you to join ${companyName} as a ${role}.
-      
-      To accept this invitation and join the team, please click the link below:
-      ${invitationLink}
-      
-      If you don't have an account yet, you'll be prompted to create one.
-      
-      Best regards,
-      The Kenesis Team
-    `;
+    if (!email || !role || !companyName) {
+      return NextResponse.json(
+        { error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
 
-    const htmlBody = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2>Team Invitation</h2>
-        <p>Hello!</p>
-        <p><strong>${inviterName}</strong> has invited you to join <strong>${companyName}</strong> as a <strong>${role}</strong>.</p>
-        <p>To accept this invitation and join the team, please click the button below:</p>
-        <a href="${invitationLink}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 20px 0;">Accept Invitation</a>
-        <p>If you don't have an account yet, you'll be prompted to create one.</p>
-        <p>Best regards,<br>The Kenesis Team</p>
-        <hr>
-        <p style="font-size: 12px; color: #666;">If the button doesn't work, copy and paste this link: ${invitationLink}</p>
-      </div>
-    `;
+    console.log('Attempting to send email with Resend...');
+    console.log('API Key exists:', !!resend);
+    console.log('To:', email);
 
-    // Send actual email using Resend
-    if (process.env.RESEND_API_KEY) {
-      console.log('Attempting to send email with Resend...');
-      console.log('API Key exists:', !!process.env.RESEND_API_KEY);
-      console.log('From:', 'onboarding@resend.dev');
-      console.log('To:', email);
-      
-      try {
-        // Use verified email address for testing
-        const senderOptions = [
-          'kenesislabs@gmail.com'  // Your verified email in Resend
-        ];
+    try {
+      // Use the default Resend verified domain
+      const fromEmail = 'onboarding@resend.dev';
+      console.log('Using sender:', fromEmail);
 
-        let lastError = null;
-        let emailSent = false;
-        let data = null;
+      const { data, error } = await resend.emails.send({
+        from: fromEmail,
+        to: [email],
+        subject: `Invitation to join ${companyName} on FinanceFlow AI`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="text-align: center; margin-bottom: 30px;">
+              <h1 style="color: #1a73e8; margin: 0;">FinanceFlow AI</h1>
+            </div>
 
-        for (const sender of senderOptions) {
-          try {
-            console.log(`Trying sender: ${sender}`);
-            const result = await resend.emails.send({
-              from: sender,
-              to: email,
-              subject: `Invitation to join ${companyName}`,
-              text: emailBody,
-              html: htmlBody,
-            });
+            <h2 style="color: #333;">You've been invited to join ${companyName}</h2>
 
-            if (result.error) {
-              console.log(`Failed with ${sender}:`, result.error);
-              lastError = result.error;
-              continue;
-            }
+            <p>Hello!</p>
 
-            console.log(`Success with ${sender}:`, result.data);
-            data = result.data;
-            emailSent = true;
-            break;
-          } catch (err) {
-            console.log(`Exception with ${sender}:`, err);
-            lastError = err;
-            continue;
-          }
-        }
+            <p>${inviterName || 'A team member'} has invited you to join <strong>${companyName}</strong> as a <strong>${role}</strong> on FinanceFlow AI.</p>
 
-        if (!emailSent) {
-          throw lastError || new Error('All sender options failed');
-        }
+            <p>FinanceFlow AI is a modern accounting platform that helps businesses manage their finances with AI assistance. Here's what you can do:</p>
 
-        
+            <ul style="margin: 20px 0;">
+              <li>Manage journal entries and ledger accounts</li>
+              <li>Generate invoices and track payments</li>
+              <li>Create financial reports and statements</li>
+              <li>Get AI-powered insights for your business</li>
+            </ul>
 
-        console.log('Email sent successfully:', JSON.stringify(data, null, 2));
+            <div style="text-align: center; margin: 40px 0;">
+              <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://financeflow.ai'}" 
+                 style="background-color: #1a73e8; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 500;">
+                Accept Invitation & Sign Up
+              </a>
+            </div>
 
-        return NextResponse.json({ 
-          success: true, 
-          message: 'Invitation email sent successfully',
-          emailId: data?.id 
-        });
-      } catch (error) {
-        console.error('Email sending error:', error);
-        console.error('Error details:', JSON.stringify(error, null, 2));
-        return NextResponse.json({ 
-          success: false, 
-          error: 'Failed to send email',
-          details: error.message || error 
-        }, { status: 500 });
+            <p style="color: #666; font-size: 14px;">
+              If the button above doesn't work, copy and paste this link into your browser:
+              <br>
+              <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://financeflow.ai'}" style="color: #1a73e8;">
+                ${process.env.NEXT_PUBLIC_APP_URL || 'https://financeflow.ai'}
+              </a>
+            </p>
+
+            <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+
+            <p style="color: #666; font-size: 14px;">
+              If you have any questions, feel free to reach out to your team or contact support.
+            </p>
+
+            <p style="color: #666; font-size: 14px;">
+              Best regards,<br>
+              The FinanceFlow AI Team
+            </p>
+          </div>
+        `,
+      });
+
+      if (error) {
+        console.log('Resend API error:', error);
+        return NextResponse.json(
+          { error: 'Failed to send invitation email', details: error },
+          { status: 500 }
+        );
       }
-    } else {
-      // Fallback for development - log the email
-      console.log('=== INVITATION EMAIL (No RESEND_API_KEY) ===');
-      console.log(`To: ${email}`);
-      console.log(`Subject: Invitation to join ${companyName}`);
-      console.log(`Body:\n${emailBody}`);
-      console.log('==========================================');
-      
+
+      console.log('Email sent successfully');
+      console.log('Response:', data);
+
       return NextResponse.json({ 
         success: true, 
-        message: 'Invitation email logged (set RESEND_API_KEY for actual sending)' 
+        message: 'Invitation sent successfully',
+        emailId: data?.id 
       });
+
+    } catch (emailError) {
+      console.log('Email sending error:', emailError);
+      console.log('Error details:', JSON.stringify(emailError, null, 2));
+
+      return NextResponse.json(
+        { error: 'Failed to send invitation email', details: emailError },
+        { status: 500 }
+      );
     }
 
   } catch (error) {
-    console.error('Error sending invitation:', error);
+    console.error('API Error:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to send invitation' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
