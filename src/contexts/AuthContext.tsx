@@ -31,6 +31,7 @@ interface AuthContextType {
   signInWithEmail: (email: string, password: string) => Promise<void>;
   updateUserProfileName: (newName: string) => Promise<void>;
   logout: () => Promise<void>;
+  checkCompanyExists: (companyId: string) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -190,6 +191,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setCurrentCompanyIdState(companyId);
   };
 
+  const checkCompanyExists = async (companyId: string): Promise<boolean> => {
+    try {
+      const company = await getCompany(companyId);
+      return company !== null;
+    } catch (error) {
+      console.error('Error checking company existence:', error);
+      return false;
+    }
+  };
+
   const updateUserProfileName = async (newName: string) => {
     if (!auth.currentUser) {
       throw new Error("No user currently signed in to update profile.");
@@ -231,7 +242,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signUpWithEmail,
       signInWithEmail,
       updateUserProfileName, 
-      logout 
+      logout,
+      checkCompanyExists
     }}>
       {children}
     </AuthContext.Provider>
