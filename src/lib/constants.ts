@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { LayoutDashboard, BookOpenText, BookCopy, MessageCircle, Settings, PlusCircle, UploadCloud, ListChecks, Landmark, BarChart3, FileText as InvoiceIcon } from "lucide-react";
+import { LayoutDashboard, BookOpenText, BookCopy, MessageCircle, Settings, PlusCircle, UploadCloud, ListChecks, Landmark, BarChart3, FileText as InvoiceIcon, CreditCard, Receipt, Users } from "lucide-react";
 
 export interface NavItem {
   title: string;
@@ -42,6 +42,21 @@ export const NAV_ITEMS_MAIN: NavItem[] = [
     title: "Ledger",
     href: "/ledger",
     icon: BookCopy,
+  },
+  {
+    title: "Bank Reconciliation",
+    href: "/bank-reconciliation",
+    icon: CreditCard,
+  },
+  {
+    title: "Tax Management",
+    href: "/tax-management",
+    icon: Receipt,
+  },
+  {
+    title: "Payroll",
+    href: "/payroll",
+    icon: Users,
   },
   {
     title: "Financial Statements",
