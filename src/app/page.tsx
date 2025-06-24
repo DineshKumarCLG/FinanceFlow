@@ -27,37 +27,33 @@ export default function HomePage() {
     }
   }, [user, router]);
 
-  const handleGoogleSignIn = async () => {
-    if (!companyId.trim()) {
-      setError('Please enter a Company ID');
-      return;
-    }
-
+  const handleGoogleSignIn = async (skipCompanyValidation: boolean = false) => {
     setIsSigningIn(true);
     setError(null);
 
     try {
-      // First check if company exists
-      setIsCheckingCompany(true);
-      const companyExists = await checkCompanyExists(companyId.trim());
-      setIsCheckingCompany(false);
+      // Check company exists first if companyId is provided and we're not skipping validation
+      if (companyId.trim() && !skipCompanyValidation) {
+        setIsCheckingCompany(true);
+        const exists = await checkCompanyExists(companyId.trim());
+        setIsCheckingCompany(false);
 
-      if (!companyExists) {
-        setError('Company not found. Please check the Company ID or contact your administrator.');
-        setIsSigningIn(false);
-        return;
+        if (!exists) {
+          setError('Company not found. Please check the Company ID or contact your administrator.');
+          setIsSigningIn(false);
+          return;
+        }
+
+        // Set company ID before signing in
+        setCurrentCompanyId(companyId.trim());
       }
 
-      // Set company ID before signing in
-      setCurrentCompanyId(companyId.trim());
-
-      // Then sign in
       await signInWithGoogle();
     } catch (error: any) {
-      setIsCheckingCompany(false);
+      console.error('Sign-in error:', error);
+      setError(error.message || 'Failed to sign in');
       setIsSigningIn(false);
-      console.error('Google Sign-In error:', error);
-      setError(error.message || 'Failed to sign in. Please try again.');
+      setIsCheckingCompany(false);
     }
   };
 
@@ -128,7 +124,7 @@ export default function HomePage() {
 
             <div className="space-y-4">
               <Button 
-                onClick={handleGoogleSignIn} 
+                onClick={() => handleGoogleSignIn(false)}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5"
                 disabled={isSigningIn || isCheckingCompany || !companyId.trim()}
               >
@@ -180,7 +176,7 @@ export default function HomePage() {
                 onClick={() => {
                   // Clear any existing company ID and sign in directly to onboarding
                   setCurrentCompanyId(null);
-                  handleGoogleSignIn();
+                  handleGoogleSignIn(true);
                 }} 
                 variant="outline" 
                 className="w-full" 
