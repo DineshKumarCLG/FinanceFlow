@@ -81,8 +81,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else if (isAuthenticated && !currentCompanyId && pathname !== '/onboarding') {
           console.log('Redirecting to onboarding (no company ID)');
           router.push('/onboarding');
-        } else if (isAuthenticated && currentCompanyId && (pathname === '/' || pathname === '/onboarding')) {
-          // Verify company exists in Firebase before navigating to dashboard
+        } else if (isAuthenticated && currentCompanyId && pathname === '/') {
+          // Only check company existence when redirecting from root, not onboarding
           try {
             console.log('Checking if company exists:', currentCompanyId);
             const company = await getCompany(currentCompanyId);
@@ -102,6 +102,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setCurrentCompanyId(null);
             router.push('/onboarding');
           }
+        } else if (isAuthenticated && currentCompanyId && pathname === '/onboarding') {
+          // If user has company ID and is on onboarding, redirect to dashboard
+          console.log('User has company ID, redirecting from onboarding to dashboard');
+          router.push('/dashboard');
         }
       }
     };
@@ -117,25 +121,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const additionalUserInfo = getAdditionalUserInfo(result);
       
       if (result.user) {
-        // Proactively set companyId from localStorage immediately after successful sign-in
+        // Check for existing company ID but don't require it for new users
         const companyIdFromStorage = localStorage.getItem(COMPANY_ID_LOCAL_STORAGE_KEY);
         if (companyIdFromStorage) {
-          setCurrentCompanyIdState(companyIdFromStorage); // Update context state directly
-        } else {
-          console.warn("Signed in with Google, but no Company ID found in localStorage. User will be redirected to / to enter it.");
-          // The effect above will handle redirecting to / if currentCompanyId remains null
+          setCurrentCompanyIdState(companyIdFromStorage);
         }
 
         if (additionalUserInfo?.isNewUser) {
           await updateProfile(result.user, {
-            displayName: result.user.displayName || 'New User', // Use Google's name
+            displayName: result.user.displayName || 'New User',
             photoURL: result.user.photoURL,
           });
-          setUser(auth.currentUser ? { ...auth.currentUser } : null); // Update local state for immediate reflection if needed
+          setUser(auth.currentUser ? { ...auth.currentUser } : null);
 
-          if (companyIdFromStorage) { // Only add notification if companyId is known
+          // New users will go through onboarding, so no notification yet
+        } else {
+          // Existing user - add notification if they have a company
+          if (companyIdFromStorage) {
             await addNotification(
-              `User ${result.user.displayName || 'New User'} (...${result.user.uid.slice(-6)}) joined company ${companyIdFromStorage}.`,
+              `User ${result.user.displayName || 'User'} (...${result.user.uid.slice(-6)}) signed in to company ${companyIdFromStorage}.`,
               'user_joined',
               companyIdFromStorage,
               result.user.uid
@@ -143,7 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       }
-      // onAuthStateChanged will also trigger, and the main useEffect will handle redirection to dashboard if companyId is set
+      // Authentication flow will handle navigation
     } catch (error: any) {
       console.error("Google Sign-In error:", error);
       setIsLoading(false);
