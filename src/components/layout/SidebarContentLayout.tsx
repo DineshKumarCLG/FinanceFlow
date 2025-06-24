@@ -33,7 +33,7 @@ export function SidebarContentLayout() {
       </SidebarHeader>
       
       <SidebarContent>
-        <SidebarNav items={navigationItems} className="px-2 py-4" />
+        <SidebarNav items={NAV_ITEMS_MAIN} className="px-2 py-4" />
       </SidebarContent>
       
       <SidebarFooter>
