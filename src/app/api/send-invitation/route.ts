@@ -6,11 +6,9 @@ export async function POST(request: Request) {
   try {
     const { email, role, companyName, inviterName, companyId } = await request.json();
 
-    if (!email || !role || !companyName) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      );
+    // Validate required fields
+    if (!email || !role || !companyName || !inviterName || !companyId) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
     // Check if user is authenticated

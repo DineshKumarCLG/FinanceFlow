@@ -79,9 +79,11 @@ service cloud.firestore {
     // Rules for company-level settings.
     // The document ID for these settings IS the companyId.
     match /companySettings/{companyId} {
-      // Any authenticated user can read or write settings for any company.
-      // Consider adding a company membership check for stricter security.
-      allow read, write: if isAuthenticated();
+      // Allow authenticated users to read/write settings for companies they have access to
+      allow read, write: if isAuthenticated() && (
+        exists(/databases/$(database)/documents/companies/$(companyId)) ||
+        exists(/databases/$(database)/documents/teamMembers/$(request.auth.uid + '_' + companyId))
+      );
     }
 
     match /aiPreferencesSettings/{companyId} {
