@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { ReactNode } from "react";
@@ -23,9 +22,10 @@ import {
   SidebarTrigger,
   useSidebar
 } from "@/components/ui/sidebar";
+import { SidebarContentLayout } from "@/components/layout/SidebarContentLayout";
 
 
-function SidebarContentLayout() {
+function SidebarContentLayoutOriginal() {
   const { open } = useSidebar();
   return (
     <>

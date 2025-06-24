@@ -9,7 +9,7 @@ interface AppLogoProps {
   textClassName?: string;
   collapsed?: boolean;
   showText?: boolean; 
-  variant?: 'logo' | 'icon';
+  variant?: 'logo' | 'icon' | 'horizontal';
   // companyLogoUrl prop removed
 }
 
@@ -39,6 +39,12 @@ export function AppLogo({
           )}
           data-ai-hint="application icon"
         />
+      ) : displayVariant === 'horizontal' ? (
+        <div className="flex items-center justify-center w-full">
+          <span className={cn("text-lg font-bold text-primary tracking-wide", textClassName)}>
+            FinanceFlow AI
+          </span>
+        </div>
       ) : (
         <>
           <Image
