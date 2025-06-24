@@ -103,9 +103,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             router.push('/onboarding');
           }
         } else if (isAuthenticated && currentCompanyId && pathname === '/onboarding') {
-          // If user has company ID and is on onboarding, redirect to dashboard
-          console.log('User has company ID, redirecting from onboarding to dashboard');
-          router.push('/dashboard');
+          // Allow users to complete onboarding even if they have a company ID
+          // Only redirect if they navigate to onboarding after completing it
+          console.log('User has company ID but staying on onboarding to complete setup');
+          // No redirect - let them finish onboarding
         }
       }
     };
