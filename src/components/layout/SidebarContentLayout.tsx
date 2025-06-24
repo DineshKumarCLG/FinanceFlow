@@ -3,7 +3,7 @@
 
 import { AppLogo } from "./AppLogo";
 import { SidebarNav } from "./SidebarNav";
-import { navigationItems } from "@/lib/constants";
+import { NAV_ITEMS_MAIN, NAV_ITEMS_BOTTOM } from "@/lib/constants";
 import {
   SidebarContent,
   SidebarHeader,
