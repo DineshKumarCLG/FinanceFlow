@@ -104,7 +104,7 @@ export default function ProfitLossPage() {
   return (
     <div className="space-y-6">
       <PageTitle
-        title={`Profit & Loss Statement ${currentCompanyId ? `(${currentCompanyId})` : ''}`}
+        title="Profit & Loss Statement"
         description="Analyze your company's revenues and expenses over a period."
       >
         <Popover>

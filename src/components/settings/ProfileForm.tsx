@@ -1,4 +1,3 @@
-
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -23,6 +22,7 @@ import { Loader2, AlertCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import * as DataService from "@/lib/data-service";
+import { useCompanyName } from "@/hooks/use-company-name";
 
 const profileFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -75,7 +75,8 @@ const currencyOptions = [
 
 
 export function ProfileForm() {
-  const { user, updateUserProfileName, isLoading: authIsLoading, currentCompanyId } = useAuth();
+  const { currentCompanyId, user, isLoading: authIsLoading } = useAuth();
+  const { companyName } = useCompanyName();
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
   const [isFetchingSettings, setIsFetchingSettings] = useState(false);
@@ -157,7 +158,7 @@ export function ProfileForm() {
       if (user && data.name !== user.displayName) {
         await updateUserProfileName(data.name);
       }
-      
+
       const companySettingsToSave: Partial<DataService.CompanySettings> = { 
         businessName: data.businessName || "",
         businessType: data.businessType || "",
@@ -175,7 +176,7 @@ export function ProfileForm() {
       };
 
       await DataService.saveCompanySettings(currentCompanyId, companySettingsToSave); 
-      
+
       toast({
         title: "Settings Updated",
         description: "Your profile and company settings have been successfully saved.",
@@ -193,7 +194,7 @@ export function ProfileForm() {
 
   const isLoadingUiElements = authIsLoading || isFetchingSettings;
   const isSaveButtonDisabled = authIsLoading || isFetchingSettings || isSaving;
-  
+
   if (!currentCompanyId && !authIsLoading && !isFetchingSettings) {
     return (
        <Card>
@@ -217,7 +218,7 @@ export function ProfileForm() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>User Profile & Company Settings {currentCompanyId ? `(${currentCompanyId})` : ''}</CardTitle>
+        <CardTitle>User Profile & Company Settings {companyName ? `(${companyName})` : ''}</CardTitle>
         <CardDescription>Manage your personal information and company-specific details like GST and addresses.</CardDescription>
       </CardHeader>
       <Form {...form}>
@@ -255,7 +256,7 @@ export function ProfileForm() {
               <Input value={currentCompanyId || "N/A"} disabled readOnly className="mt-1"/>
               <p className="text-xs text-muted-foreground">Company context for the current session. Change on login page.</p>
             </div>
-            
+
             <FormField
               control={form.control}
               name="businessName"
