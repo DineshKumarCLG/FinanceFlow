@@ -35,13 +35,13 @@
     --chart-5: 270 70% 60%; /* A purple */
 
     /* Sidebar specific theme */
-    --sidebar-background-hsl: 0 0% 100%; /* White sidebar background */
-    --sidebar-foreground-hsl: 220 9% 23%; /* Dark grey text */
+    --sidebar-background-hsl: 100 50% 90%; /* Light green sidebar background */
+    --sidebar-foreground-hsl: 100 80% 15%; /* Dark green text */
     --sidebar-primary-hsl: 100 60% 50%; /* Green accent for active items */
     --sidebar-primary-foreground-hsl: 0 0% 98%; /* White text on green accent */
-    --sidebar-accent-hsl: 100 50% 95%; /* Very light green for hover, or a light grey */
-    --sidebar-accent-foreground-hsl: 100 60% 40%; /* Darker green text on hover */
-    --sidebar-border-hsl: 240 5.9% 90%; /* Light grey border */
+    --sidebar-accent-hsl: 100 60% 85%; /* Slightly darker green for hover */
+    --sidebar-accent-foreground-hsl: 100 80% 20%; /* Dark green text on hover */
+    --sidebar-border-hsl: 100 40% 80%; /* Light green border */
     --sidebar-ring-hsl: 100 60% 55%; /* Green for focus rings */
 
     --sidebar-background: hsl(var(--sidebar-background-hsl));
