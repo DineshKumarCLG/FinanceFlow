@@ -13,6 +13,7 @@ import { Loader2, AlertCircle, Upload, Users, CheckCircle, ArrowRight, ArrowLeft
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { createCompany, addTeamMembers } from '@/lib/data-service';
+import { saveCompanySettings } from '@/lib/data-service'; // Import saveCompanySettings
 
 type OnboardingStep = 'company' | 'team' | 'complete';
 
@@ -150,6 +151,14 @@ export default function OnboardingPage() {
       // Save company to Firebase
       const newCompanyId = await createCompany(companyData);
 
+      // Also save the company details to company settings so they appear in the settings page
+      await saveCompanySettings(newCompanyId, {
+        businessName: companyName.trim(),
+        businessType: businessType,
+        companyGstin: gstin.trim(),
+        gstRegion: country === 'IN' ? 'india' : 'international_other',
+      });
+
       // Set company ID in auth context
       setCurrentCompanyId(newCompanyId);
 
@@ -173,7 +182,7 @@ export default function OnboardingPage() {
 
     try {
       const currentCompanyIdValue = localStorage.getItem('financeFlowCurrentCompanyId');
-      
+
       if (!currentCompanyIdValue) {
         throw new Error('Company ID not found. Please complete company setup first.');
       }
